@@ -1075,6 +1075,9 @@
             <button id="wizardDraft" title="Собрать карточки из темы браузерной ИИ-моделью">Собрать из темы</button>
             <button id="wizardCancel" class="btn-danger" title="Отменить текущую сборку" aria-label="Отменить сборку черновика" hidden>Отменить</button>
           </div>
+          <div class="panel-row wide">
+            <button id="loadDemoBoard" title="Открыть готовый пример борда без запуска модели и без ключей">Открыть готовый пример</button>
+          </div>
           <div class="auth-status" id="wizardStatus" role="status" aria-live="polite">Готово. Введи тему и нажми «Собрать из темы».</div>
           <span class="job-elapsed" id="wizardElapsed" aria-hidden="true" hidden></span>
         </div>
@@ -1337,6 +1340,7 @@
       </label>
       <div class="welcome-actions">
         <button id="welcomeStart" class="cta-primary">Начать</button>
+        <button id="welcomeDemo" class="welcome-ghost">Открыть пример</button>
         <button id="welcomeSkip" class="welcome-ghost">Осмотреть доску</button>
       </div>
       <p class="welcome-foot">Ничего не отправляется без твоего действия. Данные хранятся локально в браузере.</p>

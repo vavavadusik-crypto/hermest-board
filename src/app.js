@@ -7,6 +7,7 @@ import {
   providerStateLabel,
   accessBadge
 } from "./ui/connector-labels.js";
+import { buildDemoProject } from "./ui/demo-project.js";
 
     const STORAGE_KEY = "hermest-board:v1";
     const AI_SETTINGS_LOCAL_KEY = "hermest-board:ai-settings:v1";
@@ -3624,9 +3625,20 @@ import {
       if (panel) panel.scrollIntoView({ block: "center", behavior: "smooth" });
     }
 
+    // Один клик — готовый пример борда (детерминированный, без ключей и без сети),
+    // чтобы новый пользователь сразу увидел полный проход идея→сценарий→озвучка→экспорт.
+    function loadDemoProject() {
+      applyProjectDocument(buildDemoProject({ visual, schemaVersion: CONTENT_VERSION }));
+      render();
+      saveState("Загружен пример «Почему небо голубое»");
+      fitView();
+    }
+
     function initOnboarding() {
       const startButton = document.getElementById("startWizard");
       if (startButton) startButton.addEventListener("click", () => openWizard());
+      const demoButton = document.getElementById("loadDemoBoard");
+      if (demoButton) demoButton.addEventListener("click", loadDemoProject);
 
       const overlay = document.getElementById("welcomeOverlay");
       if (!overlay) return;
@@ -3640,6 +3652,7 @@ import {
 
       const topicInput = document.getElementById("welcomeTopic");
       const startCta = document.getElementById("welcomeStart");
+      const demoCta = document.getElementById("welcomeDemo");
       const skipCta = document.getElementById("welcomeSkip");
       const dismiss = () => {
         overlay.hidden = true;
@@ -3654,12 +3667,16 @@ import {
         dismiss();
         openWizard(topic);
       });
+      if (demoCta) demoCta.addEventListener("click", () => {
+        dismiss();
+        loadDemoProject();
+      });
       if (skipCta) skipCta.addEventListener("click", dismiss);
       if (topicInput) topicInput.addEventListener("keydown", event => {
         if (event.key === "Enter" && startCta) { event.preventDefault(); startCta.click(); }
       });
       // Модалка удерживает фокус: Escape закрывает, Tab циклится внутри (a11y).
-      const focusables = [topicInput, startCta, skipCta].filter(Boolean);
+      const focusables = [topicInput, startCta, demoCta, skipCta].filter(Boolean);
       overlay.addEventListener("keydown", event => {
         if (event.key === "Escape") { event.preventDefault(); dismiss(); return; }
         if (event.key === "Tab" && focusables.length) {
