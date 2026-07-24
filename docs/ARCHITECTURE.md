@@ -12,6 +12,62 @@ Hermest Board is a browser-first interactive product prototype:
 - browser recording through `MediaRecorder` and `getDisplayMedia`;
 - publish pack generation as structured JSON.
 
+## Runtime Surfaces
+
+Hermest Board is not only the SPA + Vercel skeleton described above. The real
+media product runs across **three** surfaces:
+
+1. **Board (SPA)** — one-page Vite frontend (`src/app.js`, `index.html`). Board
+   state in `localStorage`; JSON import/export; the creative control plane.
+2. **Local-media worker** — a Vite plugin
+   ([`src/local-media/vite-plugin.js`](../src/local-media/vite-plugin.js))
+   mounted as middleware in `npm run dev` / `npm run preview` and inside the
+   self-host container. It serves `/api/local-media/*` and is where **real MP4
+   rendering, wizard drafting, and multilingual editions** actually execute. It
+   is **loopback-only** and intentionally never public. Media bytes never touch
+   Vercel Functions.
+3. **Vercel `api/` functions** — the public, secret-free layer (health,
+   research, BYOK AI proxy, OAuth-start skeleton, product/storage contract).
+
+See [`docs/API_REFERENCE.md`](API_REFERENCE.md) for the full route index and
+[`docs/DEPLOYMENT.md`](DEPLOYMENT.md) for which surfaces each deploy mode has.
+
+## Local-Media Worker
+
+The worker (`src/local-media/`) is composed of:
+
+- `vite-plugin.js` — HTTP routing, origin/mutation guards, error envelope.
+- `job-manager.js` — render job lifecycle, cancellation, artifact resolution,
+  and derived analytics ([`docs/ANALYTICS_SCHEMA.md`](ANALYTICS_SCHEMA.md)).
+- `draft-job-manager.js` + `draft-service.js` — the async "topic → board"
+  wizard (drafting can take minutes, so it is a polled job).
+- `edition-service.js` — multilingual editions over the existing render surface.
+- `provider-keys.js` — session-scoped BYOK media keys (kept in the worker
+  process env, never persisted to disk or manifests).
+
+The render itself lives in `src/media/` (`render-project.js` and collaborators)
+and `src/domain/` (content pipeline, platform recipes). See
+[`docs/RENDER_PIPELINE.md`](RENDER_PIPELINE.md).
+
+## Data Flow (topic → MP4)
+
+```text
+topic
+  → POST /api/local-media/draft   (wizard: research + script via bridge/BYOK model)
+  → board (cards, script, storyboard)   [lives in localStorage; JSON export/import]
+  → POST /api/local-media/render  (project + platform)
+      → derive storyboard → TTS per scene (language = project param)
+      → visuals (b-roll / generated image / deterministic fallback)
+      → ffmpeg compose → <recipeId>.mp4  (H.264 / AAC)
+      → loudness QC + ffprobe → verified render manifest
+  → GET /api/local-media/jobs/:id → job.analytics + artifact download URLs
+  → (optional) POST /api/local-media/edition → same video in another language
+  → publish pack (structured JSON) + platform status   [OAuth exchange NOT live]
+```
+
+Every render artifact carries verified `bytes` + `sha256`; inputs and the recipe
+are hashed. See [`docs/MANIFEST_SCHEMA.md`](MANIFEST_SCHEMA.md).
+
 ## Current API Layer
 
 - `GET /api/health` - deployment health check;
