@@ -1,5 +1,12 @@
 import { normalizeCardImageUrl, renderCardImage } from "./card-image.js";
 import { friendlyErrorMessage, humanizeDetail, resolveErrorCode } from "./ui/user-messages.js";
+import {
+  capabilityName,
+  capabilityStatusLabel,
+  capabilityReason,
+  providerStateLabel,
+  accessBadge
+} from "./ui/connector-labels.js";
 
     const STORAGE_KEY = "hermest-board:v1";
     const AI_SETTINGS_LOCAL_KEY = "hermest-board:ai-settings:v1";
@@ -1451,6 +1458,7 @@ import { friendlyErrorMessage, humanizeDetail, resolveErrorCode } from "./ui/use
     document.getElementById("runResearchSearch").addEventListener("click", runResearchSearch);
     document.getElementById("showConnectorGuide").addEventListener("click", showConnectorGuide);
     document.getElementById("showReadinessReport").addEventListener("click", showReadinessReport);
+    document.getElementById("checkProviderDiagnostics").addEventListener("click", loadProviderDiagnostics);
     document.getElementById("showStorageStatus").addEventListener("click", showStorageStatus);
     document.getElementById("saveProjectApi").addEventListener("click", saveProjectApi);
     document.getElementById("loadProjectApi").addEventListener("click", loadProjectApi);
@@ -1750,6 +1758,88 @@ import { friendlyErrorMessage, humanizeDetail, resolveErrorCode } from "./ui/use
       state.publish.packageText = lines.join("\n");
       publishOutput.value = state.publish.packageText;
       saveState("Схема аккаунтов показана");
+    }
+
+    const providerDiagnostics = document.getElementById("providerDiagnostics");
+    const providerDiagnosticsStatus = document.getElementById("providerDiagnosticsStatus");
+    const providerDiagnosticsList = document.getElementById("providerDiagnosticsList");
+
+    // Диагностика провайдеров: человеко-читаемо «готов/настроен/недоступен + причина» и бейдж
+    // бесплатно/платно. Тянет per-capability статус из backend, бесплатность — из локального каталога.
+    async function loadProviderDiagnostics() {
+      providerDiagnostics.hidden = false;
+      providerDiagnosticsList.replaceChildren();
+      providerDiagnosticsStatus.textContent = "Проверяю провайдеров…";
+      try {
+        const data = await fetchJson(productApi("connectors/capabilities"));
+        const capabilities = Array.isArray(data.capabilities) ? data.capabilities : [];
+        if (!capabilities.length) {
+          providerDiagnosticsStatus.textContent = "Данные о провайдерах сейчас недоступны.";
+          return;
+        }
+        renderProviderDiagnostics(capabilities);
+        const ready = capabilities.filter(capability => capability.executable).length;
+        providerDiagnosticsStatus.textContent =
+          `Готово к работе: ${ready} из ${capabilities.length}. Бесплатные пути работают без ключа; свой ключ добавь в «Локальные API ключи».`;
+      } catch (error) {
+        providerDiagnosticsList.replaceChildren();
+        providerDiagnosticsStatus.textContent = friendlyErrorMessage(error, "generic");
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "diagnostics-retry";
+        retry.textContent = "Повторить";
+        retry.addEventListener("click", loadProviderDiagnostics);
+        providerDiagnosticsList.appendChild(retry);
+      }
+    }
+
+    function renderProviderDiagnostics(capabilities) {
+      providerDiagnosticsList.replaceChildren();
+      for (const capability of capabilities) {
+        const row = document.createElement("div");
+        row.className = "diagnostic-row";
+
+        const head = document.createElement("div");
+        head.className = "diagnostic-head";
+        const name = document.createElement("span");
+        name.className = "diagnostic-name";
+        name.textContent = capabilityName(capability.id);
+        const status = capabilityStatusLabel(capability);
+        const pill = document.createElement("span");
+        pill.className = `diagnostic-pill tone-${status.tone}`;
+        pill.textContent = status.label;
+        head.append(name, pill);
+        row.appendChild(head);
+
+        const reason = capabilityReason(capability);
+        if (reason && status.tone !== "ok") {
+          const reasonEl = document.createElement("div");
+          reasonEl.className = "diagnostic-reason";
+          reasonEl.textContent = reason;
+          row.appendChild(reasonEl);
+        }
+
+        const providers = Array.isArray(capability.providers) ? capability.providers : [];
+        if (providers.length) {
+          const chips = document.createElement("div");
+          chips.className = "diagnostic-providers";
+          for (const provider of providers) {
+            const catalogEntry = catalogProviderById(provider.id) || {};
+            const access = accessBadge({ auth: provider.auth || catalogEntry.auth, freeMode: catalogEntry.freeMode });
+            const state = providerStateLabel(provider);
+            const chip = document.createElement("span");
+            chip.className = `diagnostic-provider tone-${state.tone}`;
+            chip.textContent = `${provider.name || provider.id} · ${state.label}`;
+            const badge = document.createElement("span");
+            badge.className = `access-badge access-${access.tone}`;
+            badge.textContent = access.label;
+            chip.appendChild(badge);
+            chips.appendChild(chip);
+          }
+          row.appendChild(chips);
+        }
+        providerDiagnosticsList.appendChild(row);
+      }
     }
 
     async function showReadinessReport() {
