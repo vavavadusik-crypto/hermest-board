@@ -67,11 +67,11 @@ npm run check        # validate · unit · smoke:api · media (2 real MP4s) · b
 | Resume in-flight jobs after reload | ✅ VERIFIED | Active draft/render IDs persisted in `localStorage`, reconnect on boot |
 | Analytics block (duration/LUFS/size/scenes/voice/format/artifacts/SHA-256, copy summary) | ✅ VERIFIED | Shown on completed renders, hidden without analytics, mobile 375px |
 | Workspace storage (SQLite node:sqlite, clients/projects/campaigns/content/assets/jobs/notes) | ✅ VERIFIED | Durable across restarts, JSON import/export intact |
-| CI Gate (451 unit + 6 media real FFmpeg + build + smoke, all exit 0) | ✅ VERIFIED | GitHub Actions on every push/PR, public repo = unlimited minutes |
+| CI Gate (580+ unit + 6 media real FFmpeg + publish + workspace + build + npm audit + smoke, all exit 0) | ✅ VERIFIED | GitHub Actions on every push/PR, public repo = unlimited minutes |
 | Docker image (static SPA) | ✅ VERIFIED | `Dockerfile` — frontend only, NO worker (nginx static); [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) |
 | Self-host image (full, real MP4 render) | ✅ VERIFIED | `Dockerfile.selfhost` + compose — ffmpeg/chromium/piper worker, all features; CI build proof |
 | Semantic shorts (meaning-based scene selection, not just time crop) | ⏳ PLANNED | Vertical render by aspect ratio exists; semantic remixing next slice |
-| Multilingual editions (one project → same scenes in N languages, structured-contract translation) | ⏳ PLANNED | Architecture ready (language is edition property, not project) |
+| Multilingual editions (one project → same video in another language: translate narration → language voice → re-render) | ✅ VERIFIED | Deterministic (temperature 0 translation), `voice_missing` when no voice for a language, provenance in manifest; UI "Create edition in [language]". Bulk all-languages + RTL/CJK are follow-ups |
 | Auto-publish to social platforms (OAuth token exchange/refresh/revoke) | 🚧 PARTIAL | Skeleton exists, token exchange not implemented: requires durable storage, encrypted tokens, platform review. Board prepares publish pack and action queue; actual publishing after account connections |
 | Durable storage / multi-tenant auth | 🚧 PARTIAL | Guarded Postgres foundation + account-auth routes (disabled by default); full SaaS core is separate phase |
 | Billing / quotas / metering | ⏳ PLANNED | Not started |
@@ -210,6 +210,10 @@ npm run check        # полный гейт (перед коммитом/рел
 - `docs/STORAGE_AND_AGENT_API.md`, `docs/DATABASE_SCHEMA_DRAFT.md`, `db/postgres-schema.sql` —
   storage-контракт и черновик Postgres · `docs/SECURITY_REVIEW.md`, `SECURITY.md` — безопасность;
 - `CHANGELOG.md` — история изменений · `LICENSE` — GNU AGPL-3.0-or-later (сетевой copyleft).
+
+**Гайды пользователя:** [`FAQ`](docs/FAQ.md) · [`Troubleshooting`](docs/TROUBLESHOOTING.md) · [`Backup & Restore`](docs/BACKUP_RESTORE.md) · [`Update & Rollback`](docs/UPDATE_ROLLBACK.md).
+**Справочник разработчика:** [`API Reference`](docs/API_REFERENCE.md) · [`Render Pipeline`](docs/RENDER_PIPELINE.md) · [`Manifest Schema`](docs/MANIFEST_SCHEMA.md) · [`Analytics Schema`](docs/ANALYTICS_SCHEMA.md) · [`Migrations`](docs/MIGRATIONS.md).
+**Сопровождение:** [`Release Process`](docs/RELEASE_PROCESS.md) · [`Maintenance`](docs/MAINTENANCE.md).
 
 ---
 
