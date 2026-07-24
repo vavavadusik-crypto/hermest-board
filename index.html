@@ -1158,6 +1158,15 @@
           <span class="job-elapsed" id="localRenderElapsed" aria-hidden="true" hidden></span>
           <div class="artifact-list" id="localRenderArtifacts" aria-live="polite"></div>
           <section class="render-analytics" id="localRenderAnalytics" aria-label="Аналитика ролика" hidden></section>
+          <section class="edition-panel" id="editionPanel" aria-label="Мультиязычные издания" hidden>
+            <h3>Издание на другом языке</h3>
+            <div class="mini-note">Тот же ролик на другом языке: перевод повествования → голос языка → тот же монтаж → отдельный MP4. Ваша доска не меняется.</div>
+            <div class="panel-row two">
+              <select id="editionLanguage" aria-label="Язык издания"></select>
+              <button id="createEdition" aria-label="Создать издание на выбранном языке">Создать издание</button>
+            </div>
+            <div class="auth-status" id="editionStatus" role="status" aria-live="polite" hidden></div>
+          </section>
         </div>
         <div class="field">
           <label><span>Сценарий озвучки</span></label>
