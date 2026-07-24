@@ -75,7 +75,7 @@ export function createEdition({ project, targetLanguage, id, env = process.env }
     voiceId: voice.voiceId
   }));
   const status = voice.status === "ok" ? EDITION_STATUSES.DRAFT : EDITION_STATUSES.VOICE_MISSING;
-  return Object.freeze({
+  return freezeEdition({
     id: typeof id === "string" && id ? id : deriveEditionId(projectId, target),
     projectId,
     sourceLanguage,
@@ -83,9 +83,91 @@ export function createEdition({ project, targetLanguage, id, env = process.env }
     status,
     voiceProvider: voice.provider,
     voiceId: voice.voiceId,
+    translationModelId: null,
     message: voice.message,
     segments: Object.freeze(segments.map(Object.freeze))
   });
+}
+
+// Translate every segment through the injected translator, preserving scene
+// mapping and order. draft -> translating -> ready; any failure or empty
+// translation -> error with a user-safe message. voice_missing/ready/error
+// editions pass through unchanged (nothing to translate).
+export async function translateEdition(edition, { translate, modelId = null, signal } = {}) {
+  assertEdition(edition);
+  if (typeof translate !== "function") {
+    throw new TypeError("translateEdition requires a translate() dependency");
+  }
+  if (edition.status !== EDITION_STATUSES.DRAFT) return edition;
+  try {
+    const translatedSegments = [];
+    for (const segment of edition.segments) {
+      signal?.throwIfAborted?.();
+      const raw = await translate({ text: segment.sourceText, targetLanguage: edition.targetLanguage, signal });
+      const translatedText = String(raw ?? "").trim();
+      if (!translatedText) throw new RangeError("translator returned an empty translation");
+      translatedSegments.push(Object.freeze({ ...segment, translatedText }));
+    }
+    return freezeEdition({
+      ...edition,
+      status: EDITION_STATUSES.READY,
+      translationModelId: modelId,
+      message: null,
+      segments: Object.freeze(translatedSegments)
+    });
+  } catch (error) {
+    return freezeEdition({
+      ...edition,
+      status: EDITION_STATUSES.ERROR,
+      translationModelId: modelId,
+      message: sanitizeEditionMessage(error)
+    });
+  }
+}
+
+// Rebuild a renderable board in the target language from a READY edition. The
+// translated narration becomes each card's spoken text; original visuals
+// (assetRef/image) and scene order are reused so only audio/subtitles change.
+// Fed back through the EXISTING render path — render-project.js is not modified.
+export function buildTranslatedProject(project, edition) {
+  const board = assertProject(project);
+  assertEdition(edition);
+  if (edition.status !== EDITION_STATUSES.READY) {
+    throw new RangeError("Edition must be translated (status=ready) before rebuilding the project");
+  }
+  const storyboard = buildStoryboard(board);
+  if (storyboard.scenes.length !== edition.segments.length) {
+    throw new RangeError("Edition segments no longer match the project scenes");
+  }
+  const cards = storyboard.scenes.map((scene, index) => {
+    const segment = edition.segments[index];
+    if (segment.sceneId !== String(scene.id)) {
+      throw new RangeError("Edition segment/scene mapping drifted from the project");
+    }
+    const { title, text } = splitTranslatedNarration(segment.translatedText);
+    const card = { id: String(scene.cardId), title, text, x: 0, y: index };
+    if (scene.visual?.assetRef) card.assetRef = scene.visual.assetRef;
+    if (scene.visual?.image) card.image = scene.visual.image;
+    if (Array.isArray(scene.sourceRefs) && scene.sourceRefs.length > 0) {
+      card.sourceRefs = [...scene.sourceRefs];
+    }
+    return card;
+  });
+  const sourceBrief = board.brief && typeof board.brief === "object" && !Array.isArray(board.brief)
+    ? board.brief
+    : {};
+  const brief = {
+    ...sourceBrief,
+    language: edition.targetLanguage,
+    voice: edition.voiceProvider === "piper" ? edition.voiceId : "",
+    narrationProvider: edition.voiceProvider === "elevenlabs" ? "elevenlabs" : ""
+  };
+  return {
+    ...board,
+    projectId: `${edition.projectId}#${edition.targetLanguage}`,
+    brief,
+    cards
+  };
 }
 
 function assertProject(project) {
@@ -93,6 +175,38 @@ function assertProject(project) {
     throw new TypeError("Edition project must be an object");
   }
   return project;
+}
+
+function assertEdition(edition) {
+  if (!edition || typeof edition !== "object" || !Array.isArray(edition.segments)) {
+    throw new TypeError("A valid edition object is required");
+  }
+  return edition;
+}
+
+function freezeEdition(edition) {
+  return Object.freeze(edition);
+}
+
+// Split translated narration into a short heading (first sentence) + body so the
+// on-screen h1 stays short while the spoken narration remains the full text.
+function splitTranslatedNarration(value) {
+  const clean = String(value ?? "").trim().replace(/\s+/gu, " ");
+  const match = clean.match(/^(.+?[.!?…])\s+(.+)$/u);
+  if (match && match[2]) return { title: match[1], text: match[2] };
+  return { title: clean, text: "" };
+}
+
+// Never leak provider stacks, paths or JSON into a user-visible edition message.
+function sanitizeEditionMessage(error) {
+  const raw = String(error?.message || "translation failed")
+    .replace(/[A-Za-z]:\\[^\s"'<>]+/gu, "<path>")
+    .replace(/\/[^\s"'<>]+/gu, "<path>")
+    .replace(/[{}]/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, 200);
+  return `Не удалось перевести издание: ${raw || "неизвестная ошибка"}.`;
 }
 
 function normalizeSourceLanguage(value) {

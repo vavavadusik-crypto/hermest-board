@@ -55,12 +55,22 @@ export function createBridgeTextModel({ env = process.env, model, postImpl = pos
   return {
     provider: "browser-bridge",
     model: resolvedModel,
-    async complete({ system, prompt, signal } = {}) {
+    async complete({ system, prompt, signal, temperature } = {}) {
       const text = String(prompt ?? "").trim();
       if (!text) throw new RangeError("Text model prompt is required");
       const messages = [];
       if (system) messages.push({ role: "system", content: String(system) });
       messages.push({ role: "user", content: text });
+      // Web-chat backends may ignore temperature, but deterministic callers
+      // (edition translation) still declare 0 so the intent travels with the request.
+      const options = { stableTicks: 8, timeoutMs: 420000, requireJson: true };
+      if (temperature !== undefined && temperature !== null) {
+        const value = Number(temperature);
+        if (!Number.isFinite(value) || value < 0 || value > 2) {
+          throw new RangeError("temperature must be a number between 0 and 2");
+        }
+        options.temperature = value;
+      }
       // stableTicks/requireJson: reasoning-модели прячут стоп-кнопку в паузах —
       // финал подтверждается только распарсенным JSON, а не «стабильной» тишиной.
       // Транспорт — node:http: встроенный fetch (undici) рвёт ожидание заголовков
@@ -68,7 +78,7 @@ export function createBridgeTextModel({ env = process.env, model, postImpl = pos
       const response = await postImpl(`${baseUrl}/chat/completions`, {
         model: resolvedModel,
         messages,
-        options: { stableTicks: 8, timeoutMs: 420000, requireJson: true }
+        options
       }, { timeoutMs: REQUEST_TIMEOUT_MS, signal });
       if (!response.ok) {
         throw new RangeError(`browser bridge completion failed with status ${response.status}`);
