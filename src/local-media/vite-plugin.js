@@ -6,6 +6,7 @@ import { renderProject } from "../media/render-project.js";
 import { describeBridgeAvailability } from "../media/text-model.js";
 import { createDraftJobManager } from "./draft-job-manager.js";
 import { draftBoardService } from "./draft-service.js";
+import { editionService, toPublicEdition } from "./edition-service.js";
 import { createLocalMediaJobManager } from "./job-manager.js";
 import { createProviderKeyStore } from "./provider-keys.js";
 
@@ -57,7 +58,8 @@ export function createLocalMediaRequestHandler({
   draftManager = createDraftJobManager({ runDraft: params => draftBoardService(params) }),
   maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
   providerKeys = createProviderKeyStore(),
-  describeBridge = describeBridgeAvailability
+  describeBridge = describeBridgeAvailability,
+  runEdition = editionService
 } = {}) {
   if (!manager || typeof manager.submit !== "function") {
     throw new TypeError("A local media job manager is required");
@@ -69,7 +71,7 @@ export function createLocalMediaRequestHandler({
     throw new RangeError(`maxBodyBytes must be within 64..${DEFAULT_MAX_BODY_BYTES}`);
   }
 
-  const context = { manager, draftManager, maxBodyBytes, providerKeys, describeBridge };
+  const context = { manager, draftManager, maxBodyBytes, providerKeys, describeBridge, runEdition };
   return function localMediaHandler(request, response, next) {
     void routeRequest(request, response, context, next).catch(error => {
       // Fail-closed: любой сбой обработчика (включая сбой самой отправки
@@ -94,7 +96,7 @@ export function createLocalMediaRequestHandler({
 }
 
 async function routeRequest(request, response, context, next) {
-  const { manager, draftManager, maxBodyBytes, providerKeys, describeBridge } = context;
+  const { manager, draftManager, maxBodyBytes, providerKeys, describeBridge, runEdition } = context;
   const host = String(request.headers.host || "");
   if (!isLoopbackHost(host) || !isAllowedOrigin(request.headers.origin, host)) {
     throw new HttpError(403, "local_media_origin_forbidden");
@@ -166,6 +168,27 @@ async function routeRequest(request, response, context, next) {
     validateRenderBody(body);
     const job = manager.submit({ project: body.project, projectId: body.projectId, platform: body.platform });
     sendJson(response, 202, { ok: true, job: decorateJob(job) });
+    return;
+  }
+
+  // Мультиязычное издание: перевести повествование готового проекта и вернуть
+  // переведённый board. Рендер идёт через существующий POST /render — новой
+  // render-поверхности нет. voice_missing — обычный статус (200), не ошибка.
+  if (request.method === "POST" && pathname === `${API_PREFIX}/edition`) {
+    requireMutationRequest(request);
+    const body = await readJsonBody(request, maxBodyBytes);
+    validateEditionBody(body);
+    const result = await runEdition({
+      project: body.project,
+      targetLanguage: body.targetLanguage,
+      endpoint: sanitizeDraftEndpoint(body.endpoint),
+      model: body.model
+    });
+    sendJson(response, 200, {
+      ok: true,
+      edition: toPublicEdition(result.edition),
+      project: result.project || null
+    });
     return;
   }
 
@@ -378,6 +401,23 @@ function validateDraftEndpoint(endpoint) {
       throw new HttpError(400, "draft_endpoint_invalid");
     }
   }
+}
+
+function validateEditionBody(body) {
+  const project = body.project;
+  if (!project || typeof project !== "object" || Array.isArray(project)) {
+    throw new HttpError(400, "edition_project_invalid");
+  }
+  const targetLanguage = body.targetLanguage;
+  if (targetLanguage === undefined || targetLanguage === null
+    || (typeof targetLanguage === "string" && !targetLanguage.trim())) {
+    throw new HttpError(400, "edition_language_required");
+  }
+  if (typeof targetLanguage !== "string" || targetLanguage.length > 32) {
+    throw new HttpError(400, "edition_language_invalid");
+  }
+  requireOptionalBoundedString(body.model, 64, "edition_model_invalid");
+  validateDraftEndpoint(body.endpoint);
 }
 
 function validateRenderBody(body) {

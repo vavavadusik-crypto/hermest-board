@@ -79,6 +79,10 @@ import { buildDemoProject } from "./ui/demo-project.js";
     const localRenderArtifacts = document.getElementById("localRenderArtifacts");
     const renderLocalVideoButton = document.getElementById("renderLocalVideo");
     const cancelLocalRenderButton = document.getElementById("cancelLocalRender");
+    const editionPanel = document.getElementById("editionPanel");
+    const editionLanguageSelect = document.getElementById("editionLanguage");
+    const createEditionButton = document.getElementById("createEdition");
+    const editionStatus = document.getElementById("editionStatus");
     const wizardTopicInput = document.getElementById("wizardTopic");
     const wizardSceneCountInput = document.getElementById("wizardSceneCount");
     const wizardResearchInput = document.getElementById("wizardResearch");
@@ -1049,8 +1053,9 @@ import { buildDemoProject } from "./ui/demo-project.js";
 
     document.getElementById("stopPlayback").addEventListener("click", stopPlayback);
     document.getElementById("recordVideo").addEventListener("click", recordVideo);
-    renderLocalVideoButton.addEventListener("click", renderLocalVideo);
+    renderLocalVideoButton.addEventListener("click", () => renderLocalVideo());
     cancelLocalRenderButton.addEventListener("click", cancelLocalRender);
+    createEditionButton.addEventListener("click", createEdition);
     wizardDraftButton.addEventListener("click", draftFromTopic);
     wizardCancelButton.addEventListener("click", cancelDraftJob);
     void loadBridgeModels();
@@ -2818,11 +2823,16 @@ import { buildDemoProject } from "./ui/demo-project.js";
       return lines.join("\n");
     }
 
-    async function renderLocalVideo() {
+    async function renderLocalVideo(projectOverride) {
       if (activeLocalRenderJobId) {
         flashStatus("Локальный render уже выполняется");
         return;
       }
+      // Издание переиспользует этот проверенный путь: переданный переведённый
+      // проект рендерится как отдельный MP4, доска не затрагивается.
+      const project = projectOverride && typeof projectOverride === "object" && Array.isArray(projectOverride.cards)
+        ? projectOverride
+        : buildProjectDocument();
       const platform = localRenderPlatform.value || "youtube_video";
       const pollToken = ++localRenderPollToken;
       renderLocalVideoButton.disabled = true;
@@ -2841,7 +2851,7 @@ import { buildDemoProject } from "./ui/demo-project.js";
             "x-hermest-local-media": "1"
           },
           body: JSON.stringify({
-            project: buildProjectDocument(),
+            project,
             projectId: state.server?.projectId || "",
             platform
           })
@@ -2870,6 +2880,7 @@ import { buildDemoProject } from "./ui/demo-project.js";
         if (completed?.status === "completed") {
           renderLocalArtifactLinks(completed);
           renderRenderAnalytics(completed);
+          revealEditionPanel();
         }
       } catch (error) {
         localRenderStatus.textContent = renderErrorText(error);
@@ -2891,6 +2902,80 @@ import { buildDemoProject } from "./ui/demo-project.js";
         friendlyErrorMessage(error, "render"),
         "Запусти `npm run dev` локально либо используй `npm run render:project -- --input board.json --platform youtube_video`."
       ].join("\n");
+    }
+
+    // --- Мультиязычные издания: готовый ролик на другом языке ---
+    let editionInFlight = false;
+
+    function revealEditionPanel() {
+      populateEditionLanguages();
+      editionPanel.hidden = false;
+    }
+
+    function populateEditionLanguages() {
+      const source = state.brief?.language || "ru";
+      const options = NARRATION_LANGUAGES.filter(entry => entry.code !== source);
+      const previous = editionLanguageSelect.value;
+      editionLanguageSelect.replaceChildren(...options.map(entry => new Option(entry.label, entry.code)));
+      if (options.some(entry => entry.code === previous)) editionLanguageSelect.value = previous;
+    }
+
+    function setEditionStatus(text) {
+      editionStatus.textContent = text;
+      editionStatus.hidden = false;
+    }
+
+    async function createEdition() {
+      if (editionInFlight) return; // гард двойного запуска
+      const targetLanguage = editionLanguageSelect.value;
+      if (!targetLanguage) {
+        setEditionStatus("Выбери язык издания.");
+        return;
+      }
+      const label = NARRATION_LANGUAGES.find(entry => entry.code === targetLanguage)?.label || targetLanguage;
+      const byokPreset = selectedByokPreset();
+      let endpoint;
+      let model = wizardModelSelect.value || undefined;
+      if (byokPreset) {
+        const byokModel = wizardByokModel.value.trim();
+        const baseUrl = wizardByokBaseUrl.value.trim();
+        if (!baseUrl || !byokModel) {
+          setEditionStatus("Укажи Base URL и модель для своего API (панель сборки из темы).");
+          return;
+        }
+        endpoint = { kind: "openai", baseUrl, apiKey: wizardByokKey.value, model: byokModel };
+        model = undefined;
+      }
+      editionInFlight = true;
+      createEditionButton.disabled = true;
+      setEditionStatus(`Перевожу издание на «${label}»… reasoning-модель думает минутами.`);
+      let data;
+      try {
+        data = await fetchJson("/api/local-media/edition", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-hermest-local-media": "1" },
+          body: JSON.stringify({ project: buildProjectDocument(), targetLanguage, endpoint, model })
+        });
+      } catch (error) {
+        setEditionStatus(friendlyErrorMessage(error, "edition"));
+        editionInFlight = false;
+        createEditionButton.disabled = false;
+        return;
+      }
+      const edition = data.edition || {};
+      editionInFlight = false;
+      createEditionButton.disabled = false;
+      if (edition.status === "ready" && data.project) {
+        // Готовый перевод рендерится тем же проверенным путём как отдельный MP4.
+        setEditionStatus(`Перевод на «${label}» готов. Рендерю MP4 издания…`);
+        await renderLocalVideo(data.project);
+        return;
+      }
+      if (edition.status === "voice_missing" || edition.status === "error") {
+        setEditionStatus(humanizeDetail(edition.message, "edition") || "Издание недоступно для этого языка.");
+        return;
+      }
+      setEditionStatus(friendlyErrorMessage(null, "edition"));
     }
 
     // Переподключение к render-job после reload (id сохранён в localStorage).

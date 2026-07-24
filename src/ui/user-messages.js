@@ -14,7 +14,11 @@ const CODE_MESSAGES = Object.freeze({
   local_media_job_not_found: "Рендер уже завершился — отменять нечего.",
   local_media_job_not_cancellable: "Рендер уже завершается — отмена невозможна.",
   api_key_required: "Нужен API-ключ выбранного провайдера.",
-  bridge_unavailable: "Генерация недоступна: подключи свой API-ключ или запусти мост."
+  bridge_unavailable: "Генерация недоступна: подключи свой API-ключ или запусти мост.",
+  edition_language_required: "Выбери язык издания.",
+  edition_language_invalid: "Такой язык издания не поддерживается.",
+  edition_project_invalid: "Сначала собери готовый ролик, затем создай издание.",
+  edition_model_invalid: "Модель перевода указана неверно. Проверь настройки."
 });
 
 // Per-flow generic fallback used only when no specific code matched. Keeps the message honest
@@ -25,6 +29,7 @@ const CONTEXT_FALLBACK = Object.freeze({
   provider: "Ключ не принят. Проверь значение и попробуй снова.",
   account: "Сервис аккаунта сейчас недоступен. Попробуй позже.",
   research: "Не удалось получить источники. Попробуй ещё раз.",
+  edition: "Не удалось создать издание. Попробуй ещё раз.",
   generic: "Что-то пошло не так. Попробуй ещё раз."
 });
 

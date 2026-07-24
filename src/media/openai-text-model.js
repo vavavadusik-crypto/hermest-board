@@ -29,7 +29,7 @@ export function createOpenAiTextModel({ baseUrl, apiKey = "", model, fetchImpl =
   return {
     provider: "openai-compatible",
     model: resolvedModel,
-    async complete({ system, prompt, signal } = {}) {
+    async complete({ system, prompt, signal, temperature } = {}) {
       const text = String(prompt ?? "").trim();
       if (!text) throw new RangeError("Text model prompt is required");
       const messages = [];
@@ -42,7 +42,12 @@ export function createOpenAiTextModel({ baseUrl, apiKey = "", model, fetchImpl =
       const response = await fetchWithTimeout(fetchImpl, endpointUrl, {
         method: "POST",
         headers,
-        body: JSON.stringify({ model: resolvedModel, messages, stream: false, temperature: 0.4 }),
+        body: JSON.stringify({
+          model: resolvedModel,
+          messages,
+          stream: false,
+          temperature: normalizeTemperature(temperature)
+        }),
         signal
       }, REQUEST_TIMEOUT_MS);
 
@@ -80,6 +85,17 @@ function normalizeBaseUrl(value) {
     throw new RangeError("plain http baseUrl is allowed only for 127.0.0.1 or localhost");
   }
   return raw.replace(/\/+$/, "");
+}
+
+// Editions need deterministic translation (temperature 0); the historical
+// default of 0.4 is preserved for every other caller.
+function normalizeTemperature(value) {
+  if (value === undefined || value === null) return 0.4;
+  const temperature = Number(value);
+  if (!Number.isFinite(temperature) || temperature < 0 || temperature > 2) {
+    throw new RangeError("temperature must be a number between 0 and 2");
+  }
+  return temperature;
 }
 
 function normalizeModel(value) {
