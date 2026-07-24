@@ -1,4 +1,5 @@
 import { normalizeCardImageUrl, renderCardImage } from "./card-image.js";
+import { friendlyErrorMessage, humanizeDetail, resolveErrorCode } from "./ui/user-messages.js";
 
     const STORAGE_KEY = "hermest-board:v1";
     const AI_SETTINGS_LOCAL_KEY = "hermest-board:ai-settings:v1";
@@ -1203,7 +1204,7 @@ import { normalizeCardImageUrl, renderCardImage } from "./card-image.js";
       const hint = byokPreset
         ? "Проверь Base URL, название модели и ключ своего API."
         : "Проверь, что мост browser-ai-bridge запущен (:8788) и провайдер залогинен.";
-      return ["Не удалось собрать черновик.", `Ошибка: ${error.message || "unknown"}`, hint].join(" ");
+      return [friendlyErrorMessage(error, "draft"), hint].join(" ");
     }
 
     // Переподключение к draft-job после reload (id сохранён в localStorage).
@@ -1312,7 +1313,7 @@ import { normalizeCardImageUrl, renderCardImage } from "./card-image.js";
           });
           flashStatus(`${provider.label}: ключ передан локальному worker`);
         } catch (error) {
-          flashStatus(`${provider.label}: ключ отклонён (${error.message || "ошибка"})`);
+          flashStatus(`${provider.label}: ${friendlyErrorMessage(error, "provider")}`);
         } finally {
           keyInput.value = "";
           saveButton.disabled = false;
@@ -1764,7 +1765,7 @@ import { normalizeCardImageUrl, renderCardImage } from "./card-image.js";
           "",
           "Preflight API недоступен.",
           "",
-          `Ошибка: ${error.message || "unknown"}`,
+          `Ошибка: ${friendlyErrorMessage(error)}`,
           "",
           "Локально проверь: npm run check",
           "На production проверь: /api/product?route=preflight"
@@ -1788,7 +1789,7 @@ import { normalizeCardImageUrl, renderCardImage } from "./card-image.js";
           "",
           "API хранилище недоступно в этом режиме.",
           "",
-          `Ошибка: ${error.message || "unknown"}`,
+          `Ошибка: ${friendlyErrorMessage(error)}`,
           "",
           "Локальный fallback работает через localStorage и экспорт JSON."
         ].join("\n");
@@ -1811,7 +1812,7 @@ import { normalizeCardImageUrl, renderCardImage } from "./card-image.js";
         }
         return data;
       } catch (error) {
-        accountStatus.textContent = `Account API недоступен: ${error.message || "unknown"}`;
+        accountStatus.textContent = `Аккаунт: ${friendlyErrorMessage(error, "account")}`;
         if (showOutput) saveState("Account API недоступен");
         return null;
       }
@@ -1843,7 +1844,7 @@ import { normalizeCardImageUrl, renderCardImage } from "./card-image.js";
         publishOutput.value = state.publish.packageText;
         saveState("Выход выполнен");
       } catch (error) {
-        accountStatus.textContent = `Logout недоступен: ${error.message || "unknown"}`;
+        accountStatus.textContent = `Выход: ${friendlyErrorMessage(error, "account")}`;
         saveState("Logout недоступен");
       }
     }
@@ -1884,11 +1885,11 @@ import { normalizeCardImageUrl, renderCardImage } from "./card-image.js";
         publishOutput.value = state.publish.packageText;
         saveState(`${label} выполнен`);
       } catch (error) {
-        accountStatus.textContent = `${label} заблокирован: ${error.message || "unknown"}`;
+        accountStatus.textContent = `${label}: ${friendlyErrorMessage(error, "account")}`;
         state.publish.packageText = [
           `ACCOUNT ${label.toUpperCase()} BLOCKED`,
           "",
-          `Ошибка: ${error.message || "unknown"}`,
+          `Ошибка: ${friendlyErrorMessage(error)}`,
           error.payload?.note ? `Note: ${error.payload.note}` : "",
           "",
           "Для включения нужны server env:",
@@ -1969,7 +1970,7 @@ import { normalizeCardImageUrl, renderCardImage } from "./card-image.js";
         state.publish.packageText = [
           "API SAVE BLOCKED",
           "",
-          `Ошибка: ${error.message || "unknown"}`,
+          `Ошибка: ${friendlyErrorMessage(error)}`,
           "",
           "Это нормально для публичного Vercel без постоянной базы.",
           "Борд всё равно сохранён локально в браузере. Для переноса используй экспорт JSON.",
@@ -2011,7 +2012,7 @@ import { normalizeCardImageUrl, renderCardImage } from "./card-image.js";
         state.publish.packageText = [
           "API LOAD BLOCKED",
           "",
-          `Ошибка: ${error.message || "unknown"}`,
+          `Ошибка: ${friendlyErrorMessage(error)}`,
           "",
           "Локальный борд не изменён."
         ].join("\n");
@@ -2035,7 +2036,7 @@ import { normalizeCardImageUrl, renderCardImage } from "./card-image.js";
         state.publish.packageText = [
           "AGENT PLAN ERROR",
           "",
-          `Ошибка: ${error.message || "unknown"}`,
+          `Ошибка: ${friendlyErrorMessage(error)}`,
           "",
           "Локально можно собрать publish pack кнопкой Пакет."
         ].join("\n");
@@ -2509,12 +2510,13 @@ import { normalizeCardImageUrl, renderCardImage } from "./card-image.js";
     }
 
     function showAiError(error) {
-      const code = error?.payload?.error || error?.message || "unknown";
-      const details = error?.payload?.message || error?.payload?.note || "";
+      // AI-мост кладёт код в payload.error; резолвер иначе смотрит payload.code/message.
+      const code = error?.payload?.error || resolveErrorCode(error);
+      const details = humanizeDetail(error?.payload?.message || error?.payload?.note || "");
       aiResponseOutput.value = [
-        "AI ERROR",
+        "Ошибка AI-запроса",
         "",
-        `Ошибка: ${code}`,
+        friendlyErrorMessage(code, "generic"),
         details ? `Детали: ${details}` : "",
         "",
         code === "api_key_required" ? "Добавь свой OpenAI API key в AI настройки и повтори запрос." : "Проверь ключ, модель, лимиты аккаунта и доступ к сети."
@@ -2795,7 +2797,7 @@ import { normalizeCardImageUrl, renderCardImage } from "./card-image.js";
     function renderErrorText(error) {
       return [
         "Локальный worker недоступен или render отклонён.",
-        `Ошибка: ${error.message || "unknown"}`,
+        friendlyErrorMessage(error, "render"),
         "Запусти `npm run dev` локально либо используй `npm run render:project -- --input board.json --platform youtube_video`."
       ].join("\n");
     }
@@ -2888,7 +2890,7 @@ import { normalizeCardImageUrl, renderCardImage } from "./card-image.js";
         job.blockers?.length ? `Что мешает: ${job.blockers.join(", ")}` : "",
         job.candidate?.blockers?.length ? `Требует внимания: ${job.candidate.blockers.join(", ")}` : "",
         job.warnings?.length ? `Предупреждения: ${job.warnings.join(", ")}` : "",
-        job.error ? `Детали: ${job.error}` : ""
+        job.error ? `Детали: ${humanizeDetail(job.error, "render")}` : ""
       ].filter(Boolean);
       localRenderStatus.textContent = [headline, ...details].join("\n");
     }
