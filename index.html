@@ -244,6 +244,23 @@
       line-height: 1.5;
     }
 
+    .welcome-modes {
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 2px 0 0;
+      padding: 0;
+    }
+    .welcome-modes li {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 11px;
+      color: var(--muted);
+      background: rgba(3, 9, 18, .4);
+    }
+
     .welcome-field {
       display: flex;
       flex-direction: column;
@@ -786,6 +803,63 @@
       font-weight: 800;
     }
 
+    .diagnostics-panel {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(3, 9, 18, .5);
+      padding: 10px;
+      margin: 8px 0 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .diagnostics-panel[hidden] { display: none; }
+    .diagnostics-status { color: var(--muted); font-size: 11px; line-height: 1.4; }
+    .diagnostics-list { display: flex; flex-direction: column; gap: 8px; }
+    .diagnostic-row {
+      border: 1px solid rgba(123, 220, 255, .14);
+      border-radius: 8px;
+      background: rgba(5, 12, 24, .55);
+      padding: 8px 9px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .diagnostic-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .diagnostic-name { color: var(--text); font-size: 12px; font-weight: 700; }
+    .diagnostic-reason { color: var(--muted); font-size: 11px; line-height: 1.35; }
+    .diagnostic-providers { display: flex; flex-wrap: wrap; gap: 6px; }
+    .diagnostic-pill, .diagnostic-provider {
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 10px;
+      font-weight: 800;
+      border: 1px solid transparent;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tone-ok { color: var(--accent); border-color: rgba(94, 234, 212, .4); background: rgba(5, 25, 29, .5); }
+    .tone-warn { color: var(--warn); border-color: rgba(250, 204, 21, .4); background: rgba(40, 32, 4, .5); }
+    .tone-muted { color: var(--muted); border-color: rgba(142, 169, 186, .32); background: rgba(12, 18, 30, .6); }
+    .access-badge {
+      border-radius: 999px;
+      padding: 1px 6px;
+      font-size: 9px;
+      font-weight: 800;
+      border: 1px solid transparent;
+    }
+    .access-free { color: #052e2b; background: var(--accent); }
+    .access-paid { color: #211a02; background: var(--warn); }
+    .access-oauth { color: #2a0a2e; background: var(--accent-2); }
+    .access-byok { color: var(--text); background: rgba(123, 220, 255, .16); border-color: var(--line); }
+    .diagnostics-retry { align-self: flex-start; }
+
     .auth-status {
       border: 1px solid rgba(94, 234, 212, .22);
       border-radius: 8px;
@@ -919,14 +993,14 @@
       <input class="deck-title" id="deckTitle" value="Hermest: оболочка над ИИ-агентами" aria-label="Название борда">
       <nav class="toolbar" aria-label="Инструменты">
         <button id="startWizard" class="cta-primary" title="Собрать видео из темы — главный сценарий"><span class="cta-icon" aria-hidden="true">🎬</span><span class="cta-label">Тема → видео</span></button>
-        <button id="addCard" title="Добавить карточку">＋</button>
-        <button id="connectMode" title="Соединить выбранные карточки">⛓</button>
-        <button id="fitView" title="Показать все карточки">⌖</button>
-        <button id="openSettings" title="Настройки">⚙</button>
-        <button id="togglePanel" title="Панель настроек">☰</button>
-        <button id="recordMode" title="Режим записи">◉</button>
-        <button id="exportJson" title="Экспорт JSON">⇩</button>
-        <button id="importJson" title="Импорт JSON">⇧</button>
+        <button id="addCard" aria-label="Добавить карточку" title="Добавить карточку">＋</button>
+        <button id="connectMode" aria-label="Соединить выбранные карточки" title="Соединить выбранные карточки">⛓</button>
+        <button id="fitView" aria-label="Показать все карточки" title="Показать все карточки">⌖</button>
+        <button id="openSettings" aria-label="Настройки" title="Настройки">⚙</button>
+        <button id="togglePanel" aria-label="Панель настроек" title="Панель настроек">☰</button>
+        <button id="recordMode" aria-label="Режим записи" title="Режим записи">◉</button>
+        <button id="exportJson" aria-label="Экспорт JSON" title="Экспорт JSON">⇩</button>
+        <button id="importJson" aria-label="Импорт JSON" title="Импорт JSON">⇧</button>
       </nav>
     </header>
 
@@ -949,9 +1023,9 @@
         <input id="colorInput" type="color" value="#5eead4">
       </div>
       <div class="panel-row">
-        <button id="bringFront" title="Наверх">⇧</button>
-        <button id="duplicateCard" title="Дублировать">⧉</button>
-        <button id="deleteCard" title="Удалить">×</button>
+        <button id="bringFront" aria-label="Поднять карточку наверх" title="Наверх">⇧</button>
+        <button id="duplicateCard" aria-label="Дублировать карточку" title="Дублировать">⧉</button>
+        <button id="deleteCard" aria-label="Удалить карточку" title="Удалить">×</button>
       </div>
       <div class="hint">
         Перетаскивай блок за верхнюю полосу. Фото добавляется кликом по верхней зоне карточки. Пустое поле сцены можно двигать мышкой. Колесо мыши меняет масштаб.
@@ -1017,6 +1091,9 @@
           <div class="panel-row two">
             <button id="wizardDraft" title="Собрать карточки из темы браузерной ИИ-моделью">Собрать из темы</button>
             <button id="wizardCancel" class="btn-danger" title="Отменить текущую сборку" aria-label="Отменить сборку черновика" hidden>Отменить</button>
+          </div>
+          <div class="panel-row wide">
+            <button id="loadDemoBoard" title="Открыть готовый пример борда без запуска модели и без ключей">Открыть готовый пример</button>
           </div>
           <div class="auth-status" id="wizardStatus" role="status" aria-live="polite">Готово. Введи тему и нажми «Собрать из темы».</div>
           <span class="job-elapsed" id="wizardElapsed" aria-hidden="true" hidden></span>
@@ -1131,6 +1208,13 @@
           </div>
           <div class="panel-row wide">
             <button id="showReadinessReport" title="Проверить готовность продукта к версии 1.0.0">1.0 статус</button>
+          </div>
+          <div class="panel-row wide">
+            <button id="checkProviderDiagnostics" title="Показать, какие провайдеры готовы, настроены или недоступны, и что бесплатно">Диагностика провайдеров</button>
+          </div>
+          <div class="diagnostics-panel" id="providerDiagnostics" role="region" aria-label="Диагностика провайдеров" hidden>
+            <div class="diagnostics-status" id="providerDiagnosticsStatus" role="status" aria-live="polite"></div>
+            <div class="diagnostics-list" id="providerDiagnosticsList"></div>
           </div>
           <div class="panel-section" id="settingsPanel">
             <h2>Настройки</h2>
@@ -1267,12 +1351,19 @@
       <div class="welcome-mark" aria-hidden="true">H</div>
       <h1 id="welcomeTitle">Из темы — в готовое видео</h1>
       <p class="welcome-lead">Введи тему. ИИ соберёт карточки-сценарий, озвучит и смонтирует настоящий MP4 — локально, на твоём компьютере. Подойдёт свой или бесплатный API-ключ, без обязательной подписки.</p>
+      <ul class="welcome-modes" aria-label="Как это работает">
+        <li>🖥️ Локально и бесплатно</li>
+        <li>🎁 Бесплатный ключ</li>
+        <li>🗝️ Свой ключ (BYOK)</li>
+        <li>☁️ Облако — по желанию</li>
+      </ul>
       <label class="welcome-field" for="welcomeTopic">
         <span>Тема ролика</span>
         <input id="welcomeTopic" type="text" maxlength="300" placeholder="Например: Квантовые компьютеры простыми словами" autocomplete="off">
       </label>
       <div class="welcome-actions">
         <button id="welcomeStart" class="cta-primary">Начать</button>
+        <button id="welcomeDemo" class="welcome-ghost">Открыть пример</button>
         <button id="welcomeSkip" class="welcome-ghost">Осмотреть доску</button>
       </div>
       <p class="welcome-foot">Ничего не отправляется без твоего действия. Данные хранятся локально в браузере.</p>
