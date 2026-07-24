@@ -244,6 +244,23 @@
       line-height: 1.5;
     }
 
+    .welcome-modes {
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 2px 0 0;
+      padding: 0;
+    }
+    .welcome-modes li {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 11px;
+      color: var(--muted);
+      background: rgba(3, 9, 18, .4);
+    }
+
     .welcome-field {
       display: flex;
       flex-direction: column;
@@ -976,14 +993,14 @@
       <input class="deck-title" id="deckTitle" value="Hermest: оболочка над ИИ-агентами" aria-label="Название борда">
       <nav class="toolbar" aria-label="Инструменты">
         <button id="startWizard" class="cta-primary" title="Собрать видео из темы — главный сценарий"><span class="cta-icon" aria-hidden="true">🎬</span><span class="cta-label">Тема → видео</span></button>
-        <button id="addCard" title="Добавить карточку">＋</button>
-        <button id="connectMode" title="Соединить выбранные карточки">⛓</button>
-        <button id="fitView" title="Показать все карточки">⌖</button>
-        <button id="openSettings" title="Настройки">⚙</button>
-        <button id="togglePanel" title="Панель настроек">☰</button>
-        <button id="recordMode" title="Режим записи">◉</button>
-        <button id="exportJson" title="Экспорт JSON">⇩</button>
-        <button id="importJson" title="Импорт JSON">⇧</button>
+        <button id="addCard" aria-label="Добавить карточку" title="Добавить карточку">＋</button>
+        <button id="connectMode" aria-label="Соединить выбранные карточки" title="Соединить выбранные карточки">⛓</button>
+        <button id="fitView" aria-label="Показать все карточки" title="Показать все карточки">⌖</button>
+        <button id="openSettings" aria-label="Настройки" title="Настройки">⚙</button>
+        <button id="togglePanel" aria-label="Панель настроек" title="Панель настроек">☰</button>
+        <button id="recordMode" aria-label="Режим записи" title="Режим записи">◉</button>
+        <button id="exportJson" aria-label="Экспорт JSON" title="Экспорт JSON">⇩</button>
+        <button id="importJson" aria-label="Импорт JSON" title="Импорт JSON">⇧</button>
       </nav>
     </header>
 
@@ -1006,9 +1023,9 @@
         <input id="colorInput" type="color" value="#5eead4">
       </div>
       <div class="panel-row">
-        <button id="bringFront" title="Наверх">⇧</button>
-        <button id="duplicateCard" title="Дублировать">⧉</button>
-        <button id="deleteCard" title="Удалить">×</button>
+        <button id="bringFront" aria-label="Поднять карточку наверх" title="Наверх">⇧</button>
+        <button id="duplicateCard" aria-label="Дублировать карточку" title="Дублировать">⧉</button>
+        <button id="deleteCard" aria-label="Удалить карточку" title="Удалить">×</button>
       </div>
       <div class="hint">
         Перетаскивай блок за верхнюю полосу. Фото добавляется кликом по верхней зоне карточки. Пустое поле сцены можно двигать мышкой. Колесо мыши меняет масштаб.
@@ -1334,6 +1351,12 @@
       <div class="welcome-mark" aria-hidden="true">H</div>
       <h1 id="welcomeTitle">Из темы — в готовое видео</h1>
       <p class="welcome-lead">Введи тему. ИИ соберёт карточки-сценарий, озвучит и смонтирует настоящий MP4 — локально, на твоём компьютере. Подойдёт свой или бесплатный API-ключ, без обязательной подписки.</p>
+      <ul class="welcome-modes" aria-label="Как это работает">
+        <li>🖥️ Локально и бесплатно</li>
+        <li>🎁 Бесплатный ключ</li>
+        <li>🗝️ Свой ключ (BYOK)</li>
+        <li>☁️ Облако — по желанию</li>
+      </ul>
       <label class="welcome-field" for="welcomeTopic">
         <span>Тема ролика</span>
         <input id="welcomeTopic" type="text" maxlength="300" placeholder="Например: Квантовые компьютеры простыми словами" autocomplete="off">
