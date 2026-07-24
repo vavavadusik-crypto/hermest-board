@@ -5,8 +5,11 @@
 > Протокол непрерывности: `docs/MASTER_PLAN_2026-07-19.md`, раздел 8.6.
 > Обновляется в начале каждой задачи и после каждого коммита. Это часть Definition of Done.
 
-UPDATED: 2026-07-24 (одиннадцатая сессия — Gate M4 + M6 + M7 ЗАКРЫТЫ; лицензия AGPL-3.0 принята Вадимом)
-ACTIVE PHASE: между фазами. Закрыты 1–4 (аналитика/B-roll/publishing/workspace) + 6 (open-source legal) + 7 (install/self-host) + 9 (CI offload). NEXT: PHASE 8 (security hardening) ИЛИ 5 (онбординг/UX) двухполосно через терминального claude; затем 10 (доки) и 11 (release candidate).
+UPDATED: 2026-07-24 (одиннадцатая сессия — Gate M4/M5/M6/M7/M8 ЗАКРЫТЫ в облаке; лицензия AGPL-3.0)
+ACTIVE PHASE: между фазами. Закрыты 1–8 + 9 (CI offload) — все с CI SUCCESS. NEXT: PHASE 10 (документация пользователя/разработчика) + PHASE 11 (release candidate: SBOM, checksums, архивы, чек-лист).
+ВАЖНО (частая путаница): мультиязычная ОЗВУЧКА видео (Piper ru/en/es/de/fr + ElevenLabs, язык = параметр проекта) — ПРОДУКТОВАЯ фича, РАБОТАЕТ, проверена media-гейтом. Отдельно #8 «UI i18n» = язык надписей самого приложения (меню RU↔EN) — системы нет, отложено (owner decision). Это РАЗНЫЕ вещи.
+Gate M5 ✅ ЗАКРЫТ @ a322927 (CI SUCCESS): UX/онбординг — санитайз ошибок (src/ui/user-messages.js), панель диагностики провайдеров (src/ui/connector-labels.js), one-click демо (src/ui/demo-project.js), a11y, состояния. Аудит docs/audits/2026-07-24-phase5-ux.md. Owner-decision отложены: #8 UI i18n, #3 визуальный stepper.
+Gate M8 ✅ ЗАКРЫТ @ 129499c/e158a39 (CI SUCCESS): security hardening — ssrf-guard+wiring (validateOutboundUrl в respond.js/search.js), redaction, spawn-safety, npm audit в CI, M2 Secure-cookie (X-Forwarded-Proto/HERMEST_FORCE_SECURE_COOKIES), L2 trust-model доки. Аудит LANE B (5 находок, 0 crit/high). Owner-decision: M1 OAuth-state (exchange=501, не живой), M3 tenant-модель, L1 vault-KDF — не блокеры при single-tenant.
 
 ## PHASE 5 (продуктовый UX / онбординг) — В РАБОТЕ на feat/m5-ux-onboarding (не merge; ждёт cloud CI + owner review)
 Терм. claude (Opus), аддитивно, минимальные диффы, TDD. Аудит: docs/audits/2026-07-24-phase5-ux.md (10 критериев, file:line; 2 missing, 6 partial, 1 owner-decision). Реализовано 5 срезов (каждый — коммит+push, лёгкий гейт зелёный):
