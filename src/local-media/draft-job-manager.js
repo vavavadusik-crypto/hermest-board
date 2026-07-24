@@ -57,7 +57,7 @@ export function createDraftJobManager({
     return record ? publicJob(record) : null;
   }
 
-  // Контракт отмены (docs/CANCEL_MILESTONE_HANDOFF.md, «Правила идемпотентности»):
+  // Контракт отмены (the cancel contract, «Правила идемпотентности»):
   //   queued|running → job СРАЗУ терминально cancelled (наружу не выходит
   //     промежуточный статус), abort прерывает таймеры/запросы исполнителя;
   //   cancelled → идемпотентный повтор: тот же исход "cancelled", без ошибки;

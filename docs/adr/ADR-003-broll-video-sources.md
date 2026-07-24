@@ -1,6 +1,6 @@
 # ADR-003: B-roll Video Sources for Scene Backgrounds
 
-Date: 2026-07-19 · Status: ACCEPTED · Phase: P2 (master plan `docs/MASTER_PLAN_2026-07-19.md`)
+Date: 2026-07-19 · Status: ACCEPTED · Phase: P2 (master plan the internal engineering plan)
 
 ## Context
 

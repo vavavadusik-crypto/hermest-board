@@ -84,7 +84,7 @@ export function createLocalMediaJobManager({
     return record ? publicJob(record) : null;
   }
 
-  // Контракт отмены (docs/RENDER_CANCEL_MILESTONE_HANDOFF.md, «Общий API-контракт»):
+  // Контракт отмены (the render-cancel contract, «Общий API-контракт»):
   //   queued|running → job СРАЗУ терминально cancelled (промежуточный статус
   //     вроде "cancelling" наружу не выходит), abort доводится через AbortSignal
   //     до runMediaTool, который убивает порождённые child-процессы
@@ -164,7 +164,7 @@ export function createLocalMediaJobManager({
       // сводки: analytics.completedAt обязан отражать реальное завершение.
       record.completedAt = now();
       // Аналитика деривируется ТОЛЬКО на completed из уже верифицированного
-      // manifest (контракт docs/ANALYTICS_MILESTONE_HANDOFF.md).
+      // manifest (analytics manifest contract).
       record.analytics = deriveRenderAnalytics(record, result);
       // phase:"done" проставляет только сам менеджер и только на completed:
       // отменённый/упавший job не имеет права показывать ложный done.
@@ -188,7 +188,7 @@ export function createLocalMediaJobManager({
     }
   }
 
-  // Прогресс-контракт (docs/PROGRESS_MILESTONE_HANDOFF.md, «Общий API-контракт»):
+  // Прогресс-контракт (the progress contract, «Общий API-контракт»):
   // адаптер сообщает фазы preflight|scenes|audio|encode|finalize через
   // инъектируемый onProgress; queued ставится при submit, done — только
   // менеджером на completed. Отчёты вне running (поздние зомби-отчёты после
@@ -479,7 +479,7 @@ function publicJob(record) {
   return structuredClone(job);
 }
 
-// Аналитика ролика (docs/ANALYTICS_MILESTONE_HANDOFF.md, «Общий API-контракт»):
+// Аналитика ролика (analytics manifest contract):
 // честная сводка ТОЛЬКО из уже прошедшего QC result.manifest и публичных
 // артефактов. Отсутствующее значение → null/0, ничего не выдумывается; наружу
 // уходят числа, короткие санитизированные строки и хеши — ни путей, ни stack.

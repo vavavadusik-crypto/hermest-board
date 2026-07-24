@@ -221,7 +221,7 @@ async function routeRequest(request, response, context, next) {
   }
   if (draftJobMatch && request.method === "DELETE") {
     requireMutationRequest(request);
-    // Контракт отмены (docs/CANCEL_MILESTONE_HANDOFF.md): queued/running и
+    // Контракт отмены (the cancel contract): queued/running и
     // повторная отмена → 202 идемпотентно; терминальные completed/failed →
     // детерминированный 409; неизвестный id → 404. Состояние job никогда
     // не превращается в 500.
@@ -250,7 +250,7 @@ async function routeRequest(request, response, context, next) {
   }
   if (jobMatch && request.method === "DELETE") {
     requireMutationRequest(request);
-    // Контракт отмены (docs/RENDER_CANCEL_MILESTONE_HANDOFF.md): queued/running
+    // Контракт отмены (the render-cancel contract): queued/running
     // и повторная отмена → 202 идемпотентно; терминальные completed/failed →
     // детерминированный 409; неизвестный id → 404. Состояние job никогда
     // не превращается в 500.

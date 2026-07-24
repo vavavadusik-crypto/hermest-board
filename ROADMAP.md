@@ -1,6 +1,6 @@
 # Roadmap
 
-This roadmap outlines the planned development phases for Hermest Board, derived from the internal master plan (`docs/MASTER_PLAN_2026-07-19.md`). Statuses are **honest** — DONE means verified and merged, IN PROGRESS means active work, PLANNED means designed but not started.
+This roadmap outlines the planned development phases for Hermest Board, derived from the internal master plan (internal engineering plan). Statuses are **honest** — DONE means verified and merged, IN PROGRESS means active work, PLANNED means designed but not started.
 
 See [CHANGELOG.md](CHANGELOG.md) for past releases and detailed change history.
 
@@ -301,5 +301,5 @@ See [CHANGELOG.md](CHANGELOG.md) for past releases and detailed change history.
 
 ---
 
-**Roadmap source of truth:** `docs/MASTER_PLAN_2026-07-19.md` (internal engineering plan).  
+**Roadmap source of truth:** the internal engineering plan (internal engineering plan).  
 **Last updated:** 2026-07-24 (M6 open-source preparation).

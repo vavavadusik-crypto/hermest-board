@@ -62,7 +62,7 @@ export async function renderProject({
   onProgress = null
 }) {
   // Прогресс — best-effort телеметрия для job-записи (контракт —
-  // docs/PROGRESS_MILESTONE_HANDOFF.md): фазы preflight → scenes → audio →
+  // the progress contract): фазы preflight → scenes → audio →
   // encode → finalize; done проставляет только job-manager на completed.
   const reportProgress = createRenderProgressReporter(onProgress);
   reportProgress({ phase: "preflight", label: "Подготовка проекта" });

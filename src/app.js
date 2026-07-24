@@ -1061,7 +1061,7 @@ import { buildDemoProject } from "./ui/demo-project.js";
     void loadBridgeModels();
 
     // Заполняет селект моделей живым списком провайдеров моста; deepseek — дефолт
-    // (сейчас самый надёжный для JSON-драфта), см. docs/EXECUTION_STATE грабли.
+    // (сейчас самый надёжный для JSON-драфта), известные особенности ffmpeg.
     async function loadBridgeModels() {
       const labels = {
         deepseek: "DeepSeek (бесплатно)",

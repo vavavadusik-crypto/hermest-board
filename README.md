@@ -200,8 +200,7 @@ npm run check        # полный гейт (перед коммитом/рел
 
 ## Документация
 
-Полный релиз-статус — `docs/RELEASE_READINESS.md`; актуальный checkpoint и recovery —
-`docs/EXECUTION_STATE.md` и `docs/NEXT_AGENT_HANDOFF.md`. Прочее:
+История и статус изменений — `CHANGELOG.md`. Прочее:
 
 - `docs/PRODUCT_NORTH_STAR.md` — определение продукта · `docs/ARCHITECTURE.md` — архитектура и
   backend boundary · `docs/CONTENT_PIPELINE_SPEC.md` — pipeline/cards/storyboard;

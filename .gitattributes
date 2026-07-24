@@ -1,2 +1,1 @@
-public/download/*.zip export-ignore
 tmp/ export-ignore

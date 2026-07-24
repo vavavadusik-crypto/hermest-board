@@ -20,7 +20,7 @@ user strings; the run dir is cleaned up after artifacts are finalized.
 ## Phases (progress `label`s emitted to the UI)
 
 `renderProject` reports these phases via `onProgress` (see
-`docs/PROGRESS_MILESTONE_HANDOFF.md`):
+`the progress contract`):
 
 | Phase | Label (RU) | What happens |
 |-------|-----------|--------------|
@@ -155,7 +155,7 @@ the **existing** `POST /api/local-media/render`.
 
 Follow-ups (not implemented): RTL/CJK text-box shaping + font coverage, resume
 mid-batch on quota/rate-limit, manual translation editing, bulk "all languages
-at once", pixel-identical visual freeze. See `docs/EXECUTION_STATE.md`.
+at once", pixel-identical visual freeze. See `CHANGELOG.md` and the README roadmap.
 
 ## Verification
 

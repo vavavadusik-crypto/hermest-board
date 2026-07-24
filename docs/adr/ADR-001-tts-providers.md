@@ -1,6 +1,6 @@
 # ADR-001: TTS Providers for Multilingual Narration
 
-Date: 2026-07-19 · Status: ACCEPTED · Phase: P1 (master plan `docs/MASTER_PLAN_2026-07-19.md`)
+Date: 2026-07-19 · Status: ACCEPTED · Phase: P1 (master plan the internal engineering plan)
 
 ## Context
 

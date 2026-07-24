@@ -79,4 +79,4 @@ block on the finished render.
   (`src/local-media/job-manager.js`).
 - Served: `GET /api/local-media/jobs/:jobId` (see
   [`docs/API_REFERENCE.md`](API_REFERENCE.md)).
-- History: `docs/ANALYTICS_MILESTONE_HANDOFF.md`, `docs/milestones/M1_ANALYTICS.md`.
+- History: see `CHANGELOG.md`.
