@@ -4,6 +4,8 @@
 // render path (render-project.js is not modified). See
 // docs/plans/2026-07-24-multilingual-editions.md.
 
+import { createHash } from "node:crypto";
+
 import { buildStoryboard } from "../domain/content-pipeline.js";
 import { describeElevenLabsAvailability } from "./elevenlabs-tts.js";
 import { hashJson } from "./manifest.js";
@@ -18,6 +20,7 @@ export const EDITION_STATUSES = Object.freeze({
 });
 
 const LANGUAGE_PATTERN = /^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$/;
+const SHA256_HEX = /^[a-f0-9]{64}$/;
 // ElevenLabs multilingual covers languages Piper does not; a stable marker keeps
 // the edition record honest without leaking the internal default voice id.
 const ELEVENLABS_VOICE_MARKER = "elevenlabs:eleven_multilingual_v2";
@@ -168,6 +171,49 @@ export function buildTranslatedProject(project, edition) {
     brief,
     cards
   };
+}
+
+// Provenance record for a translated edition: what language, which translation
+// model and voice produced it, content hashes per segment, and (once rendered)
+// the render manifest + video hashes. Additive to the render manifest, which
+// already carries `language`.
+export function buildEditionManifest(edition, { render = null, translationModelId } = {}) {
+  assertEdition(edition);
+  if (edition.status !== EDITION_STATUSES.READY) {
+    throw new RangeError("Edition must be translated (status=ready) before building its manifest");
+  }
+  const manifest = {
+    schemaVersion: 1,
+    kind: "multilingual-edition",
+    editionId: edition.id,
+    projectId: edition.projectId,
+    sourceLanguage: edition.sourceLanguage,
+    targetLanguage: edition.targetLanguage,
+    voiceProvider: edition.voiceProvider,
+    voiceId: edition.voiceId,
+    translationModelId: translationModelId ?? edition.translationModelId ?? null,
+    segments: edition.segments.map(segment => ({
+      sceneId: segment.sceneId,
+      sourceSha256: sha256(segment.sourceText),
+      translatedSha256: sha256(String(segment.translatedText ?? ""))
+    })),
+    render: normalizeRenderProvenance(render)
+  };
+  return manifest;
+}
+
+function normalizeRenderProvenance(render) {
+  if (!render || typeof render !== "object") return null;
+  const summary = {};
+  if (SHA256_HEX.test(String(render.manifestSha256 || ""))) summary.manifestSha256 = render.manifestSha256;
+  if (SHA256_HEX.test(String(render.videoSha256 || ""))) summary.videoSha256 = render.videoSha256;
+  if (typeof render.recipeId === "string" && render.recipeId) summary.recipeId = render.recipeId.slice(0, 64);
+  if (typeof render.platform === "string" && render.platform) summary.platform = render.platform.slice(0, 64);
+  return Object.keys(summary).length > 0 ? summary : null;
+}
+
+function sha256(value) {
+  return createHash("sha256").update(String(value ?? "")).digest("hex");
 }
 
 function assertProject(project) {
