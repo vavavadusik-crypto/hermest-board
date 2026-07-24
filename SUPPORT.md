@@ -1,6 +1,6 @@
 # Support
 
-Thank you for using Hermes Board! This document explains how to get help, where to ask questions, and how to help others.
+Thank you for using Hermest Board! This document explains how to get help, where to ask questions, and how to help others.
 
 ---
 
@@ -41,7 +41,7 @@ Thank you for using Hermes Board! This document explains how to get help, where 
 
 ### Paid Support
 
-**Not currently available.** Hermes Board is a community-driven open-source project. For commercial support inquiries (SLA, dedicated help, custom features), contact vavavadusik@gmail.com.
+**Not currently available.** Hermest Board is a community-driven open-source project. For commercial support inquiries (SLA, dedicated help, custom features), contact vavavadusik@gmail.com.
 
 ---
 
@@ -126,4 +126,4 @@ See [ROADMAP.md](ROADMAP.md) for what's planned and where help is needed. If you
 
 ## Thank You
 
-Thank you for being part of the Hermes Board community! Your questions, bug reports, and feedback make the project better for everyone. 🎬
+Thank you for being part of the Hermest Board community! Your questions, bug reports, and feedback make the project better for everyone. 🎬

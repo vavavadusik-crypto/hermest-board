@@ -1,6 +1,6 @@
 # Governance
 
-This document describes how Hermes Board is governed and how decisions are made.
+This document describes how Hermest Board is governed and how decisions are made.
 
 ---
 
@@ -14,14 +14,14 @@ The owner has final decision authority on:
 - **Project direction and roadmap**
 - **Breaking changes and major architectural decisions**
 - **Repository access, branch protection, and release process**
-- **Trademark and branding** (the "Hermes Board" name)
+- **Trademark and branding** (the "Hermest Board" name)
 - **Commercial strategy** (SaaS pricing, hosting, partnerships)
 
 ---
 
 ## Contribution Model
 
-Hermes Board is an **open-source, community-driven project** with a **benevolent owner** model:
+Hermest Board is an **open-source, community-driven project** with a **benevolent owner** model:
 
 - **Anyone can contribute** (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 - **Maintainers review and merge PRs** (see below for current maintainers).
@@ -112,7 +112,7 @@ Releases are managed by maintainers (currently the owner):
 4. **Tag the release** (`git tag v0.x.0`) and push.
 5. **Publish release notes** on GitHub Releases (link to CHANGELOG, highlight breaking changes).
 
-**Versioning:** Hermes Board follows [Semantic Versioning (SemVer)](https://semver.org/):
+**Versioning:** Hermest Board follows [Semantic Versioning (SemVer)](https://semver.org/):
 
 - **Major** (v1.0.0 → v2.0.0): Breaking changes (incompatible API, removed features).
 - **Minor** (v0.3.0 → v0.4.0): New features, backwards-compatible.
@@ -136,7 +136,7 @@ If a **disagreement arises** (between contributors, or contributor vs. maintaine
 
 ## Trademark and Branding
 
-The **"Hermes Board"** name and logo (if any) are owned by the project owner. Contributors may:
+The **"Hermest Board"** name and logo (if any) are owned by the project owner. Contributors may:
 
 - **Use the name** in documentation, blog posts, talks (with proper attribution).
 - **NOT trademark the name** themselves or use it to imply endorsement of derivative works without permission.
@@ -144,8 +144,8 @@ The **"Hermes Board"** name and logo (if any) are owned by the project owner. Co
 **Forks and derivatives:**
 
 - You may fork the code (subject to the project license, once chosen).
-- **Do not use the "Hermes Board" name** for your fork's branding (rename to avoid confusion).
-- Permitted: "MyFork (based on Hermes Board)" or "Fork of Hermes Board".
+- **Do not use the "Hermest Board" name** for your fork's branding (rename to avoid confusion).
+- Permitted: "MyFork (based on Hermest Board)" or "Fork of Hermest Board".
 
 ---
 
@@ -173,4 +173,4 @@ Any governance changes will be announced in a GitHub issue and require owner app
 - **Owner:** Vadim (vavavadusik@gmail.com)
 - **Public discussion:** [GitHub Issues](https://github.com/vavavadusik-crypto/-8-/issues) and [Discussions](https://github.com/vavavadusik-crypto/-8-/discussions)
 
-Thank you for being part of the Hermes Board community! 🎬
+Thank you for being part of the Hermest Board community! 🎬

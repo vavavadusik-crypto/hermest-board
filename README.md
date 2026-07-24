@@ -1,4 +1,4 @@
-# Hermes Board
+# Hermest Board
 
 [![CI Gate](https://github.com/vavavadusik-crypto/-8-/actions/workflows/ci.yml/badge.svg)](https://github.com/vavavadusik-crypto/-8-/actions/workflows/ci.yml)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](LICENSE)
@@ -38,7 +38,7 @@ Open the printed address in your browser. `npm run dev` (not opening `index.html
 1. Click **Code** → **Codespaces** → **Create codespace on main**
 2. Wait for container build (~2 min, includes ffmpeg)
 3. Terminal auto-runs `npm run dev`
-4. Click the forwarded port link (Ports tab, port 5173) → opens Hermes Board in browser
+4. Click the forwarded port link (Ports tab, port 5173) → opens Hermest Board in browser
 
 **First run:** On first open, a welcome overlay "From topic to finished video" appears — enter a topic and click "Start" to jump into the wizard. Anytime, the main flow opens via the **"🎬 Topic → Video"** button in the header (opens panel, prefills and focuses the topic field). Welcome shown once (`localStorage` flag).
 
@@ -226,13 +226,13 @@ npm run check        # полный гейт (перед коммитом/рел
 
 ## License
 
-Hermes Board is licensed under the **GNU Affero General Public License v3.0 or later** (`AGPL-3.0-or-later`). See [`LICENSE`](LICENSE).
+Hermest Board is licensed under the **GNU Affero General Public License v3.0 or later** (`AGPL-3.0-or-later`). See [`LICENSE`](LICENSE).
 
 **What this means in practice:**
 
 - ✅ **Free to use** for any purpose, including commercial (done-for-you services, paid SaaS tiers, usage packs).
 - ✅ **Free to modify and self-host.**
-- 🔒 **Network copyleft:** if you deploy a modified version as a public/hosted service, you **must** make your modified source available to its users. Improvements to the hosted product stay open — a competitor cannot fork Hermes Board, close the source, and resell it as a proprietary SaaS.
+- 🔒 **Network copyleft:** if you deploy a modified version as a public/hosted service, you **must** make your modified source available to its users. Improvements to the hosted product stay open — a competitor cannot fork Hermest Board, close the source, and resell it as a proprietary SaaS.
 - 📎 All bundled dependencies are permissive (MIT/ISC/BSD-3-Clause/CC0) and AGPL-compatible — see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 The rationale (AGPL vs Apache-2.0) is documented in [`LICENSE_DECISION.md`](LICENSE_DECISION.md).

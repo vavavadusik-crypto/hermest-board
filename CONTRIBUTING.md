@@ -1,6 +1,6 @@
-# Contributing to Hermes Board
+# Contributing to Hermest Board
 
-Thank you for your interest in contributing! Hermes Board is an open-source AI content studio, and contributions are welcome in all forms: bug reports, feature requests, code improvements, documentation, design, testing, and community support.
+Thank you for your interest in contributing! Hermest Board is an open-source AI content studio, and contributions are welcome in all forms: bug reports, feature requests, code improvements, documentation, design, testing, and community support.
 
 ---
 
@@ -194,7 +194,7 @@ Follow the [Conventional Commits](https://www.conventionalcommits.org/) format:
 
 ## License and Copyright
 
-By contributing to Hermes Board, you agree that your contributions will be licensed under the same license as the project (see `LICENSE` file — owner decision pending). You retain copyright to your contributions, but grant the project a perpetual, worldwide, non-exclusive, royalty-free license to use, modify, and distribute your work.
+By contributing to Hermest Board, you agree that your contributions will be licensed under the same license as the project (see `LICENSE` file — owner decision pending). You retain copyright to your contributions, but grant the project a perpetual, worldwide, non-exclusive, royalty-free license to use, modify, and distribute your work.
 
 **Do not submit code you don't have the right to share.** If you include third-party code or assets, ensure they are compatible with the project license and properly attributed.
 
@@ -214,4 +214,4 @@ By contributing to Hermes Board, you agree that your contributions will be licen
 
 Contributors will be recognized in release notes and the project's contributor graph. Significant contributions may be highlighted in the README or docs.
 
-Thank you for making Hermes Board better! 🎬
+Thank you for making Hermest Board better! 🎬

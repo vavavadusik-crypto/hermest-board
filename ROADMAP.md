@@ -1,6 +1,6 @@
 # Roadmap
 
-This roadmap outlines the planned development phases for Hermes Board, derived from the internal master plan (`docs/MASTER_PLAN_2026-07-19.md`). Statuses are **honest** — DONE means verified and merged, IN PROGRESS means active work, PLANNED means designed but not started.
+This roadmap outlines the planned development phases for Hermest Board, derived from the internal master plan (`docs/MASTER_PLAN_2026-07-19.md`). Statuses are **honest** — DONE means verified and merged, IN PROGRESS means active work, PLANNED means designed but not started.
 
 See [CHANGELOG.md](CHANGELOG.md) for past releases and detailed change history.
 
@@ -149,7 +149,7 @@ See [CHANGELOG.md](CHANGELOG.md) for past releases and detailed change history.
 - ⏳ CITATION.cff (optional, if it fits).
 
 **6.3 Branding:**
-- Single name "Hermes Board" (a.k.a. Hermest Board in code).
+- Single name "Hermest Board" (a.k.a. Hermest Board in code).
 - Honest feature matrix (VERIFIED/PARTIAL/PLANNED) in README.
 - CI Gate badge (real, passes).
 - No private data in examples.

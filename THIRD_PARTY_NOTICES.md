@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-Hermes Board uses the following third-party dependencies at runtime and build time.
+Hermest Board uses the following third-party dependencies at runtime and build time.
 
 ## Runtime Dependencies
 
@@ -74,7 +74,7 @@ This project uses the following Node.js built-in modules, which are part of the 
 
 **assets/music/calm-ambient-pad.m4a**
 - **License: CC0 (Public Domain)**
-- **Created by:** Hermes Board project team
+- **Created by:** Hermest Board project team
 - **Method:** Procedurally generated using freely available tools
 - No third-party samples or copyrighted material used
 

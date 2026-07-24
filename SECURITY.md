@@ -71,11 +71,11 @@ The following are **not** considered security vulnerabilities:
 ### FFmpeg and System Dependencies
 
 - **Keep FFmpeg up to date** — security vulnerabilities in media processing are common. Install from trusted sources (official packages, Homebrew, apt).
-- **Validate user-uploaded media** before processing (though Hermes Board currently doesn't accept arbitrary user uploads, this is a future consideration).
+- **Validate user-uploaded media** before processing (though Hermest Board currently doesn't accept arbitrary user uploads, this is a future consideration).
 
 ### Browser Security
 
-- **Keep your browser up to date** — Hermes Board runs client-side JavaScript and uses `localStorage`.
+- **Keep your browser up to date** — Hermest Board runs client-side JavaScript and uses `localStorage`.
 - **Use HTTPS in production** — the development server (`npm run dev`) is HTTP-only; production deployments must use HTTPS to protect session data and prevent MITM attacks.
 
 ### Dependencies
@@ -85,7 +85,7 @@ The following are **not** considered security vulnerabilities:
 
 ---
 
-## Security Features in Hermes Board
+## Security Features in Hermest Board
 
 ### What We Do to Keep You Safe
 
@@ -122,11 +122,11 @@ We appreciate responsible disclosure from security researchers and users. Contri
 - **Release notes** for the patched version
 - **`SECURITY.md` Hall of Fame** (if you'd like to be listed)
 
-Thank you for helping keep Hermes Board secure! 🔒
+Thank you for helping keep Hermest Board secure! 🔒
 
 ## Deployment trust model
 
-Hermes Board self-host is **single-tenant by default**. Understand the actor modes before exposing an instance to more than one person:
+Hermest Board self-host is **single-tenant by default**. Understand the actor modes before exposing an instance to more than one person:
 
 - **`signed-session`** — a real logged-in account. Per-record ownership (workspace / tenant isolation) is enforced: an actor only sees records in its own workspace.
 - **`owner-token` / `development`** — the single operator of a self-hosted or local instance. These modes **intentionally bypass** per-record ownership: the operator owns every record. This is correct for a private, single-operator deployment.

@@ -33,7 +33,7 @@ If applicable, add screenshots or error logs to help explain your problem.
  - Node.js version: [e.g. 22.3.0, run `node -v`]
  - Browser (if UI issue): [e.g. Chrome 120, Firefox 119]
  - FFmpeg version (if render issue): [e.g. 6.0, run `ffmpeg -version`]
- - Hermes Board version: [e.g. main branch @ abc1234, or release v0.3.0]
+ - Hermest Board version: [e.g. main branch @ abc1234, or release v0.3.0]
 
 **Additional context**
 Add any other context about the problem here (e.g., does it happen every time? only with specific inputs? after a recent update?).
