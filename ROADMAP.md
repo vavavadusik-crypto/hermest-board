@@ -296,8 +296,8 @@ See [CHANGELOG.md](CHANGELOG.md) for past releases and detailed change history.
 - **Vote on features:** 👍 reactions on issues help prioritize.
 - **Contribute implementations:** PRs for roadmap items are prioritized. See [CONTRIBUTING.md](CONTRIBUTING.md).
 - **Sponsor development:** Contact owner (vavavadusik@gmail.com) for commercial priorities.
-- **Report bugs:** [GitHub Issues](https://github.com/vavavadusik-crypto/-8-/issues).
-- **Discuss ideas:** [GitHub Discussions](https://github.com/vavavadusik-crypto/-8-/discussions) (if enabled).
+- **Report bugs:** [GitHub Issues](https://github.com/vavavadusik-crypto/hermest-board/issues).
+- **Discuss ideas:** [GitHub Discussions](https://github.com/vavavadusik-crypto/hermest-board/discussions) (if enabled).
 
 ---
 

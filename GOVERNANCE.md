@@ -171,6 +171,6 @@ Any governance changes will be announced in a GitHub issue and require owner app
 ## Contact
 
 - **Owner:** Vadim (vavavadusik@gmail.com)
-- **Public discussion:** [GitHub Issues](https://github.com/vavavadusik-crypto/-8-/issues) and [Discussions](https://github.com/vavavadusik-crypto/-8-/discussions)
+- **Public discussion:** [GitHub Issues](https://github.com/vavavadusik-crypto/hermest-board/issues) and [Discussions](https://github.com/vavavadusik-crypto/hermest-board/discussions)
 
 Thank you for being part of the Hermest Board community! 🎬

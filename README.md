@@ -1,6 +1,6 @@
 # Hermest Board
 
-[![CI Gate](https://github.com/vavavadusik-crypto/-8-/actions/workflows/ci.yml/badge.svg)](https://github.com/vavavadusik-crypto/-8-/actions/workflows/ci.yml)
+[![CI Gate](https://github.com/vavavadusik-crypto/hermest-board/actions/workflows/ci.yml/badge.svg)](https://github.com/vavavadusik-crypto/hermest-board/actions/workflows/ci.yml)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](LICENSE)
 
 AI content studio: **topic → research → source cards → script/storyboard → live voiceover → real MP4 (16:9 + 9:16) → publish pack**. The local board is the creative control plane; the media worker deterministically assembles real videos via FFmpeg, while browser-based and BYOK AI models write scripts and draw visuals.

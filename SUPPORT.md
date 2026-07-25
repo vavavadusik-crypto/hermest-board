@@ -30,7 +30,7 @@ Thank you for using Hermest Board! This document explains how to get help, where
 
 ### Community Support
 
-**GitHub Issues:** [https://github.com/vavavadusik-crypto/-8-/issues](https://github.com/vavavadusik-crypto/-8-/issues)
+**GitHub Issues:** [https://github.com/vavavadusik-crypto/hermest-board/issues](https://github.com/vavavadusik-crypto/hermest-board/issues)
 
 - Search existing issues first — your question may already be answered.
 - For **bugs**, use the [bug report template](../../issues/new?template=bug_report.md).

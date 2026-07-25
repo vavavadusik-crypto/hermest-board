@@ -9,7 +9,7 @@
 
 ## 🔍 Детальная Оценка Каждого Репо
 
-### 1. **-8-** | [GitHub](https://github.com/vavavadusik-crypto/-8-)
+### 1. **-8-** | [GitHub](https://github.com/vavavadusik-crypto/hermest-board)
 **Статус:** ⚠️ Средний
 **Размер:** 1.6 MB | **Язык:** JavaScript + HTML (53.4% + 46.5%) | **Видимость:** Публичный
 **Последний коммит:** 3 часа назад
