@@ -17,6 +17,14 @@ on:
         default: youtube_video
         type: choice
         options: [youtube_video, youtube_shorts]
+      expect_seconds:
+        description: "Fail the run unless the render lands on this duration (empty = no check)"
+        required: false
+        default: ""
+      tolerance_seconds:
+        description: "Allowed deviation from expect_seconds"
+        required: false
+        default: "0.5"
 
 jobs:
   render:
@@ -94,10 +102,36 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           echo "duration: ${duration}s"
 
+          # Длительность выводится из измеренной озвучки, а не задаётся числом,
+          # поэтому «ровно минута» — проверяемое условие, а не обещание.
+          expect='${{ inputs.expect_seconds }}'
+          if [ -n "$expect" ]; then
+            tol='${{ inputs.tolerance_seconds }}'
+            node -e '
+              const [actual, expect, tol] = process.argv.slice(1).map(Number);
+              const drift = actual - expect;
+              const ok = Math.abs(drift) <= tol;
+              console.log(`${ok ? "on target" : "OFF TARGET"}: ${actual}s vs ${expect}s +/-${tol} (drift ${drift.toFixed(3)}s)`);
+              if (!ok) {
+                console.log(`::error::render is ${drift.toFixed(3)}s off the requested ${expect}s`);
+                process.exit(1);
+              }
+            ' "$duration" "$expect" "$tol" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Upload rendered video and sidecars
+        # Ролик нужен и когда он не попал в целевую длительность: по нему
+        # калибруется следующий прогон.
+        if: always() && steps.render.outputs.video != ''
         uses: actions/upload-artifact@v4
         with:
           name: hermest-render-${{ inputs.platform }}-${{ github.run_id }}
-          path: ${{ steps.render.outputs.outputDir }}
+          # Только результат и его доказательства: промежуточные PNG-кадры сцен
+          # раздували артефакт до сотен мегабайт и никому не нужны после сборки.
+          path: |
+            ${{ steps.render.outputs.outputDir }}/*.mp4
+            ${{ steps.render.outputs.outputDir }}/*.srt
+            ${{ steps.render.outputs.outputDir }}/*.json
+            ${{ steps.render.outputs.outputDir }}/*.sha256
           retention-days: 14
           if-no-files-found: error
