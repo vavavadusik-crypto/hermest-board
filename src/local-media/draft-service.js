@@ -3,6 +3,7 @@
 // не будет), fail-open по research (источники — усиление, а не условие).
 
 import { draftBoardFromTopic } from "../domain/ai-director.js";
+import { deriveSceneCountFromDuration, normalizeTargetDurationSeconds } from "../domain/duration-plan.js";
 import { createOpenAiTextModel } from "../media/openai-text-model.js";
 import { searchResearchSources } from "../media/research-sources.js";
 import { createBridgeTextModel, describeBridgeAvailability } from "../media/text-model.js";
@@ -15,7 +16,8 @@ const DEFAULT_SCENES = 6;
 export async function draftBoardService({
   topic,
   language = "ru",
-  sceneCount = DEFAULT_SCENES,
+  sceneCount,
+  targetDurationSeconds,
   voice = "",
   narrationProvider = "",
   research = true,
@@ -28,7 +30,13 @@ export async function draftBoardService({
 } = {}) {
   const cleanTopic = String(topic ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_TOPIC_CHARS);
   if (!cleanTopic) throw new TypeError("draft topic is required");
-  const scenes = clampSceneCount(sceneCount);
+  const targetDuration = normalizeTargetDurationSeconds(targetDurationSeconds);
+  // Число сцен считает система из выбранной длительности; явное значение —
+  // ручное переопределение из «тонких настроек», оно всегда сильнее.
+  const derivedScenes = targetDuration === null
+    ? DEFAULT_SCENES
+    : deriveSceneCountFromDuration(targetDuration, { minScenes: MIN_SCENES, maxScenes: MAX_SCENES }).sceneCount;
+  const scenes = clampSceneCount(sceneCount ?? derivedScenes);
 
   // Прямой OpenAI-совместимый провайдер не зависит от браузерного моста:
   // проверять мост в этом режиме значит блокировать драфт без причины.
@@ -59,6 +67,7 @@ export async function draftBoardService({
     topic: cleanTopic,
     language,
     sceneCount: scenes,
+    targetDurationSeconds: targetDuration,
     voice,
     narrationProvider,
     textModel: textModel || createDraftTextModel({ endpoint, model }),
