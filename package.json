@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-or-later",
-  "description": "Interactive AI-agent board for learning videos, scripts, roadmaps, voiceover, and publish packs.",
+  "description": "Free, open-source, self-hosted AI content studio: topic to research, storyboard, voiceover and a real MP4 (16:9 and 9:16) plus a publish pack. BYOK, runs locally, deterministic FFmpeg renders.",
   "engines": {
     "node": ">=20.11 <23"
   },
