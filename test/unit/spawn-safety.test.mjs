@@ -1,6 +1,26 @@
-import { describe, it } from "node:test";
+import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { runMediaTool } from "../../src/media/process-runner.js";
+import { existsSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+import { getMediaToolDescriptor, runMediaTool } from "../../src/media/process-runner.js";
+
+// Доказательство строится на sentinel-файле, а не на тексте ошибки инструмента:
+// при shell:true инъекция создала бы файл, при shell:false — нет. Проверка верна
+// и там, где ffmpeg/ffprobe не установлены (CI без медиа-тулчейна): там spawn
+// падает с ENOENT, но shell всё равно не запускался, и sentinel не появляется.
+const sandbox = await mkdtemp(path.join(os.tmpdir(), "hermest-spawn-safety-"));
+after(() => rm(sandbox, { recursive: true, force: true }));
+
+const sentinelPath = name => path.join(sandbox, `${name}.sentinel`);
+const toolExists = tool => existsSync(getMediaToolDescriptor(tool).path);
+
+async function assertNoShellExecution(tool, args, sentinel) {
+  await assert.rejects(async () => runMediaTool(tool, args, { timeoutMs: 3000 }));
+  assert.equal(existsSync(sentinel), false, `shell injection executed: ${sentinel} was created`);
+}
 
 describe("spawn safety — command injection guards", () => {
   it("rejects non-array args", async () => {
@@ -24,37 +44,25 @@ describe("spawn safety — command injection guards", () => {
   });
 
   it("shell injection attempt stays literal (safe array form)", async () => {
-    // Тест: если бы spawn использовал shell:true или конкатенацию строк,
-    // `; rm -rf /` был бы выполнен как отдельная команда.
-    // С array-форматом и shell:false — это просто невалидный флаг ffmpeg.
-    const maliciousArg = "-version; rm -rf /";
-    await assert.rejects(
-      async () => runMediaTool("ffmpeg", [maliciousArg], { timeoutMs: 3000 }),
-      // ffmpeg вернёт ошибку: unrecognized option '-version; rm -rf /'
-      // (команда rm НЕ выполняется)
-      error => error.message.includes("exited") || error.message.includes("timeout")
-    );
+    const sentinel = sentinelPath("semicolon-flag");
+    await assertNoShellExecution("ffmpeg", [`-version; touch ${sentinel}`], sentinel);
   });
 
   it("filename with semicolon stays literal", async () => {
-    const filename = "file;rm-rf.txt";
-    // Конструируем валидный аргумент для ffprobe (проверка существования файла).
-    // Если spawn использовал shell, ";rm-rf" был бы интерпретирован как команда.
-    // С array-форматом — это просто путь к несуществующему файлу.
-    await assert.rejects(
-      async () => runMediaTool("ffprobe", ["-v", "error", filename], { timeoutMs: 3000 }),
-      // ffprobe вернёт ошибку о несуществующем файле, а НЕ выполнит команду
-      error => error.message.includes("exited") || error.message.includes("No such file")
-    );
+    const sentinel = sentinelPath("semicolon-filename");
+    await assertNoShellExecution("ffprobe", ["-v", "error", `file.txt;touch ${sentinel}`], sentinel);
   });
 
   it("filename with newline injection stays literal", async () => {
-    // Тест: если бы spawn использовал shell, newline мог бы внедрить вторую команду.
-    // С array-форматом — это просто невалидное имя файла.
-    const maliciousFilename = "video.mp4\nrm -rf /tmp";
+    const sentinel = sentinelPath("newline-filename");
+    await assertNoShellExecution("ffprobe", ["-v", "error", `video.mp4\ntouch ${sentinel}`], sentinel);
+  });
+
+  it("media tool reports the injected argument as its own failure", { skip: !toolExists("ffprobe") }, async () => {
+    // Дополнительная проверка там, где тулчейн есть: аргумент дошёл до ffprobe
+    // целиком и был отвергнут им самим, а не разобран оболочкой.
     await assert.rejects(
-      async () => runMediaTool("ffprobe", ["-v", "error", maliciousFilename], { timeoutMs: 3000 }),
-      // ffprobe вернёт ошибку: нет файла с \n в имени, команда rm НЕ выполняется
+      async () => runMediaTool("ffprobe", ["-v", "error", "file.txt;whoami"], { timeoutMs: 3000 }),
       error => error.message.includes("exited") || error.message.includes("No such file")
     );
   });
