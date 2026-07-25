@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { access, mkdtemp, symlink, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -130,4 +130,32 @@ test("filesystem roots outside system temp are not trusted render roots", async 
     /outside allowed render roots|ENOENT/
   );
   assert.equal(await resolveOutputRoot("/tmp"), "/tmp");
+});
+
+test("preflight rejects a hostile target duration before any synthesis is paid for", async () => {
+  const sandbox = await mkdtemp(path.join(os.tmpdir(), "hermest-board-preflight-duration-"));
+  const fixture = JSON.parse(await readFile(validFixture, "utf8"));
+
+  const withValidTarget = path.join(sandbox, "valid-target.json");
+  await writeFile(
+    withValidTarget,
+    JSON.stringify({ ...fixture, brief: { ...fixture.brief, targetDurationSeconds: 60 } }),
+    { mode: 0o600 }
+  );
+  const accepted = await preflightBoardInput(withValidTarget);
+  assert.equal(accepted.brief.targetDurationSeconds, 60);
+
+  for (const [name, value] of [["short", 5], ["long", 4000], ["text", "минута"], ["bool", true]]) {
+    const rejectedInput = path.join(sandbox, `rejected-${name}.json`);
+    await writeFile(
+      rejectedInput,
+      JSON.stringify({ ...fixture, brief: { ...fixture.brief, targetDurationSeconds: value } }),
+      { mode: 0o600 }
+    );
+    await assert.rejects(() => preflightBoardInput(rejectedInput), /targetDurationSeconds/, name);
+  }
+
+  // Прежнее поведение: без цели длительности проект проходит как раньше.
+  const untouched = await preflightBoardInput(validFixture);
+  assert.equal(untouched.brief.targetDurationSeconds, undefined);
 });

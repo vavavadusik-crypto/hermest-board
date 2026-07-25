@@ -152,6 +152,67 @@ test("Piper narration adapter synthesizes through stdin and returns auditable me
   assert.ok(/^[0-9a-f]{64}$/.test(result.scriptSha256));
 });
 
+test("Piper speech rate reaches argv only when a target duration changed it", async () => {
+  const model = `${VOICES}/ru_RU-dmitri-medium.onnx`;
+  const events = [];
+  const adapter = createPiperNarrationAdapter({
+    env: {},
+    homeDirectory: HOME,
+    fileExists: existsCatalog([BINARY, model]),
+    runTool: async (tool, args) => events.push(args),
+    probeFile: async () => ({
+      durationSeconds: 4.1,
+      audio: { codec: "pcm_s16le", sampleRate: 22050, channels: 1 }
+    })
+  });
+  assert.equal(adapter.supportsSpeechRate, true);
+
+  const base = {
+    text: "Проверка темпа речи.",
+    language: "ru",
+    outputPath: "/tmp/hermest-board-run/narration.wav"
+  };
+
+  const withoutRate = await adapter.synthesize(base);
+  assert.equal(events[0].includes("--length_scale"), false);
+  assert.equal(withoutRate.lengthScale, 1);
+
+  const slower = await adapter.synthesize({ ...base, lengthScale: 0.88 });
+  assert.deepEqual(events[1].slice(-2), ["--length_scale", "0.880"]);
+  assert.equal(slower.lengthScale, 0.88);
+
+  // Ровно 1.0 — это «темп не менялся»: argv обязан остаться прежним, иначе
+  // хеши манифеста разъедутся на рендере без цели длительности.
+  await adapter.synthesize({ ...base, lengthScale: 1 });
+  assert.deepEqual(events[2], events[0]);
+});
+
+test("Piper rejects a speech rate outside the audible corridor", async () => {
+  const model = `${VOICES}/ru_RU-dmitri-medium.onnx`;
+  const adapter = createPiperNarrationAdapter({
+    env: {},
+    homeDirectory: HOME,
+    fileExists: existsCatalog([BINARY, model]),
+    runTool: async () => {
+      throw new Error("must not run");
+    },
+    probeFile: async () => ({
+      durationSeconds: 1,
+      audio: { codec: "pcm_s16le", sampleRate: 22050, channels: 1 }
+    })
+  });
+  const base = {
+    text: "Проверка.",
+    language: "ru",
+    outputPath: "/tmp/hermest-board-run/narration.wav"
+  };
+
+  await assert.rejects(adapter.synthesize({ ...base, lengthScale: 0.5 }), RangeError);
+  await assert.rejects(adapter.synthesize({ ...base, lengthScale: 1.5 }), RangeError);
+  await assert.rejects(adapter.synthesize({ ...base, lengthScale: true }), TypeError);
+  await assert.rejects(adapter.synthesize({ ...base, lengthScale: "быстрее" }), TypeError);
+});
+
 test("Piper narration adapter fails closed when not executable", async () => {
   const adapter = createPiperNarrationAdapter({
     env: {},

@@ -237,3 +237,80 @@ test("draft service clamps the scene count into the renderable range", async () 
 
   assert.match(textModel.calls[0], /ровно 12 сцен/);
 });
+
+const promptSceneCount = prompt => Number(/ровно (\d+) сцен/u.exec(prompt)?.[1]);
+
+test("draft service derives the scene count from the requested duration", async () => {
+  const longerModel = mockTextModel();
+  const longer = await draftBoardService({
+    topic: "Подписки на ИИ",
+    targetDurationSeconds: 180,
+    research: false,
+    textModel: longerModel,
+    availabilityCheck: executableBridge()
+  });
+
+  const shorterModel = mockTextModel();
+  const shorter = await draftBoardService({
+    topic: "Подписки на ИИ",
+    targetDurationSeconds: 30,
+    research: false,
+    textModel: shorterModel,
+    availabilityCheck: executableBridge()
+  });
+
+  assert.equal(longer.board.brief.targetDurationSeconds, 180);
+  assert.equal(shorter.board.brief.targetDurationSeconds, 30);
+  const longerScenes = promptSceneCount(longerModel.calls[0]);
+  const shorterScenes = promptSceneCount(shorterModel.calls[0]);
+  assert.ok(longerScenes > shorterScenes, `${longerScenes} > ${shorterScenes}`);
+  assert.ok(shorterScenes >= 2 && longerScenes <= 12);
+});
+
+test("draft service rejects a target duration outside the supported corridor", async () => {
+  await assert.rejects(
+    draftBoardService({
+      topic: "Подписки на ИИ",
+      targetDurationSeconds: 5,
+      research: false,
+      textModel: mockTextModel(),
+      availabilityCheck: executableBridge()
+    }),
+    RangeError
+  );
+  await assert.rejects(
+    draftBoardService({
+      topic: "Подписки на ИИ",
+      targetDurationSeconds: "минута",
+      research: false,
+      textModel: mockTextModel(),
+      availabilityCheck: executableBridge()
+    }),
+    TypeError
+  );
+});
+
+test("an explicit scene count overrides the duration-derived one", async () => {
+  const textModel = mockTextModel();
+  await draftBoardService({
+    topic: "Подписки на ИИ",
+    targetDurationSeconds: 600,
+    sceneCount: 3,
+    research: false,
+    textModel,
+    availabilityCheck: executableBridge()
+  });
+  assert.match(textModel.calls[0], /ровно 3 сцен/u);
+});
+
+test("without a target duration the draft keeps the previous default scene count", async () => {
+  const textModel = mockTextModel();
+  const result = await draftBoardService({
+    topic: "Подписки на ИИ",
+    research: false,
+    textModel,
+    availabilityCheck: executableBridge()
+  });
+  assert.match(textModel.calls[0], /ровно 6 сцен/u);
+  assert.equal("targetDurationSeconds" in result.board.brief, false);
+});
