@@ -288,6 +288,16 @@ function validatePiperTtsArgv(argv) {
   if (!decimal.test(cursor.take())) throw new TypeError("invalid piper noise width");
   cursor.expect("--sentence_silence");
   if (!decimal.test(cursor.take())) throw new TypeError("invalid piper silence");
+  // Темп речи опционален: он появляется в argv только когда задана целевая
+  // длительность. Коридор здесь тот же, что в домене — манифест не должен
+  // принимать темп, который конвейер сам никогда не выбрал бы.
+  if (argv.length > cursor.position()) {
+    cursor.expect("--length_scale");
+    const lengthScale = cursor.take();
+    if (!decimal.test(lengthScale)) throw new TypeError("invalid piper length scale");
+    const scale = Number(lengthScale);
+    if (!(scale >= 0.85 && scale <= 1.15)) throw new TypeError("piper length scale out of range");
+  }
   cursor.finish();
 }
 

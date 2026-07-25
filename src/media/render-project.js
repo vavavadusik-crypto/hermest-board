@@ -18,6 +18,11 @@ import {
   buildStoryboard,
   reconcileStoryboardWithSceneDurations
 } from "../domain/content-pipeline.js";
+import {
+  countNarrationCharacters,
+  normalizeTargetDurationSeconds,
+  planTargetDuration
+} from "../domain/duration-plan.js";
 import { getPlatformRecipe } from "../domain/platform-recipes.js";
 import {
   buildComposedVideoRenderArgs,
@@ -97,58 +102,105 @@ export async function renderProject({
       provider: project?.brief?.narrationProvider
     });
 
-    const narrationCommands = [];
-    const sceneNarrations = [];
-    let sceneTtsMetadata = null;
     const ttsWarnings = new Set();
-    for (const [sceneIndex, scene] of estimatedStoryboard.scenes.entries()) {
-      reportProgress({
-        phase: "scenes",
-        sceneIndex,
-        sceneTotal: estimatedStoryboard.scenes.length,
-        label: `Сцена ${sceneIndex + 1} из ${estimatedStoryboard.scenes.length}`
-      });
-      const sceneTag = String(sceneIndex + 1).padStart(3, "0");
-      const sceneRawFile = path.join(runDir, `narration-scene-${sceneTag}.raw.wav`);
-      const sceneWavFile = path.join(runDir, `narration-scene-${sceneTag}.wav`);
-      const sceneTts = await narrationAdapter.synthesize({
-        text: scene.narration,
-        language: narrationLanguage,
-        voice: narrationVoice,
-        outputPath: sceneRawFile,
-        signal
-      });
-      sceneTtsMetadata = sceneTtsMetadata || sceneTts;
-      for (const warning of sceneTts.warnings || []) ttsWarnings.add(warning);
-      if (sceneTts.command) narrationCommands.push(sceneTts.command);
-      const canonicalizeCommand = {
-        id: "narration-canonicalize",
-        tool: "ffmpeg",
-        argv: buildNarrationCanonicalizeArgs({
-          inputFile: sceneRawFile,
-          outputFile: sceneWavFile
-        })
-      };
-      await runMediaTool(canonicalizeCommand.tool, canonicalizeCommand.argv, {
-        timeoutMs: 300000,
-        signal
-      });
-      narrationCommands.push(canonicalizeCommand);
-      await rm(sceneRawFile, { force: true });
-      const sceneProbe = await probeMediaFile(sceneWavFile, { signal });
-      if (!sceneProbe.audio) {
-        throw new TypeError(`Scene ${scene.id} narration does not contain an audio stream`);
+    // Пассы синтеза нумеруются, потому что ffmpeg-канонизация идёт с `-n`
+    // (никогда не перезаписывать): у повторного синтеза свои имена файлов.
+    const synthesizeAllScenes = async ({ lengthScale, pass }) => {
+      const commands = [];
+      const narrations = [];
+      let metadata = null;
+      for (const [sceneIndex, scene] of estimatedStoryboard.scenes.entries()) {
+        reportProgress({
+          phase: "scenes",
+          sceneIndex,
+          sceneTotal: estimatedStoryboard.scenes.length,
+          label: `Сцена ${sceneIndex + 1} из ${estimatedStoryboard.scenes.length}`
+        });
+        const sceneTag = `${String(sceneIndex + 1).padStart(3, "0")}${pass > 1 ? `-p${pass}` : ""}`;
+        const sceneRawFile = path.join(runDir, `narration-scene-${sceneTag}.raw.wav`);
+        const sceneWavFile = path.join(runDir, `narration-scene-${sceneTag}.wav`);
+        const sceneTts = await narrationAdapter.synthesize({
+          text: scene.narration,
+          language: narrationLanguage,
+          voice: narrationVoice,
+          outputPath: sceneRawFile,
+          // Без цели длительности параметр не передаётся вовсе — прежний контракт
+          // адаптеров и байт-в-байт прежний argv.
+          ...(lengthScale === 1 ? {} : { lengthScale }),
+          signal
+        });
+        metadata = metadata || sceneTts;
+        for (const warning of sceneTts.warnings || []) ttsWarnings.add(warning);
+        if (sceneTts.command) commands.push(sceneTts.command);
+        const canonicalizeCommand = {
+          id: "narration-canonicalize",
+          tool: "ffmpeg",
+          argv: buildNarrationCanonicalizeArgs({
+            inputFile: sceneRawFile,
+            outputFile: sceneWavFile
+          })
+        };
+        await runMediaTool(canonicalizeCommand.tool, canonicalizeCommand.argv, {
+          timeoutMs: 300000,
+          signal
+        });
+        commands.push(canonicalizeCommand);
+        await rm(sceneRawFile, { force: true });
+        const sceneProbe = await probeMediaFile(sceneWavFile, { signal });
+        if (!sceneProbe.audio) {
+          throw new TypeError(`Scene ${scene.id} narration does not contain an audio stream`);
+        }
+        narrations.push({
+          file: sceneWavFile,
+          durationMs: Math.ceil(sceneProbe.durationSeconds * 1000)
+        });
       }
-      sceneNarrations.push({
-        file: sceneWavFile,
-        durationMs: Math.ceil(sceneProbe.durationSeconds * 1000)
+      return { commands, narrations, metadata };
+    };
+
+    const targetDurationSeconds = normalizeTargetDurationSeconds(project?.brief?.targetDurationSeconds);
+    const narrationCharacters = countNarrationCharacters(narration);
+    let lengthScale = 1;
+    let pass = await synthesizeAllScenes({ lengthScale, pass: 1 });
+    const narrationCommands = [...pass.commands];
+    let sceneNarrations = pass.narrations;
+    let sceneTtsMetadata = pass.metadata;
+
+    // Решение «какой padding и какой темп речи» принимает домен; здесь только
+    // исполнение: паузы бесплатны, пересинтез допускается ровно один раз.
+    let durationPlan = null;
+    if (targetDurationSeconds !== null) {
+      durationPlan = planTargetDuration({
+        targetDurationSeconds,
+        measuredSceneDurationsMs: sceneNarrations.map(sceneNarration => sceneNarration.durationMs),
+        narrationCharacters,
+        lengthScale,
+        allowResynthesis: narrationAdapter.supportsSpeechRate === true
       });
+      if (durationPlan.status === "resynthesize") {
+        lengthScale = durationPlan.lengthScale;
+        const previousFiles = sceneNarrations.map(sceneNarration => sceneNarration.file);
+        pass = await synthesizeAllScenes({ lengthScale, pass: 2 });
+        await Promise.all(previousFiles.map(file => rm(file, { force: true })));
+        narrationCommands.push(...pass.commands);
+        sceneNarrations = pass.narrations;
+        sceneTtsMetadata = pass.metadata;
+        durationPlan = planTargetDuration({
+          targetDurationSeconds,
+          measuredSceneDurationsMs: sceneNarrations.map(sceneNarration => sceneNarration.durationMs),
+          narrationCharacters,
+          lengthScale,
+          allowResynthesis: false
+        });
+      }
+      if (durationPlan.warning) ttsWarnings.add(durationPlan.warning);
     }
 
     reportProgress({ phase: "audio", label: "Сборка озвучки" });
     const storyboard = reconcileStoryboardWithSceneDurations(
       estimatedStoryboard,
-      sceneNarrations.map(sceneNarration => sceneNarration.durationMs)
+      sceneNarrations.map(sceneNarration => sceneNarration.durationMs),
+      durationPlan ? { paddingMs: durationPlan.paddingMs } : {}
     );
     const sceneWavBuffers = await Promise.all(
       sceneNarrations.map(sceneNarration => readFile(sceneNarration.file))
@@ -499,7 +551,8 @@ export async function renderProject({
       subtitleFile,
       narrationAudioFile,
       storyboardFile,
-      manifest
+      manifest,
+      durationPlan
     };
   } finally {
     if (!completed) await rm(runDir, { recursive: true, force: true });
@@ -539,6 +592,9 @@ export async function preflightBoardInput(inputPath) {
 export function validateBoardProject(project) {
   validateJsonStructure(project);
   buildStoryboard(project);
+  // Целевая длительность — внешний ввод: отбраковываем на границе проекта, а не
+  // посреди рендера, когда уже потрачен синтез.
+  normalizeTargetDurationSeconds(project?.brief?.targetDurationSeconds);
   hashJson(project);
   return project;
 }

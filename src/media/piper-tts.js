@@ -4,6 +4,7 @@ import { constants as fsConstants } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { normalizeLengthScale } from "../domain/duration-plan.js";
 import { assertSafeGeneratedPath } from "./ffmpeg-args.js";
 import { probeMediaFile, resolvePiperBinaryPath, runMediaTool } from "./process-runner.js";
 import { normalizeNarrationLanguage, normalizeNarrationScript } from "./tts.js";
@@ -93,9 +94,13 @@ export function createPiperNarrationAdapter(dependencies = {}) {
 
   return Object.freeze({
     id: PIPER_PROVIDER,
-    async synthesize({ text, language = "ru", voice, outputPath, signal } = {}) {
+    // Домен спрашивает адаптер, умеет ли он темп речи, прежде чем планировать
+    // пересинтез: ElevenLabs, например, не умеет — и решение должно это учесть.
+    supportsSpeechRate: true,
+    async synthesize({ text, language = "ru", voice, outputPath, lengthScale, signal } = {}) {
       signal?.throwIfAborted();
       const script = normalizeNarrationScript(text);
+      const speechRate = normalizeLengthScale(lengthScale);
       const normalizedLanguage = normalizeNarrationLanguage(language);
       const outputFile = assertSafeGeneratedPath(outputPath);
       const availability = await describePiperAvailability({
@@ -116,7 +121,11 @@ export function createPiperNarrationAdapter(dependencies = {}) {
           "--output_file", outputFile,
           "--noise_scale", PIPER_NOISE_SCALE,
           "--noise_w", PIPER_NOISE_WIDTH,
-          "--sentence_silence", PIPER_SENTENCE_SILENCE
+          "--sentence_silence", PIPER_SENTENCE_SILENCE,
+          // Темп добавляется только когда он отличается от дефолтного 1.0:
+          // без цели длительности argv остаётся байт-в-байт прежним, а с ним —
+          // и хеши манифеста повторного рендера.
+          ...(speechRate === 1 ? [] : ["--length_scale", speechRate.toFixed(3)])
         ]
       };
       await runTool(command.tool, command.argv, {
@@ -132,6 +141,7 @@ export function createPiperNarrationAdapter(dependencies = {}) {
         model: availability.voice,
         voice: availability.voice,
         language: normalizedLanguage,
+        lengthScale: speechRate,
         durationSeconds: Number(probe.durationSeconds),
         sampleRate: Number(probe.audio.sampleRate || 0),
         channels: Number(probe.audio.channels || 0),

@@ -24,7 +24,8 @@ if (!options.input) {
       outputDir: result.outputDir,
       videoFile: result.videoFile,
       manifestPath: result.manifestPath,
-      manifestHashPath: result.manifestHashPath
+      manifestHashPath: result.manifestHashPath,
+      durationPlan: result.durationPlan
     }, null, 2)}\n`);
   } catch (error) {
     process.stderr.write(`Hermest Board render failed: ${error.message}\n`);
