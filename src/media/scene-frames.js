@@ -1,14 +1,13 @@
 import { createHash } from "node:crypto";
-import { access, chmod, readFile, rm, writeFile } from "node:fs/promises";
+import { access, rm, writeFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import path from "node:path";
 
+import { openSceneBrowser } from "./chrome-cdp.js";
 import { assertSafeGeneratedPath } from "./ffmpeg-args.js";
-import { runMediaTool } from "./process-runner.js";
 import { buildSceneMarkup } from "./scene-markup.js";
 
 const PRIVATE_FILE_MODE = 0o600;
-const SCREENSHOT_TIMEOUT_MS = 60000;
 const MAX_SCENES = 64;
 // Окно build-in анимации сцены: дальше секвенция замирает на финальном кадре,
 // а хвост сцены тянет ffmpeg (tpad clone + camera push-in).
@@ -37,42 +36,6 @@ function resolveChromeBinaryPathFromEnv(env) {
   return "/usr/bin/google-chrome";
 }
 
-export function buildSceneScreenshotArgs({
-  profileDir,
-  width,
-  height,
-  outputFile,
-  inputFile,
-  transparent = false,
-  frameTimeMs
-}) {
-  const safeProfileDir = assertSafeGeneratedPath(profileDir);
-  const safeOutputFile = assertSafeGeneratedPath(outputFile);
-  const safeInputFile = assertSafeGeneratedPath(inputFile);
-  const safeWidth = positiveInteger(width, "width");
-  const safeHeight = positiveInteger(height, "height");
-  let frameHash = "";
-  if (frameTimeMs !== undefined) {
-    const safeFrameTime = Number(frameTimeMs);
-    if (!Number.isSafeInteger(safeFrameTime) || safeFrameTime < 0 || safeFrameTime > 600000) {
-      throw new RangeError("frameTimeMs must be within 0..600000");
-    }
-    frameHash = `#t=${safeFrameTime}`;
-  }
-  return [
-    "--headless=new",
-    "--disable-gpu",
-    "--disable-extensions",
-    "--hide-scrollbars",
-    "--force-device-scale-factor=1",
-    ...(transparent ? ["--default-background-color=00000000"] : []),
-    `--user-data-dir=${safeProfileDir}`,
-    `--window-size=${safeWidth},${safeHeight}`,
-    `--screenshot=${safeOutputFile}`,
-    `file://${safeInputFile}${frameHash}`
-  ];
-}
-
 function resolveBuildFrameLimit(env, explicitLimit) {
   if (explicitLimit !== undefined) {
     const limit = Number(explicitLimit);
@@ -88,6 +51,12 @@ function resolveBuildFrameLimit(env, explicitLimit) {
   return null;
 }
 
+/**
+ * Снимает build-in секвенцию каждой сцены из ОДНОГО headless-браузера через CDP.
+ * Раньше на каждый кадр стартовал отдельный процесс chrome — это и было главным
+ * узким местом рендера. Кадр по-прежнему снимается со свежего документа на
+ * точном виртуальном времени, поэтому картинка не меняется ни на бит.
+ */
 export async function composeSceneFrames({
   storyboard,
   brief,
@@ -99,7 +68,7 @@ export async function composeSceneFrames({
   backgroundImages = [],
   buildFrameLimit,
   env = process.env,
-  runner = runMediaTool
+  browserFactory = openSceneBrowser
 } = {}) {
   const scenes = storyboard?.scenes;
   if (!Array.isArray(scenes) || scenes.length === 0 || scenes.length > MAX_SCENES) {
@@ -112,81 +81,94 @@ export async function composeSceneFrames({
   const frameLimit = resolveBuildFrameLimit(env, buildFrameLimit);
   const profileDir = path.join(safeRunDir, "chrome-profile");
   const sceneTitles = scenes.map(scene => String(scene.title || ""));
-  const commands = [];
   const frames = [];
 
-  for (const [sceneIndex, scene] of scenes.entries()) {
-    const sceneTag = String(sceneIndex + 1).padStart(3, "0");
-    const markupFile = path.join(safeRunDir, `scene-${sceneTag}.html`);
-    const brollClip = brollClips[sceneIndex] || null;
-    const backgroundImage = brollClip ? null : backgroundImages[sceneIndex] || null;
-    const hasMovingBackground = Boolean(brollClip || backgroundImage);
-    const markup = buildSceneMarkup({
-      scene,
-      sceneIndex,
-      sceneTitles,
-      brief,
-      width,
-      height,
-      seed,
-      mode: hasMovingBackground ? "overlay" : "opaque"
-    });
-    await writeFile(markupFile, markup, { encoding: "utf8", flag: "wx", mode: PRIVATE_FILE_MODE });
+  const browser = await browserFactory({ profileDir, width, height, signal });
+  // Один процесс на весь рендер: закрытие обязано случиться и на ошибке,
+  // иначе headless-браузер утечёт вместе с профилем.
+  try {
+    for (const [sceneIndex, scene] of scenes.entries()) {
+      const sceneTag = String(sceneIndex + 1).padStart(3, "0");
+      const markupFile = path.join(safeRunDir, `scene-${sceneTag}.html`);
+      const brollClip = brollClips[sceneIndex] || null;
+      const backgroundImage = brollClip ? null : backgroundImages[sceneIndex] || null;
+      const hasMovingBackground = Boolean(brollClip || backgroundImage);
+      const markup = buildSceneMarkup({
+        scene,
+        sceneIndex,
+        sceneTitles,
+        brief,
+        width,
+        height,
+        seed,
+        mode: hasMovingBackground ? "overlay" : "opaque"
+      });
+      await writeFile(markupFile, markup, { encoding: "utf8", flag: "wx", mode: PRIVATE_FILE_MODE });
 
-    const sceneSeconds = Number(scene.durationMs) / 1000;
-    let frameCount = Math.min(
-      Math.round(SCENE_BUILD_SECONDS * fps),
-      Math.max(Math.round(sceneSeconds * fps), 1)
-    );
-    if (frameLimit) frameCount = Math.min(frameCount, frameLimit);
+      const sceneSeconds = Number(scene.durationMs) / 1000;
+      let frameCount = Math.min(
+        Math.round(SCENE_BUILD_SECONDS * fps),
+        Math.max(Math.round(sceneSeconds * fps), 1)
+      );
+      if (frameLimit) frameCount = Math.min(frameCount, frameLimit);
 
-    const sceneCommands = [];
-    let lastFrameFile = "";
-    let lastFrameBytes = null;
-    for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
-      const frameFile = path.join(safeRunDir, `scene-${sceneTag}-f${String(frameIndex).padStart(4, "0")}.png`);
-      const command = {
-        id: "scene-frame",
-        tool: "chrome",
-        argv: buildSceneScreenshotArgs({
-          profileDir,
-          width,
-          height,
-          outputFile: frameFile,
-          inputFile: markupFile,
-          transparent: hasMovingBackground,
-          frameTimeMs: Math.round((frameIndex * 1000) / fps)
-        })
-      };
-      await runner(command.tool, command.argv, { timeoutMs: SCREENSHOT_TIMEOUT_MS, signal });
-      sceneCommands.push(command);
-      const frameBytes = await readFile(frameFile);
-      if (frameBytes.length === 0 || !isPng(frameBytes)) {
-        throw new TypeError(`Scene frame ${sceneTag} is not a valid PNG screenshot`);
-      }
-      await chmod(frameFile, PRIVATE_FILE_MODE);
-      lastFrameFile = frameFile;
-      lastFrameBytes = frameBytes;
+      await browser.openScene({ htmlFile: markupFile, transparent: hasMovingBackground });
+      const lastFrameIndex = frameCount - 1;
+      const lastFrameFile = path.join(
+        safeRunDir,
+        `scene-${sceneTag}-f${String(lastFrameIndex).padStart(4, "0")}.png`
+      );
+      let lastFrameBytes = null;
+      // Кадры сцены независимы (каждый — свежий документ на своём виртуальном
+      // времени), поэтому раздаём их вкладкам пула. Порядок гонки на результат
+      // не влияет: имя файла определяется индексом кадра.
+      let nextFrameIndex = 0;
+      let sequenceFailed = false;
+      const workerCount = Math.max(1, Math.min(browser.workerCount || 1, frameCount));
+      await Promise.all(Array.from({ length: workerCount }, (_unused, workerIndex) => (async () => {
+        try {
+          for (;;) {
+            const frameIndex = nextFrameIndex;
+            nextFrameIndex += 1;
+            if (frameIndex >= frameCount || sequenceFailed) return;
+            signal?.throwIfAborted();
+            const frameFile = path.join(safeRunDir, `scene-${sceneTag}-f${String(frameIndex).padStart(4, "0")}.png`);
+            const frameBytes = await browser.captureFrame(Math.round((frameIndex * 1000) / fps), workerIndex);
+            if (!Buffer.isBuffer(frameBytes) || frameBytes.length === 0 || !isPng(frameBytes)) {
+              throw new TypeError(`Scene frame ${sceneTag} is not a valid PNG screenshot`);
+            }
+            await writeFile(frameFile, frameBytes, { flag: "wx", mode: PRIVATE_FILE_MODE });
+            if (frameIndex === lastFrameIndex) lastFrameBytes = frameBytes;
+          }
+        } catch (error) {
+          sequenceFailed = true;
+          throw error;
+        }
+      })()));
+
+      frames.push({
+        path: lastFrameFile,
+        sequencePattern: path.join(safeRunDir, `scene-${sceneTag}-f%04d.png`),
+        sequenceFrameCount: frameCount,
+        sequenceFps: fps,
+        durationSeconds: sceneSeconds,
+        markupSha256: createHash("sha256").update(markup).digest("hex"),
+        frameSha256: createHash("sha256").update(lastFrameBytes).digest("hex"),
+        ...(brollClip ? { brollPath: brollClip.path } : {}),
+        ...(backgroundImage ? { backgroundImagePath: backgroundImage.path } : {})
+      });
+      await rm(markupFile, { force: true });
     }
-    // Манифест несёт первую и последнюю команду захвата сцены; полный контент
-    // секвенции зафиксирован markupSha256 + frameSha256 финального кадра.
-    commands.push(sceneCommands[0]);
-    if (sceneCommands.length > 1) commands.push(sceneCommands[sceneCommands.length - 1]);
-
-    frames.push({
-      path: lastFrameFile,
-      sequencePattern: path.join(safeRunDir, `scene-${sceneTag}-f%04d.png`),
-      sequenceFrameCount: frameCount,
-      sequenceFps: fps,
-      durationSeconds: sceneSeconds,
-      markupSha256: createHash("sha256").update(markup).digest("hex"),
-      frameSha256: createHash("sha256").update(lastFrameBytes).digest("hex"),
-      ...(brollClip ? { brollPath: brollClip.path } : {}),
-      ...(backgroundImage ? { backgroundImagePath: backgroundImage.path } : {})
-    });
-    await rm(markupFile, { force: true });
+  } finally {
+    await browser.close();
   }
-  await rm(profileDir, { recursive: true, force: true });
+  // Chrome забирает дочерние процессы не мгновенно: пока они дописывают профиль,
+  // рекурсивное удаление ловит ENOTEMPTY. Ретраи ждут затишья.
+  await rm(profileDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+  // Единственный запущенный процесс — единственная команда-доказательство.
+  // Содержимое секвенций пришпилено markupSha256 + frameSha256 в frames[],
+  // а времена кадров выводятся из sequenceFps/sequenceFrameCount.
+  const commands = [{ id: "scene-browser", tool: "chrome", argv: browser.launchArgv }];
   return { frames, commands, composer: "scene-markup@2" };
 }
 

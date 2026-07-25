@@ -192,6 +192,7 @@ node src/bridge-server.mjs       # мост на 127.0.0.1:8788
 | `HERMEST_BRIDGE_URL` / `HERMEST_BRIDGE_MODEL` | адрес и модель браузерного моста |
 | `HERMEST_PIPER_PATH` / `HERMEST_PIPER_VOICES_DIR` | путь к бинарю и голосам Piper |
 | `HERMEST_CHROME_PATH` | Chrome для сборки motion-кадров сцен |
+| `HERMEST_SCENE_CAPTURE_WORKERS` | вкладок в пуле захвата кадров, 1..4 (по умолчанию `min(4, ядра - 1)`) |
 | `HERMEST_ACCOUNT_AUTH` / `HERMEST_SESSION_SECRET` | включают account-auth роуты (по умолчанию выкл.) |
 
 Секреты — только в окружении/секрет-хранилище, никогда в коде, логах или коммитах.

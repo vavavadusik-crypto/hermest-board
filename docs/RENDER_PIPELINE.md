@@ -95,6 +95,28 @@ renders are deterministic and offline (no network), which keeps the test gate
 non-flaky. Scene frames are composed by a headless Chromium composer
 (`scene-frames.js`, `HERMEST_CHROME_PATH`).
 
+### Scene frame capture (`chrome-cdp.js`)
+
+The composer starts **one** headless Chrome for the whole render and drives it
+over the DevTools Protocol (`Page.navigate` + `Page.captureScreenshot`) through
+Node's built-in `WebSocket` — no browser-automation dependency is added. Chrome
+picks a free port itself (`--remote-debugging-port=0`, loopback only) and
+publishes it in `DevToolsActivePort` inside a throwaway profile under the run
+directory.
+
+Determinism is unchanged: every frame is still a **fresh document** loaded at
+`#t=<ms>`, which the markup uses to pin each CSS animation to its exact virtual
+time and freeze it. Seeking animations inside an already-loaded document is
+faster still, but leaves composited layers promoted by earlier frames, which
+shifts anti-aliasing on a few dozen pixels — so the composer reloads instead.
+Frames of one scene are independent, so they are spread over a small pool of
+tabs (`HERMEST_SCENE_CAPTURE_WORKERS`, default `min(4, cores - 1)`); the frame
+index alone decides the output filename, so capture order cannot affect output.
+
+Verified against the previous one-process-per-frame path: all 498 frames of
+`examples/ai-subscriptions-60s.ru.json` and the resulting MP4 are byte-identical,
+while the render step dropped from 376 s to 138 s on an 8-core box.
+
 ## Music
 
 Optional CC0 music bed from the local library (`music-library.js`,

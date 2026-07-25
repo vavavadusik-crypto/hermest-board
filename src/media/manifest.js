@@ -25,7 +25,7 @@ const ALLOWED_COMMAND_TOOLS = Object.freeze({
   "narration-canonicalize": Object.freeze(["ffmpeg"]),
   render: Object.freeze(["ffmpeg"]),
   "render-composed": Object.freeze(["ffmpeg"]),
-  "scene-frame": Object.freeze(["chrome"]),
+  "scene-browser": Object.freeze(["chrome"]),
   "loudness-measure": Object.freeze(["ffmpeg"])
 });
 const LOUDNESS_KEYS = Object.freeze([
@@ -267,7 +267,7 @@ function validateCommandArgv(id, tool, argv, commandIndex) {
     else if (id === "loudness-measure" && tool === "ffmpeg") validateLoudnessMeasureArgv(argv);
     else if (id === "render") validateRenderArgv(argv);
     else if (id === "render-composed" && tool === "ffmpeg") validateComposedRenderArgv(argv);
-    else if (id === "scene-frame" && tool === "chrome") validateSceneFrameArgv(argv);
+    else if (id === "scene-browser" && tool === "chrome") validateSceneBrowserArgv(argv);
     else throw new TypeError("unsupported schema");
   } catch {
     throw new TypeError(`Command argv schema mismatch at index ${commandIndex}`);
@@ -353,7 +353,11 @@ function validateRenderArgv(argv) {
   cursor.finish();
 }
 
-function validateSceneFrameArgv(argv) {
+// Кадры больше не снимаются процессом на кадр: браузер поднимается один раз, а
+// сцены и кадры адресуются по CDP. Поэтому доказательством запуска служит argv
+// самого браузера, а не argv скриншота. Порт обязан быть эфемерным (0), а адрес
+// отладки — строго loopback: это инвариант безопасности, и манифест его пришпиливает.
+function validateSceneBrowserArgv(argv) {
   const cursor = argvCursor(argv);
   cursor.expect(
     "--headless=new",
@@ -362,23 +366,16 @@ function validateSceneFrameArgv(argv) {
     "--hide-scrollbars",
     "--force-device-scale-factor=1"
   );
-  if (argv[cursorIndex(cursor)] === "--default-background-color=00000000") {
-    cursor.take();
-  }
   const profile = cursor.take();
   if (!/^--user-data-dir=\/[A-Za-z0-9_./-]+$/.test(profile) || !isSafeGeneratedPath(profile.slice("--user-data-dir=".length))) {
     throw new TypeError("invalid chrome profile dir");
   }
   if (!/^--window-size=\d{2,5},\d{2,5}$/.test(cursor.take())) throw new TypeError("invalid chrome window size");
-  const screenshot = cursor.take();
-  if (!/^--screenshot=\/[A-Za-z0-9_./-]+\.png$/.test(screenshot) || !isSafeGeneratedPath(screenshot.slice("--screenshot=".length))) {
-    throw new TypeError("invalid chrome screenshot output");
-  }
-  const target = cursor.take();
-  const targetMatch = target.match(/^file:\/\/(\/[A-Za-z0-9_./-]+\.html)(?:#t=\d{1,6})?$/);
-  if (!targetMatch || !isSafeGeneratedPath(targetMatch[1])) {
-    throw new TypeError("invalid chrome target url");
-  }
+  cursor.expect(
+    "--remote-debugging-address=127.0.0.1",
+    "--remote-debugging-port=0",
+    "about:blank"
+  );
   cursor.finish();
 }
 

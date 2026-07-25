@@ -15,6 +15,22 @@
   *Cause*: The environment variable `HERMEST_CHROME_PATH` is not set or points to a missing binary.  
   *Fix*: Install Chromium/Chrome and set `HERMEST_CHROME_PATH` to its full path (e.g., `/usr/bin/chromium`).
 
+- **`chrome did not publish a DevTools endpoint`**
+  *Symptom*: Render fails during scene composition; the message quotes Chrome's own stderr.
+  *Cause*: The scene composer drives one headless Chrome over the DevTools Protocol and waits for
+  `DevToolsActivePort` inside the run-directory profile. Chrome could not start (missing sandbox,
+  unwritable run directory, no `/dev/shm`) or could not bind a loopback debugging port.
+  *Fix*: Read the quoted stderr first. In containers add `--shm-size=1g` or run with `--init`;
+  make sure the render output directory is writable and that loopback networking is available.
+
+- **Scene composition is slow on a small runner**
+  *Symptom*: The render step dominates total time on a 2-core machine.
+  *Cause*: Every frame is a fresh document load plus a full 1080p rasterisation and PNG encode; the
+  tab pool defaults to `min(4, cores - 1)`, so a 2-core box captures sequentially.
+  *Fix*: This is Chrome's own render cost, not process overhead — expect roughly 300 ms per frame
+  per tab. `HERMEST_SCENE_CAPTURE_WORKERS` (1..4) tunes the pool; more tabs than cores makes it
+  slower, not faster.
+
 - **Piper TTS or voices missing**  
   *Symptom*: Text-to-speech does not work, or piper-related errors appear.  
   *Cause*: Piper and its voices are not installed.  

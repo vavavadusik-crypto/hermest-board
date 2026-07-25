@@ -14,6 +14,15 @@ const THEME = Object.freeze({
 const NODE_COLORS = Object.freeze(["#2dd4bf", "#7c5cff", "#f5b944", "#ff5d73", "#4f8dff", "#9ae66e"]);
 const MAX_TEXT_CHARS = 400;
 const STAR_COUNT = 90;
+const MAX_FRAME_TIME_MS = 600000;
+
+export function assertFrameTimeMs(frameTimeMs) {
+  const value = Number(frameTimeMs);
+  if (!Number.isSafeInteger(value) || value < 0 || value > MAX_FRAME_TIME_MS) {
+    throw new RangeError(`frameTimeMs must be within 0..${MAX_FRAME_TIME_MS}`);
+  }
+  return value;
+}
 
 export function escapeHtml(value) {
   return String(value ?? "")

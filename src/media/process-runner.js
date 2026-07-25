@@ -60,11 +60,22 @@ export function getMediaToolDescriptor(tool) {
   return { path: binaryPath, env: { ...SCRUBBED_ENV } };
 }
 
+// Долгоживущий инструмент (headless Chrome под CDP) не укладывается в
+// run-to-completion контракт runMediaTool, но обязан спавниться по тем же
+// правилам: массив аргументов, shell:false, вычищенное окружение.
+export function spawnMediaTool(tool, args) {
+  const descriptor = getMediaToolDescriptor(tool);
+  assertStringArguments(args);
+  return spawn(descriptor.path, args, {
+    shell: false,
+    stdio: ["ignore", "ignore", "pipe"],
+    env: descriptor.env
+  });
+}
+
 export async function runMediaTool(tool, args, { timeoutMs = 300000, signal, stdinText } = {}) {
   const descriptor = getMediaToolDescriptor(tool);
-  if (!Array.isArray(args) || args.some(value => typeof value !== "string")) {
-    throw new TypeError("Media tool arguments must be a string array");
-  }
+  assertStringArguments(args);
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_TIMEOUT_MS) {
     throw new RangeError(`Media tool timeout must be within 1..${MAX_TIMEOUT_MS}ms`);
   }
@@ -140,6 +151,12 @@ export async function runMediaTool(tool, args, { timeoutMs = 300000, signal, std
       resolve({ code, stdout, stderr });
     }));
   });
+}
+
+function assertStringArguments(args) {
+  if (!Array.isArray(args) || args.some(value => typeof value !== "string")) {
+    throw new TypeError("Media tool arguments must be a string array");
+  }
 }
 
 export async function probeMediaFile(filePath, { signal } = {}) {

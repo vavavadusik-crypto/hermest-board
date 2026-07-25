@@ -72,25 +72,28 @@ function manifestWith(commands) {
   });
 }
 
-test("manifest accepts the locked scene-frame chrome schema and keeps composer lineage", () => {
+const SCENE_BROWSER_ARGV = Object.freeze([
+  "--headless=new",
+  "--disable-gpu",
+  "--disable-extensions",
+  "--hide-scrollbars",
+  "--force-device-scale-factor=1",
+  "--user-data-dir=/tmp/run/chrome-profile",
+  "--window-size=1920,1080",
+  "--remote-debugging-address=127.0.0.1",
+  "--remote-debugging-port=0",
+  "about:blank"
+]);
+
+test("manifest accepts the locked scene-browser chrome schema and keeps composer lineage", () => {
   const manifest = manifestWith([{
-    id: "scene-frame",
+    id: "scene-browser",
     tool: "chrome",
-    argv: [
-      "--headless=new",
-      "--disable-gpu",
-      "--disable-extensions",
-      "--hide-scrollbars",
-      "--force-device-scale-factor=1",
-      "--user-data-dir=/tmp/run/chrome-profile",
-      "--window-size=1920,1080",
-      "--screenshot=/tmp/run/scene-001.png",
-      "file:///tmp/run/scene-001.html"
-    ]
+    argv: [...SCENE_BROWSER_ARGV]
   }]);
   assert.equal(manifest.tools.sceneComposer, "scene-markup@1");
   assert.equal(manifest.commands.length, 1);
-  assert.ok(manifest.commands[0].argv.includes("file://<run>/scene-001.html"));
+  assert.ok(manifest.commands[0].argv.includes("--user-data-dir=<run>/chrome-profile"));
   assert.ok(!JSON.stringify(manifest.commands).includes("/tmp/run/"));
 });
 
@@ -103,68 +106,39 @@ test("manifest accepts the composed ffmpeg render schema", () => {
   assert.equal(manifest.commands[0].id, "render-composed");
 });
 
-test("manifest accepts the transparent overlay scene-frame schema", () => {
-  const manifest = manifestWith([{
-    id: "scene-frame",
-    tool: "chrome",
-    argv: [
-      "--headless=new",
-      "--disable-gpu",
-      "--disable-extensions",
-      "--hide-scrollbars",
-      "--force-device-scale-factor=1",
-      "--default-background-color=00000000",
-      "--user-data-dir=/tmp/run/chrome-profile",
-      "--window-size=1920,1080",
-      "--screenshot=/tmp/run/scene-002.png",
-      "file:///tmp/run/scene-002.html"
-    ]
-  }]);
-  assert.equal(manifest.commands.length, 1);
-  assert.throws(() => manifestWith([{
-    id: "scene-frame",
-    tool: "chrome",
-    argv: [
-      "--headless=new",
-      "--disable-gpu",
-      "--disable-extensions",
-      "--hide-scrollbars",
-      "--force-device-scale-factor=1",
-      "--default-background-color=ff0000ff",
-      "--user-data-dir=/tmp/run/chrome-profile",
-      "--window-size=1920,1080",
-      "--screenshot=/tmp/run/scene-002.png",
-      "file:///tmp/run/scene-002.html"
-    ]
-  }]), /schema mismatch/);
+test("manifest pins the debugging endpoint to an ephemeral loopback port", () => {
+  const nonLoopback = SCENE_BROWSER_ARGV.map(
+    argument => (argument === "--remote-debugging-address=127.0.0.1" ? "--remote-debugging-address=0.0.0.0" : argument)
+  );
+  assert.throws(() => manifestWith([{ id: "scene-browser", tool: "chrome", argv: nonLoopback }]), /schema mismatch/);
+  const fixedPort = SCENE_BROWSER_ARGV.map(
+    argument => (argument === "--remote-debugging-port=0" ? "--remote-debugging-port=9222" : argument)
+  );
+  assert.throws(() => manifestWith([{ id: "scene-browser", tool: "chrome", argv: fixedPort }]), /schema mismatch/);
 });
 
-test("manifest rejects scene-frame drift from the locked schema", () => {
+test("manifest rejects scene-browser drift from the locked schema", () => {
   assert.throws(() => manifestWith([{
-    id: "scene-frame",
+    id: "scene-browser",
     tool: "chrome",
     argv: ["--headless=new", "--disable-gpu", "--remote-debugging-port=9222"]
   }]), /schema mismatch|Unsupported/);
   assert.throws(() => manifestWith([{
-    id: "scene-frame",
+    id: "scene-browser",
     tool: "ffmpeg",
     argv: ["-i", "/tmp/x.png"]
   }]), /Unsupported command evidence/);
   assert.throws(() => manifestWith([{
     id: "scene-frame",
     tool: "chrome",
-    argv: [
-      "--headless=new",
-      "--disable-gpu",
-      "--disable-extensions",
-      "--hide-scrollbars",
-      "--force-device-scale-factor=1",
-      "--user-data-dir=/tmp/run/chrome-profile",
-      "--window-size=1920,1080",
-      "--screenshot=/tmp/run/scene-001.png",
-      "https://evil.example/page.html"
-    ]
-  }]), /schema mismatch/);
+    argv: [...SCENE_BROWSER_ARGV]
+  }]), /Unsupported command evidence/);
+  const unsafeProfile = SCENE_BROWSER_ARGV.map(
+    argument => (argument.startsWith("--user-data-dir=") ? "--user-data-dir=/tmp/run/../etc" : argument)
+  );
+  assert.throws(() => manifestWith([{ id: "scene-browser", tool: "chrome", argv: unsafeProfile }]), /schema mismatch/);
+  const extraTarget = [...SCENE_BROWSER_ARGV, "https://evil.example/page.html"];
+  assert.throws(() => manifestWith([{ id: "scene-browser", tool: "chrome", argv: extraTarget }]), /schema mismatch/);
 });
 
 test("composed render args support b-roll overlay scenes", () => {

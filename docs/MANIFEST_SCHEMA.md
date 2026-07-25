@@ -84,9 +84,17 @@ Array of redacted command evidence:
 ```
 
 `id` must be one of `tts`, `narration-canonicalize`, `render`,
-`render-composed`, `scene-frame`, `loudness-measure`, and `tool` must be
+`render-composed`, `scene-browser`, `loudness-measure`, and `tool` must be
 allowlisted for that id (`ffmpeg`, `piper`, or `chrome`). `argv` is bounded
 (≤512 args, ≤16384 bytes each) and stripped of secrets.
+
+`scene-browser` is the single headless Chrome launch that composes every scene
+frame over the DevTools Protocol. Its argv schema is locked, including two
+security invariants: `--remote-debugging-address=127.0.0.1` and an ephemeral
+`--remote-debugging-port=0`. Individual frame captures are not separate
+processes, so they produce no command evidence of their own — the frame content
+is pinned by `markupSha256` plus `frameSha256` per scene, and the frame times
+follow from the sequence framerate recorded in the `render-composed` argv.
 
 ### `qc` (`normalizeQc`)
 ```jsonc

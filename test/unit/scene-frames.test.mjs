@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import {
-  buildSceneScreenshotArgs,
-  composeSceneFrames,
-  describeSceneComposerAvailability
-} from "../../src/media/scene-frames.js";
+import { composeSceneFrames, describeSceneComposerAvailability } from "../../src/media/scene-frames.js";
 
 const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 
@@ -20,63 +17,37 @@ const storyboard = Object.freeze({
 });
 const recipe = Object.freeze({ width: 1920, height: 1080, fps: 30 });
 
-test("screenshot argv follows the exact locked schema", () => {
-  const argv = buildSceneScreenshotArgs({
-    profileDir: "/tmp/run/chrome-profile",
-    width: 1920,
-    height: 1080,
-    outputFile: "/tmp/run/scene-001.png",
-    inputFile: "/tmp/run/scene-001.html"
-  });
-  assert.deepEqual(argv, [
-    "--headless=new",
-    "--disable-gpu",
-    "--disable-extensions",
-    "--hide-scrollbars",
-    "--force-device-scale-factor=1",
-    "--user-data-dir=/tmp/run/chrome-profile",
-    "--window-size=1920,1080",
-    "--screenshot=/tmp/run/scene-001.png",
-    "file:///tmp/run/scene-001.html"
-  ]);
-});
-
-test("screenshot argv pins the animation frame time in the url hash", () => {
-  const argv = buildSceneScreenshotArgs({
-    profileDir: "/tmp/run/chrome-profile",
-    width: 1920,
-    height: 1080,
-    outputFile: "/tmp/run/scene-001-f0007.png",
-    inputFile: "/tmp/run/scene-001.html",
-    frameTimeMs: 233
-  });
-  assert.equal(argv.at(-1), "file:///tmp/run/scene-001.html#t=233");
-  assert.throws(() => buildSceneScreenshotArgs({
-    profileDir: "/tmp/run/chrome-profile",
-    width: 1920,
-    height: 1080,
-    outputFile: "/tmp/run/scene.png",
-    inputFile: "/tmp/run/scene.html",
-    frameTimeMs: -5
-  }), RangeError);
-});
-
-test("screenshot argv rejects unsafe paths", () => {
-  assert.throws(() => buildSceneScreenshotArgs({
-    profileDir: "/tmp/run/../etc",
-    width: 1920,
-    height: 1080,
-    outputFile: "/tmp/run/scene.png",
-    inputFile: "/tmp/run/scene.html"
-  }), TypeError);
-  assert.throws(() => buildSceneScreenshotArgs({
-    profileDir: "/tmp/run/profile",
-    width: 1920,
-    height: 1080,
-    outputFile: "/tmp/run/scene with space.png",
-    inputFile: "/tmp/run/scene.html"
-  }), TypeError);
-});
+// Двойник CDP-браузера: один экземпляр на весь прогон, как и настоящий.
+function createFakeBrowser({ frameBytes = () => PNG_HEADER, workerCount = 1 } = {}) {
+  const calls = { scenes: [], frames: [], workers: [], closed: 0 };
+  return {
+    calls,
+    workerCount,
+    launchArgv: [
+      "--headless=new",
+      "--disable-gpu",
+      "--disable-extensions",
+      "--hide-scrollbars",
+      "--force-device-scale-factor=1",
+      "--user-data-dir=/tmp/run/chrome-profile",
+      "--window-size=1920,1080",
+      "--remote-debugging-address=127.0.0.1",
+      "--remote-debugging-port=0",
+      "about:blank"
+    ],
+    async openScene(options) {
+      calls.scenes.push(options);
+    },
+    async captureFrame(frameTimeMs, workerIndex) {
+      calls.frames.push(frameTimeMs);
+      calls.workers.push(workerIndex);
+      return frameBytes(frameTimeMs, calls.frames.length - 1);
+    },
+    async close() {
+      calls.closed += 1;
+    }
+  };
+}
 
 test("composer availability reports missing binary honestly", async () => {
   const availability = await describeSceneComposerAvailability({
@@ -86,15 +57,11 @@ test("composer availability reports missing binary honestly", async () => {
   assert.ok(availability.reason.includes("legacy"));
 });
 
-test("composeSceneFrames captures an animated build-in sequence per scene", async () => {
+test("composeSceneFrames captures an animated build-in sequence from one browser", async () => {
   const runDir = await mkdtemp(path.join(os.tmpdir(), "scene-frames-test-"));
   try {
-    const invocations = [];
-    const runner = async (tool, argv) => {
-      invocations.push({ tool, argv });
-      const screenshotArg = argv.find(value => value.startsWith("--screenshot="));
-      await writeFile(screenshotArg.slice("--screenshot=".length), PNG_HEADER);
-    };
+    const browser = createFakeBrowser();
+    const factoryCalls = [];
     const result = await composeSceneFrames({
       storyboard,
       brief: { topic: "Тема", language: "ru" },
@@ -102,16 +69,23 @@ test("composeSceneFrames captures an animated build-in sequence per scene", asyn
       runDir,
       seed: 42,
       buildFrameLimit: 3,
-      runner
+      browserFactory: async options => {
+        factoryCalls.push(options);
+        return browser;
+      }
     });
+    assert.equal(factoryCalls.length, 1, "one browser for the whole render");
+    assert.equal(factoryCalls[0].profileDir, path.join(runDir, "chrome-profile"));
+    assert.equal(factoryCalls[0].width, 1920);
+    assert.equal(factoryCalls[0].height, 1080);
+
     assert.equal(result.frames.length, 2);
-    assert.equal(invocations.length, 6, "3 build frames per scene");
-    assert.equal(result.commands.length, 4, "first and last capture command per scene");
+    assert.equal(browser.calls.scenes.length, 2, "each scene is announced to the browser once");
+    assert.deepEqual(browser.calls.frames, [0, 33, 67, 0, 33, 67], "3 build frames per scene at 30fps");
+    assert.equal(browser.calls.closed, 1, "browser closed exactly once");
     assert.equal(result.composer, "scene-markup@2");
-    assert.ok(invocations.every(call => call.tool === "chrome"));
-    assert.ok(invocations.every(call => /#t=\d+$/.test(call.argv.at(-1))));
-    assert.match(invocations[0].argv.at(-1), /#t=0$/);
-    assert.match(invocations[2].argv.at(-1), /#t=67$/);
+    assert.deepEqual(result.commands, [{ id: "scene-browser", tool: "chrome", argv: browser.launchArgv }]);
+    assert.ok(browser.calls.scenes.every(scene => scene.transparent === false));
 
     const firstFrame = result.frames[0];
     assert.equal(firstFrame.durationSeconds, 4.2);
@@ -121,6 +95,74 @@ test("composeSceneFrames captures an animated build-in sequence per scene", asyn
     assert.ok(firstFrame.path.endsWith("scene-001-f0002.png"), "static path is the final build frame");
     assert.match(firstFrame.frameSha256, /^[0-9a-f]{64}$/);
     assert.match(firstFrame.markupSha256, /^[0-9a-f]{64}$/);
+
+    const written = await readdir(runDir);
+    assert.deepEqual(written.filter(name => name.endsWith(".png")).sort(), [
+      "scene-001-f0000.png",
+      "scene-001-f0001.png",
+      "scene-001-f0002.png",
+      "scene-002-f0000.png",
+      "scene-002-f0001.png",
+      "scene-002-f0002.png"
+    ]);
+    assert.equal(written.filter(name => name.endsWith(".html")).length, 0, "markup is cleaned up");
+  } finally {
+    await rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("composeSceneFrames opens overlay scenes with a transparent background", async () => {
+  const runDir = await mkdtemp(path.join(os.tmpdir(), "scene-frames-overlay-"));
+  try {
+    const browser = createFakeBrowser();
+    await composeSceneFrames({
+      storyboard,
+      brief: {},
+      recipe,
+      runDir,
+      seed: 7,
+      buildFrameLimit: 1,
+      backgroundImages: [null, { path: "/tmp/run/bg-002.png" }],
+      browserFactory: async () => browser
+    });
+    assert.deepEqual(browser.calls.scenes.map(scene => scene.transparent), [false, true]);
+  } finally {
+    await rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("composeSceneFrames spreads a scene sequence across the tab pool without gaps", async () => {
+  const runDir = await mkdtemp(path.join(os.tmpdir(), "scene-frames-pool-"));
+  try {
+    // Каждый кадр отдаёт уникальные байты, чтобы поймать перепутанные файлы.
+    const browser = createFakeBrowser({
+      workerCount: 3,
+      frameBytes: frameTimeMs => Buffer.concat([PNG_HEADER, Buffer.from(`t${frameTimeMs}`)])
+    });
+    const result = await composeSceneFrames({
+      storyboard: { scenes: [{ title: "Одна", narration: "Текст.", durationMs: 5000 }] },
+      brief: {},
+      recipe,
+      runDir,
+      seed: 3,
+      buildFrameLimit: 7,
+      browserFactory: async () => browser
+    });
+    assert.equal(result.frames[0].sequenceFrameCount, 7);
+    assert.deepEqual([...browser.calls.frames].sort((a, b) => a - b), [0, 33, 67, 100, 133, 167, 200]);
+    assert.deepEqual([...new Set(browser.calls.workers)].sort(), [0, 1, 2], "every pool tab does work");
+
+    for (let frameIndex = 0; frameIndex < 7; frameIndex += 1) {
+      const frameTimeMs = Math.round((frameIndex * 1000) / 30);
+      const written = await readFile(path.join(runDir, `scene-001-f${String(frameIndex).padStart(4, "0")}.png`));
+      assert.equal(written.subarray(PNG_HEADER.length).toString(), `t${frameTimeMs}`, "frame index maps to its file");
+    }
+    const lastBytes = await readFile(path.join(runDir, "scene-001-f0006.png"));
+    assert.equal(
+      result.frames[0].frameSha256,
+      createHash("sha256").update(lastBytes).digest("hex"),
+      "frameSha256 pins the final build frame regardless of capture order"
+    );
   } finally {
     await rm(runDir, { recursive: true, force: true });
   }
@@ -129,34 +171,26 @@ test("composeSceneFrames captures an animated build-in sequence per scene", asyn
 test("composeSceneFrames caps the build window by scene duration and fps", async () => {
   const runDir = await mkdtemp(path.join(os.tmpdir(), "scene-frames-cap-"));
   try {
-    let calls = 0;
-    const runner = async (_tool, argv) => {
-      calls += 1;
-      const screenshotArg = argv.find(value => value.startsWith("--screenshot="));
-      await writeFile(screenshotArg.slice("--screenshot=".length), PNG_HEADER);
-    };
+    const browser = createFakeBrowser();
     const result = await composeSceneFrames({
       storyboard: { scenes: [{ title: "Короткая", narration: "Текст.", durationMs: 400 }] },
       brief: {},
       recipe,
       runDir,
       seed: 1,
-      runner
+      browserFactory: async () => browser
     });
     assert.equal(result.frames[0].sequenceFrameCount, 12, "0.4s at 30fps = 12 frames");
-    assert.equal(calls, 12);
+    assert.equal(browser.calls.frames.length, 12);
   } finally {
     await rm(runDir, { recursive: true, force: true });
   }
 });
 
-test("composeSceneFrames fails closed on non-png screenshot output", async () => {
-  const runDir = await mkdtemp(path.join(os.tmpdir(), "scene-frames-test-"));
+test("composeSceneFrames fails closed on non-png capture output and still closes the browser", async () => {
+  const runDir = await mkdtemp(path.join(os.tmpdir(), "scene-frames-badpng-"));
   try {
-    const runner = async (_tool, argv) => {
-      const screenshotArg = argv.find(value => value.startsWith("--screenshot="));
-      await writeFile(screenshotArg.slice("--screenshot=".length), "not a png");
-    };
+    const browser = createFakeBrowser({ frameBytes: () => Buffer.from("not a png") });
     await assert.rejects(
       composeSceneFrames({
         storyboard,
@@ -164,22 +198,89 @@ test("composeSceneFrames fails closed on non-png screenshot output", async () =>
         recipe,
         runDir,
         seed: 1,
-        runner
+        browserFactory: async () => browser
       }),
       /not a valid PNG/
     );
+    assert.equal(browser.calls.closed, 1, "browser must not leak when a capture is rejected");
+    const written = await readdir(runDir);
+    assert.equal(written.filter(name => name.endsWith(".png")).length, 0, "no bogus frame reaches disk");
   } finally {
     await rm(runDir, { recursive: true, force: true });
   }
 });
 
-test("composeSceneFrames validates scene count and run dir", async () => {
+test("composeSceneFrames closes the browser when a capture throws", async () => {
+  const runDir = await mkdtemp(path.join(os.tmpdir(), "scene-frames-throw-"));
+  try {
+    const browser = createFakeBrowser({
+      frameBytes: (_frameTimeMs, index) => {
+        if (index === 2) throw new Error("chrome CDP command Page.captureScreenshot timed out after 60000ms");
+        return PNG_HEADER;
+      }
+    });
+    await assert.rejects(
+      composeSceneFrames({
+        storyboard,
+        brief: {},
+        recipe,
+        runDir,
+        seed: 1,
+        browserFactory: async () => browser
+      }),
+      /Page.captureScreenshot timed out/
+    );
+    assert.equal(browser.calls.closed, 1, "browser must not leak when capture fails mid-sequence");
+  } finally {
+    await rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("composeSceneFrames aborts mid-sequence and closes the browser", async () => {
+  const runDir = await mkdtemp(path.join(os.tmpdir(), "scene-frames-abort-"));
+  try {
+    const controller = new AbortController();
+    const browser = createFakeBrowser({
+      frameBytes: (_frameTimeMs, index) => {
+        if (index === 1) controller.abort();
+        return PNG_HEADER;
+      }
+    });
+    await assert.rejects(
+      composeSceneFrames({
+        storyboard,
+        brief: {},
+        recipe,
+        runDir,
+        seed: 1,
+        signal: controller.signal,
+        browserFactory: async () => browser
+      }),
+      { name: "AbortError" }
+    );
+    assert.equal(browser.calls.closed, 1);
+  } finally {
+    await rm(runDir, { recursive: true, force: true });
+  }
+});
+
+test("composeSceneFrames validates scene count and run dir before launching a browser", async () => {
+  let launched = 0;
+  const browserFactory = async () => {
+    launched += 1;
+    return createFakeBrowser();
+  };
   await assert.rejects(
-    composeSceneFrames({ storyboard: { scenes: [] }, brief: {}, recipe, runDir: "/tmp/x", seed: 1 }),
+    composeSceneFrames({
+      storyboard: { scenes: [] }, brief: {}, recipe, runDir: "/tmp/x", seed: 1, browserFactory
+    }),
     RangeError
   );
   await assert.rejects(
-    composeSceneFrames({ storyboard, brief: {}, recipe, runDir: "relative/path", seed: 1 }),
+    composeSceneFrames({
+      storyboard, brief: {}, recipe, runDir: "relative/path", seed: 1, browserFactory
+    }),
     TypeError
   );
+  assert.equal(launched, 0, "no chrome process starts for invalid input");
 });
