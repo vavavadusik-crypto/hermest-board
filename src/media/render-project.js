@@ -179,7 +179,10 @@ export async function renderProject({
     const storyboardFile = path.join(runDir, "storyboard.json");
     const subtitleFile = path.join(runDir, "narration.srt");
     await atomicWriteFile(storyboardFile, `${JSON.stringify(storyboard, null, 2)}\n`);
-    await atomicWriteFile(subtitleFile, formatSrt(buildSubtitleCues(storyboard)));
+    await atomicWriteFile(subtitleFile, formatSrt(buildSubtitleCues(storyboard, {
+      width: recipe.width,
+      subtitleLayout: recipe.subtitleLayout
+    })));
 
     // «encode» покрывает весь этап сборки видео: подбор футажей/фонов,
     // композицию кадров и сам ffmpeg-рендер — порядок фаз остаётся монотонным.

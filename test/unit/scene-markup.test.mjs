@@ -50,6 +50,29 @@ test("scene markup carries brand chrome, chapter badge and progress", () => {
   assert.ok(!markup.includes("Второе предложение."));
 });
 
+test("lead line skips the narrated repeat of the card title", () => {
+  const markup = buildSceneMarkup({
+    ...baseInput,
+    scene: {
+      title: "Сначала посчитай",
+      // Так нарратив и собирается в пайплайне: заголовок карточки + её текст.
+      narration: "Сначала посчитай. Подписка окупается, только если ты ей пользуешься."
+    }
+  });
+
+  assert.ok(markup.includes("Подписка окупается, только если ты ей пользуешься."));
+  assert.equal(markup.match(/Сначала посчитай/g).length, 1, "заголовок не должен дублироваться лидом");
+});
+
+test("lead line is dropped when the card says nothing beyond its title", () => {
+  const markup = buildSceneMarkup({
+    ...baseInput,
+    scene: { title: "Сначала посчитай", narration: "Сначала посчитай." }
+  });
+
+  assert.ok(!markup.includes(`class="lead"`), "пустой лид не рендерится");
+});
+
 test("scene markup adapts to vertical dimensions", () => {
   const vertical = buildSceneMarkup({ ...baseInput, width: 1080, height: 1920 });
   assert.ok(vertical.includes("width: 1080px"));

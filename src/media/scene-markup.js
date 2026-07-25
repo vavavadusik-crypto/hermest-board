@@ -42,6 +42,25 @@ function clampText(value, limit = MAX_TEXT_CHARS) {
   return `${text.slice(0, limit - 1)}…`;
 }
 
+// Заголовок и дикторский текст сравниваются без хвостовой пунктуации и
+// регистра: сборщик нарратива добавляет к заголовку точку, поэтому дословное
+// сравнение строк повтор не поймает.
+function sentenceKey(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/[.!?…]+$/u, "")
+    .toLocaleLowerCase();
+}
+
+function pickLeadSentence(narration, title) {
+  const titleKey = sentenceKey(title);
+  const sentences = String(narration ?? "")
+    .split(/(?<=[.!?…])\s+/)
+    .map(sentence => sentence.trim())
+    .filter(Boolean);
+  return sentences.find(sentence => sentenceKey(sentence) !== titleKey) ?? "";
+}
+
 function starField({ seed, width, height }) {
   const random = seededRandom(seed);
   const stars = [];
@@ -142,7 +161,10 @@ export function buildSceneMarkup({
   const isTitleScene = index === 0;
   const topic = clampText(brief?.topic || titles[0] || scene.title, 80);
   const title = clampText(scene.title, 120);
-  const narrationLead = clampText(String(scene.narration || "").split(/(?<=[.!?…])\s+/)[0] || "", 180);
+  // Дикторский текст сцены собирается как «заголовок карточки + её текст»,
+  // поэтому первое предложение дословно повторяет <h1>. Ведущей строкой берём
+  // первое предложение, которое заголовком не является.
+  const narrationLead = clampText(pickLeadSentence(scene.narration, scene.title), 180);
   const badge = `${String(index + 1).padStart(2, "0")} / ${String(total).padStart(2, "0")}`;
   const diagramSize = isVertical ? Math.round(safeWidth * 0.68) : Math.round(safeHeight * 0.52);
   const heroFontSize = isTitleScene
@@ -276,7 +298,7 @@ ${isOverlay ? '  <div class="headline-scrim"></div>' : `  <svg class="backdrop" 
     <div class="headline">
       <div class="kicker">${escapeHtml(topic)}</div>
       <h1>${escapeHtml(title)}<span class="dot">.</span></h1>
-      <p class="lead">${escapeHtml(isTitleScene ? narrationLead : narrationLead)}</p>
+      ${narrationLead ? `<p class="lead">${escapeHtml(narrationLead)}</p>` : ""}
     </div>
     <div class="diagram-panel">${diagram}</div>
   </div>
