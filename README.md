@@ -13,6 +13,41 @@ Russian UI/docs below. Full English docs: `docs/` directory.
 
 ---
 
+## See It
+
+![8-second excerpt from an MP4 rendered by Hermest Board: title card, narration subtitles and a live concept map](docs/media/demo-preview.gif)
+
+**This clip was rendered by Hermest Board itself.** It is an 8-second excerpt from a real project
+render — the scene order, per-scene timing and burned-in subtitles come from the project storyboard,
+and the deterministic FFmpeg pipeline assembled the H.264/AAC MP4 (1920×1080) with the voiceover
+track. Nothing here is a mockup or a hand-edited video.
+
+Full renders of the same project, straight out of the pipeline (~18 s each):
+
+- [**16:9 — 1920×1080 MP4**](docs/media/demo-16x9.mp4) (723 KB)
+- [**9:16 — 1080×1920 MP4**](docs/media/demo-9x16.mp4) (665 KB)
+
+Both files come from the same project. The 9:16 cut is an honest aspect-ratio reframe, not a semantic
+re-edit — see [`docs/RENDER_PIPELINE.md`](docs/RENDER_PIPELINE.md) for that caveat and for everything
+the pipeline emits alongside the MP4s (SRT, thumbnails, `storyboard.json`, manifest with hashes and
+provenance, SHA-256 sidecar).
+
+### Screenshots
+
+From the running app (Russian UI — an English UI is not shipped yet).
+
+| First run | The board |
+|:--|:--|
+| <a href="docs/media/screenshot-first-run.webp"><img src="docs/media/screenshot-first-run.webp" width="100%" alt="First-run overlay 'Из темы — в готовое видео' with four mode chips and a topic field"></a> | <a href="docs/media/screenshot-board.webp"><img src="docs/media/screenshot-board.webp" width="100%" alt="Demo board 'Почему небо голубое' with six scene cards and the inspector panel"></a> |
+| Onboarding overlay on first open: one topic field, and the four ways to run the product — local & free, free key, own key (BYOK), cloud if you want it. Footer states that nothing leaves the machine without your action. | Demo project «Почему небо голубое»: six scene cards on the canvas, and the right inspector with block transform controls plus the project Plan / Roadmap / Video tabs. Auto-save is on. |
+
+| «Тема → видео» wizard | Mobile |
+|:--|:--|
+| <a href="docs/media/screenshot-topic-to-video.webp"><img src="docs/media/screenshot-topic-to-video.webp" width="100%" alt="'Тема → видео' side panel with topic, scene count, source search and AI model selector"></a> | <a href="docs/media/screenshot-mobile.webp"><img src="docs/media/screenshot-mobile.webp" width="220" alt="Board on a 390×844 mobile viewport"></a> |
+| The wizard panel: topic, number of scenes, "search sources" toggle, and the AI-model selector (browser bridge or any OpenAI-compatible API). The panel is explicit that real local MP4 rendering only works under `npm run dev`, where the private FFmpeg worker runs. | 390×844 viewport. The header toolbar wraps onto its own row and the side panel stacks below the canvas — one column, no horizontal scrolling. |
+
+---
+
 ## Quick Start
 
 **Self-host (full, real MP4 rendering)** — Docker Compose (one command):

@@ -12,6 +12,8 @@ npm-debug.log*
 *.mp4
 *.mov
 *.log
+# Committed README showcase clips (rendered by the product itself)
+!docs/media/*.mp4
 .vercel
 node_modules
 release/

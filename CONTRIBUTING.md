@@ -44,8 +44,8 @@ Open a [feature request](../../issues/new?template=feature_request.md) with:
 
 1. **Fork the repo** and clone your fork:
    ```bash
-   git clone https://github.com/YOUR-USERNAME/hermes-board.git
-   cd hermes-board
+   git clone https://github.com/YOUR-USERNAME/hermest-board.git
+   cd hermest-board
    ```
 
 2. **Install dependencies** (requires Node.js 20.11+ and `ffmpeg`/`ffprobe`):

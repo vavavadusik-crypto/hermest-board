@@ -1,5 +1,5 @@
 services:
-  hermes-board:
+  hermest-board:
     build:
       context: .
       dockerfile: Dockerfile.selfhost
