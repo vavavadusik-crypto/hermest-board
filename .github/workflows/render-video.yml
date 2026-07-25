@@ -25,6 +25,14 @@ on:
         description: "Allowed deviation from expect_seconds"
         required: false
         default: "0.5"
+      min_live_visuals:
+        description: "Fail unless this share of scenes got a real visual (0..1)"
+        required: false
+        default: "0.8"
+      min_stock_footage:
+        description: "Fail unless this share of scenes got moving stock footage (0..1)"
+        required: false
+        default: "0"
 
 jobs:
   render:
@@ -72,6 +80,12 @@ jobs:
         id: render
         env:
           HERMEST_CHROME_PATH: /usr/bin/google-chrome
+          # Без этих ключей пайплайн тихо скатывается в статичный композер:
+          # ни живого b-roll, ни нормального голоса. Раньше их тут не было —
+          # отсюда и «слайд-шоу с механической озвучкой».
+          HERMEST_PEXELS_API_KEY: ${{ secrets.HERMEST_PEXELS_API_KEY }}
+          HERMEST_FAL_API_KEY: ${{ secrets.HERMEST_FAL_API_KEY }}
+          HERMEST_ELEVENLABS_API_KEY: ${{ secrets.HERMEST_ELEVENLABS_API_KEY }}
         run: |
           set -euo pipefail
           output="$(mktemp -d /tmp/hermest-render-XXXXXX)"
@@ -118,6 +132,15 @@ jobs:
               }
             ' "$duration" "$expect" "$tol" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Verify the visuals actually landed
+        if: always() && steps.render.outputs.outputDir != ''
+        run: |
+          set -euo pipefail
+          manifest="$(ls '${{ steps.render.outputs.outputDir }}'/*.manifest.json | head -1)"
+          node scripts/check-visual-coverage.mjs "$manifest" \
+            --min-live '${{ inputs.min_live_visuals }}' \
+            --min-footage '${{ inputs.min_stock_footage }}' | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Upload rendered video and sidecars
         # Ролик нужен и когда он не попал в целевую длительность: по нему

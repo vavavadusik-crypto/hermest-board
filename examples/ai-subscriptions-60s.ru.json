@@ -5,8 +5,12 @@
     "topic": "Как не переплачивать за подписки на ИИ-сервисы",
     "audience": "широкая аудитория",
     "language": "ru",
-    "voice": "ru_RU-dmitri-medium",
+    "narrationProvider": "elevenlabs",
+    "voice": "JBFqnCBsd6RMkjVDRZzb",
     "tone": "спокойный практичный",
+    "brollMode": "auto",
+    "generateVisuals": true,
+    "stylePreset": "cinematic documentary photography, shallow depth of field, soft natural light, muted teal and amber palette, no text, no logos, no watermarks",
     "platforms": ["youtube_video", "youtube_shorts"]
   },
   "cards": [
@@ -16,6 +20,7 @@
       "y": 80,
       "title": "Сначала посчитай",
       "text": "Подписка окупается, только если ты ей пользуешься. Неделю записывай, сколько раз реально открыл сервис и зачем. Обычно итоговая цифра сильно удивляет.",
+      "visualQuery": "counting money calculator desk",
       "sourceRefs": ["usage-audit"]
     },
     {
@@ -24,6 +29,7 @@
       "y": 80,
       "title": "Год или месяц",
       "text": "Годовой тариф дешевле, но это ставка на то, что через полгода сервис всё ещё будет нужен именно тебе. Начинай с месячного и продлевай осознанно.",
+      "visualQuery": "calendar pages turning time",
       "sourceRefs": ["billing-cycle"]
     },
     {
@@ -32,6 +38,7 @@
       "y": 80,
       "title": "Читай лимиты",
       "text": "Главное в тарифе не цена, а что именно случится, когда лимит кончится: длинная очередь, модель послабее или полная блокировка до следующего месяца.",
+      "visualQuery": "reading contract fine print",
       "sourceRefs": ["quota-behaviour"]
     },
     {
@@ -40,6 +47,7 @@
       "y": 460,
       "title": "Ключ вместо подписки",
       "text": "Если пользуешься редко, бери доступ по ключу и плати только за запросы. При паре часов в неделю это выходит заметно дешевле подписки.",
+      "visualQuery": "programmer typing code screen",
       "sourceRefs": ["byok-cost"]
     },
     {
@@ -48,6 +56,7 @@
       "y": 460,
       "title": "Отмена сразу",
       "text": "Оформил пробный период — тут же поставь себе напоминание за два дня до списания. Большинство людей платит не за сервис, а за собственную забывчивость.",
+      "visualQuery": "smartphone notification reminder hand",
       "sourceRefs": ["trial-reminder"]
     },
     {
@@ -56,6 +65,7 @@
       "y": 460,
       "title": "Одна на команду",
       "text": "Командный тариф обычно дешевле, чем те же места по отдельности, и управлять им заметно проще: единый счёт, общие настройки, понятный список доступов.",
+      "visualQuery": "small team working together office",
       "sourceRefs": ["team-plan"]
     }
   ],

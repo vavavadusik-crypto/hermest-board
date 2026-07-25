@@ -203,13 +203,23 @@ export async function renderProject({
       const brollClips = [];
       const brollOrientation = recipe.height > recipe.width ? "portrait" : "landscape";
 
+      // Сток-видео и генераторы изображений ищут по-английски: русский
+      // заголовок карточки они фактически игнорируют и возвращают случайный
+      // кадр. `visualQuery` — явное описание того, что должно быть в кадре;
+      // без него остаётся прежнее поведение.
+      const cardsById = new Map((Array.isArray(project?.cards) ? project.cards : []).map(card => [card?.id, card]));
+      const visualQueryFor = scene => {
+        const raw = cardsById.get(scene?.cardId)?.visualQuery;
+        return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+      };
+
       for (const [sceneIndex, scene] of storyboard.scenes.entries()) {
         if (sceneIndex === 0) continue;
         const clipFile = path.join(runDir, `broll-${String(sceneIndex + 1).padStart(3, "0")}.mp4`);
         const result = await runBrollCascade({
           providers: brollProviders.filter(p => p.kind === "stock-footage"),
           request: {
-            keywords: [project?.brief?.topic, scene.title].filter(Boolean),
+            keywords: visualQueryFor(scene) ? [visualQueryFor(scene)] : [project?.brief?.topic, scene.title].filter(Boolean),
             orientation: brollOrientation,
             minDurationSeconds: scene.durationMs / 1000,
             outputPath: clipFile,
@@ -251,8 +261,9 @@ export async function renderProject({
           const result = await runBrollCascade({
             providers: imageProviders,
             request: {
-              prompt: [project?.brief?.topic, scene.title, scene.narration.split(/(?<=[.!?…])\s+/)[0]]
-                .filter(Boolean).join(". "),
+              prompt: visualQueryFor(scene)
+                || [project?.brief?.topic, scene.title, scene.narration.split(/(?<=[.!?…])\s+/)[0]]
+                  .filter(Boolean).join(". "),
               stylePreset,
               width: recipe.width,
               height: recipe.height,
