@@ -24,13 +24,13 @@ jobs:
         with:
           context: .
           file: Dockerfile.selfhost
-          tags: hermes-board:selfhost-ci
+          tags: hermest-board:selfhost-ci
           push: false
           load: true
 
       - name: Start container
         run: |
-          docker run -d -p 8080:8080 --name hermes-board-smoke hermes-board:selfhost-ci
+          docker run -d -p 8080:8080 --name hermest-board-smoke hermest-board:selfhost-ci
 
       - name: Wait for server (smoke test)
         run: |
@@ -58,10 +58,10 @@ jobs:
 
       - name: Logs (on failure)
         if: failure()
-        run: docker logs hermes-board-smoke
+        run: docker logs hermest-board-smoke
 
       - name: Teardown
         if: always()
         run: |
-          docker stop hermes-board-smoke || true
-          docker rm hermes-board-smoke || true
+          docker stop hermest-board-smoke || true
+          docker rm hermest-board-smoke || true
