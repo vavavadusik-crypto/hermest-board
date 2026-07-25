@@ -1,0 +1,103 @@
+name: Render a video
+
+# Рендерит проект-доску в настоящий MP4 на раннере GitHub — тем же пайплайном,
+# что и локальный self-host. Нужен, чтобы получить видео без нагрузки на слабую
+# или перегревающуюся машину: тяжёлый ffmpeg-проход идёт на сервере, а готовый
+# ролик забирается из артефактов запуска.
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        description: "Path to the board project JSON inside the repository"
+        required: true
+        default: examples/ai-subscriptions-60s.ru.json
+      platform:
+        description: "Render recipe"
+        required: true
+        default: youtube_video
+        type: choice
+        options: [youtube_video, youtube_shorts]
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install ffmpeg + ensure media tools at /usr/bin
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          test -x /usr/bin/ffmpeg  || { echo "::error::/usr/bin/ffmpeg missing"; exit 1; }
+          test -x /usr/bin/ffprobe || { echo "::error::/usr/bin/ffprobe missing"; exit 1; }
+          if [ ! -e /usr/bin/google-chrome ]; then
+            chrome="$(command -v google-chrome-stable || true)"
+            [ -n "$chrome" ] && sudo ln -sf "$chrome" /usr/bin/google-chrome || true
+          fi
+          # Композер сцен обязателен: без Chrome пайплайн молча падает на
+          # legacy-заливки, и ролик выходит не тем, что показывает продукт.
+          /usr/bin/google-chrome --version || { echo "::error::google-chrome missing"; exit 1; }
+
+      - name: Cache piper binary and voices
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/opt/piper
+            ~/.local/share/piper/voices
+          key: piper-${{ runner.os }}-${{ hashFiles('scripts/install-piper-ci.sh') }}
+
+      - name: Install piper (TTS) + voices
+        run: bash scripts/install-piper-ci.sh
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Render project
+        id: render
+        env:
+          HERMEST_CHROME_PATH: /usr/bin/google-chrome
+        run: |
+          set -euo pipefail
+          output="$(mktemp -d /tmp/hermest-render-XXXXXX)"
+          npm run --silent render:project -- \
+            --input "${{ inputs.project }}" \
+            --output "$output" \
+            --platform "${{ inputs.platform }}" | tee /tmp/render-result.json
+          video="$(node -p 'JSON.parse(require("fs").readFileSync("/tmp/render-result.json","utf8")).videoFile')"
+          echo "video=$video" >> "$GITHUB_OUTPUT"
+          echo "outputDir=$(dirname "$video")" >> "$GITHUB_OUTPUT"
+
+      - name: Report duration and stream layout
+        run: |
+          set -euo pipefail
+          video='${{ steps.render.outputs.video }}'
+          duration="$(/usr/bin/ffprobe -v error -show_entries format=duration -of csv=p=0 "$video")"
+          streams="$(/usr/bin/ffprobe -v error -show_entries stream=codec_name,width,height,sample_rate -of csv=p=0 "$video" | tr '\n' ' ')"
+          {
+            echo "### Render complete"
+            echo ""
+            echo "| field | value |"
+            echo "|---|---|"
+            echo "| project | \`${{ inputs.project }}\` |"
+            echo "| recipe | \`${{ inputs.platform }}\` |"
+            echo "| duration | **${duration} s** |"
+            echo "| streams | \`${streams}\` |"
+            echo "| size | $(du -h "$video" | cut -f1) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "duration: ${duration}s"
+
+      - name: Upload rendered video and sidecars
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermest-render-${{ inputs.platform }}-${{ github.run_id }}
+          path: ${{ steps.render.outputs.outputDir }}
+          retention-days: 14
+          if-no-files-found: error
