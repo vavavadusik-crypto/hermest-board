@@ -10,6 +10,15 @@
 //  * у каждого архетипа есть бесконечный ambient-слой, чтобы кадр не «умирал»
 //    после того, как build-in отыграл.
 
+import {
+  CHARACTER_VIEWBOX_HEIGHT,
+  CHARACTER_VIEWBOX_WIDTH,
+  cartoonCharacterCss,
+  renderCharacter,
+  renderForeground,
+  renderSetting,
+  speechBubble
+} from "./cartoon-cast.js";
 import { NODE_COLORS, THEME, clampText, escapeHtml, scaled } from "./scene-design.js";
 
 const MAX_CHIPS = 5;
@@ -963,8 +972,165 @@ function buildQuote(ctx) {
   };
 }
 
+// Расстановка по ширине кадра: в узком кадре персонажи сходятся к центру,
+// в широком — расходятся, иначе двое стоят вплотную либо теряются по углам.
+const CARTOON_POSITIONS = Object.freeze({
+  wide: Object.freeze({ 1: [0.42], 2: [0.26, 0.74], 3: [0.16, 0.5, 0.84] }),
+  narrow: Object.freeze({ 1: [0.5], 2: [0.29, 0.71], 3: [0.17, 0.5, 0.83] })
+});
+
+/**
+ * Размер реплики подбирается под облачко: длинная фраза уменьшает кегль, пока
+ * текст не поместится в отведённую высоту. Оценка грубая (ширина глифа —
+ * доля кегля), но детерминированная, а облачко всё равно с запасом.
+ */
+function fitBubbleFontSize({ text, bubbleWidth, maxHeight, maxFontSize }) {
+  const characters = Math.max(1, String(text).length);
+  for (let fontSize = maxFontSize; fontSize > 12; fontSize -= 2) {
+    const charsPerLine = Math.max(8, Math.floor(bubbleWidth / (fontSize * GLYPH_WIDTH_RATIO)));
+    const lines = Math.ceil(characters / charsPerLine);
+    if (lines * fontSize * 1.32 <= maxHeight) return fontSize;
+  }
+  return 12;
+}
+
+function buildCartoonShot(ctx) {
+  const { layout, content, topic, s } = ctx;
+  // Карточка без явного мультблока всё равно должна дать кадр: один персонаж,
+  // говорящий лид сцены. Пустая сцена хуже, чем сцена по умолчанию.
+  const cartoon = content.data.cartoon ?? {
+    setting: "void",
+    cast: [{ id: `char-${topic}`, name: "", pose: "talk", side: "left", speaking: true, look: null }],
+    line: "",
+    caption: ""
+  };
+  const frameWidth = layout.width;
+  const frameHeight = layout.height;
+  const groundY = frameHeight - layout.captionHeight - scaled(layout, 3);
+  const ceiling = layout.padTop;
+  const available = Math.max(120, groundY - ceiling);
+  const charHeight = Math.round(Math.min(available * (layout.isNarrow ? 0.46 : 0.62), frameHeight * 0.46));
+  const charWidth = Math.round((charHeight * CHARACTER_VIEWBOX_WIDTH) / CHARACTER_VIEWBOX_HEIGHT);
+
+  const table = layout.isNarrow ? CARTOON_POSITIONS.narrow : CARTOON_POSITIONS.wide;
+  const positions = table[cartoon.cast.length] ?? table[1];
+  const speakerIndex = Math.max(0, cartoon.cast.findIndex(member => member.speaking));
+  const line = cartoon.line || content.lead || content.title;
+
+  const gap = scaled(layout, 2.2);
+  const cardFontSize = Math.round(ctx.heroFontSize * 0.32);
+  // Карточка места стоит в том же верхнем углу, куда тянется облачко: без
+  // вычета её высоты длинная реплика наезжает на неё.
+  const cardHeight = cartoon.caption ? Math.round(cardFontSize * 1.5) + scaled(layout, 2.4) : 0;
+  const bubbleBottom = frameHeight - groundY + charHeight + gap;
+  const bubbleMaxHeight = Math.max(scaled(layout, 8), available - charHeight - gap * 2 - cardHeight);
+  const bubbleWidth = Math.round(frameWidth * (layout.isNarrow ? 0.88 : 0.54));
+  const speakerX = Math.round(frameWidth * positions[speakerIndex % positions.length]);
+  const edge = scaled(layout, 3);
+  const bubbleLeft = Math.min(Math.max(speakerX - Math.round(bubbleWidth / 2), edge), frameWidth - bubbleWidth - edge);
+  const tailLeft = Math.min(Math.max(speakerX - bubbleLeft, scaled(layout, 3)), bubbleWidth - scaled(layout, 3));
+  const speakerName = cartoon.cast[speakerIndex]?.name ?? "";
+  const bubblePadding = scaled(layout, 1.9);
+  const nameHeight = speakerName ? scaled(layout, 3) : 0;
+  const fontSize = fitBubbleFontSize({
+    text: line,
+    bubbleWidth: bubbleWidth - bubblePadding * 2,
+    maxHeight: bubbleMaxHeight - bubblePadding * 2 - nameHeight,
+    maxFontSize: Math.round(ctx.heroFontSize * 0.62)
+  });
+
+  const cast = cartoon.cast.map((member, castIndex) => {
+    const position = positions[castIndex % positions.length];
+    return `<div class="toon-slot" style="--i:${castIndex};left:${Math.round(frameWidth * position)}px;">
+      <svg width="${charWidth}" height="${charHeight}" viewBox="0 0 ${CHARACTER_VIEWBOX_WIDTH} ${CHARACTER_VIEWBOX_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+        ${renderCharacter({
+          id: member.id,
+          name: member.name,
+          look: member.look,
+          pose: member.pose,
+          facing: position > 0.5 ? "left" : "right",
+          index: castIndex
+        })}
+      </svg>
+    </div>`;
+  }).join("");
+
+  return {
+    stageFlex: "flex-direction:column;align-items:stretch;justify-content:flex-start;",
+    stage: `<div class="toon">
+      <svg class="toon-set" width="${frameWidth}" height="${frameHeight}" viewBox="0 0 ${frameWidth} ${frameHeight}" xmlns="http://www.w3.org/2000/svg">
+        ${renderSetting({ setting: cartoon.setting, width: frameWidth, height: frameHeight, groundY, seed: ctx.sceneIndex + 3 })}
+      </svg>
+      <div class="toon-veil"></div>
+      ${cartoon.caption ? `<div class="toon-card">${escapeHtml(cartoon.caption)}</div>` : ""}
+      ${cast}
+      <svg class="toon-fore" width="${frameWidth}" height="${frameHeight}" viewBox="0 0 ${frameWidth} ${frameHeight}" xmlns="http://www.w3.org/2000/svg">
+        ${renderForeground({ setting: cartoon.setting, width: frameWidth, height: frameHeight, groundY, characterHeight: charHeight })}
+      </svg>
+      ${line ? speechBubble({ text: line, speaker: speakerName, side: speakerX > frameWidth / 2 ? "right" : "left", fontSize, maxWidth: bubbleWidth }) : ""}
+    </div>`,
+    css: `
+  /* Мультсцена занимает весь кадр, а не только safe-зону: рамка вокруг
+     декорации выдала бы «слайд с картинкой» вместо кадра мультфильма. */
+  .toon {
+    position: absolute; left: ${-layout.padLeft}px; top: ${-layout.padTop}px;
+    width: ${frameWidth}px; height: ${frameHeight}px; overflow: hidden;
+  }
+  .toon-set, .toon-fore { position: absolute; inset: 0; pointer-events: none; }
+  /* Мультсцена кроет весь кадр, поэтому фирменная плашка поднимается над ней:
+     иначе бренд исчезает ровно в тех роликах, где он нужнее всего. */
+  .chrome-bar { z-index: 3; }
+  .toon-fore { animation: rise-in 0.6s ease-out 0.2s backwards; }
+  .toon-veil {
+    position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, rgba(4, 9, 18, 0.66), rgba(4, 9, 18, 0) 22%, rgba(4, 9, 18, 0) 68%, rgba(4, 9, 18, 0.5));
+  }
+  .toon-slot {
+    position: absolute; bottom: ${frameHeight - groundY}px;
+    transform: translateX(-50%);
+    animation: toon-enter 0.62s cubic-bezier(0.22, 0.9, 0.3, 1) calc(0.25s + var(--i) * 0.16s) backwards;
+  }
+  .toon-card {
+    position: absolute; left: ${layout.padLeft}px; top: ${ceiling}px;
+    background: rgba(4, 9, 18, 0.78); border-left: ${scaled(layout, 0.5)}px solid ${THEME.accentWarm};
+    color: ${THEME.text}; font-size: ${cardFontSize}px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    padding: ${scaled(layout, 0.9)}px ${scaled(layout, 1.6)}px;
+    animation: rise-in 0.5s ease-out 0.15s backwards;
+  }
+  .toon-bubble {
+    position: absolute; left: ${bubbleLeft}px; bottom: ${bubbleBottom}px;
+    width: ${bubbleWidth}px; max-height: ${bubbleMaxHeight}px;
+    box-sizing: border-box; padding: ${bubblePadding}px ${Math.round(bubblePadding * 1.2)}px;
+    background: #f4f8ff; color: #0a1120; border-radius: ${scaled(layout, 2.2)}px;
+    box-shadow: 0 ${scaled(layout, 1.4)}px ${scaled(layout, 3.4)}px rgba(1, 6, 14, 0.55);
+    animation: toon-pop 0.42s cubic-bezier(0.3, 1.5, 0.5, 1) 0.72s backwards;
+  }
+  .toon-speaker {
+    color: #1c6f63; font-size: ${Math.round(fontSize * 0.62)}px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase; margin-bottom: ${scaled(layout, 0.6)}px;
+  }
+  .toon-line { margin: 0; font-size: ${fontSize}px; line-height: 1.32; font-weight: 600; }
+  /* Хвостик — повёрнутый квадрат того же цвета: без него облачко ничьё. */
+  .toon-tail {
+    position: absolute; bottom: ${-scaled(layout, 1.1)}px; left: ${tailLeft}px;
+    width: ${scaled(layout, 2.4)}px; height: ${scaled(layout, 2.4)}px;
+    margin-left: ${-scaled(layout, 1.2)}px;
+    background: #f4f8ff; transform: rotate(45deg); border-radius: ${scaled(layout, 0.4)}px;
+  }
+  @keyframes toon-enter { from { opacity: 0; transform: translateX(-50%) translateY(${scaled(layout, 3)}px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+  @keyframes toon-pop { from { opacity: 0; transform: translateY(${scaled(layout, 1.4)}px) scale(0.92); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  @keyframes toon-far-drift { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(${scaled(layout, 0.8)}px); } }
+  .toon-far { animation: toon-far-drift 26s ease-in-out 0s infinite; }
+  .toon-plant { transform-box: fill-box; transform-origin: 50% 100%; animation: amb-sway 19s ease-in-out -3s infinite; }
+  ${cartoon.setting === "void" ? "" : ".bd-stars, .bd-grid { opacity: 0; } .glow-a, .glow-b { opacity: 0.4; }"}
+  ${cartoonCharacterCss()}`
+  };
+}
+
 const BUILDERS = Object.freeze({
   classic: buildClassic,
+  "cartoon-shot": buildCartoonShot,
   statement: buildStatement,
   "device-mockup": buildDeviceMockup,
   "board-columns": buildBoardColumns,

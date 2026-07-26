@@ -5,11 +5,13 @@
 // Слой чистый: никакого HTML, никаких сторонних эффектов, только детерминированные
 // преобразования строк. Экранирование — забота слоя рендера.
 
+import { normalizePose, normalizeSetting } from "./cartoon-cast.js";
 import { clampText, pickLeadSentence, sentenceKey, splitSentences } from "./scene-design.js";
 
 export const SCENE_ARCHETYPES = Object.freeze([
   "classic",
   "statement",
+  "cartoon-shot",
   "device-mockup",
   "board-columns",
   "format-trio",
@@ -35,6 +37,8 @@ const NEUTRAL_ROTATION = Object.freeze(["classic", "device-mockup", "checklist",
 const MAX_ITEMS = 5;
 const MAX_ITEM_CHARS = 64;
 const MAX_LABEL_CHARS = 28;
+const MAX_CARTOON_CAST = 3;
+const MAX_CARTOON_LINE_CHARS = 180;
 
 const KEYWORDS = Object.freeze({
   board: /доск|канбан|колонк|бэклог|board|kanban|backlog|в работе|в процессе|готово|воронк|workflow|pipeline/iu,
@@ -168,9 +172,52 @@ function normalizeSceneData(raw) {
     const text = cleanItem(raw.quote.text, 220);
     if (text) data.quote = { text, source: cleanItem(raw.quote.source, 48) };
   }
+  const cartoon = normalizeCartoon(raw.cartoon);
+  if (cartoon) data.cartoon = cartoon;
   const cta = cleanItem(raw.cta, MAX_LABEL_CHARS);
   if (cta) data.cta = cta;
   return data;
+}
+
+/**
+ * Мультипликационный кадр. Роли, позы и декорация проверяются по словарям
+ * мультслоя: из модели приходит текст, а не разметка, поэтому неизвестная поза
+ * становится `idle`, а не пустой сценой. Внешность (`look`) проверяет уже сам
+ * `resolveCharacterLook` — здесь она только переносится как есть.
+ */
+function normalizeCartoon(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const castSource = Array.isArray(raw.cast) ? raw.cast.slice(0, MAX_CARTOON_CAST) : [];
+  const cast = [];
+  for (const [castIndex, member] of castSource.entries()) {
+    const name = cleanItem(member?.name, MAX_LABEL_CHARS);
+    const id = cleanItem(member?.id, 40) || (name ? `char-${slugKey(name)}` : `char-${castIndex + 1}`);
+    cast.push({
+      id,
+      name,
+      pose: normalizePose(member?.pose),
+      side: member?.side === "right" ? "right" : "left",
+      speaking: member?.speaking === true,
+      look: member?.look && typeof member.look === "object" && !Array.isArray(member.look) ? member.look : null
+    });
+  }
+  if (!cast.length) return null;
+  // Ровно один говорящий: облачко с хвостиком не может указывать на двоих.
+  // Если модель не отметила никого — говорит первый.
+  const speakingIndex = Math.max(0, cast.findIndex(member => member.speaking));
+  for (const [castIndex, member] of cast.entries()) member.speaking = castIndex === speakingIndex;
+  return {
+    setting: normalizeSetting(raw.setting),
+    cast,
+    line: cleanItem(raw.line, MAX_CARTOON_LINE_CHARS),
+    caption: cleanItem(raw.caption, MAX_LABEL_CHARS)
+  };
+}
+
+// Транслитерация не нужна: id должен быть лишь стабильным ключом внешности,
+// поэтому годится любая детерминированная свёртка имени.
+function slugKey(value) {
+  return String(value).toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/gu, "").slice(0, 32);
 }
 
 function normalizeComparisonSide(side) {
@@ -338,9 +385,13 @@ export function pickSceneArchetype({ scene, sceneIndex = 0, sceneCount = 1, prev
   const role = roleForIndex(index, count);
   const explicit = normalizeArchetype(scene?.sceneType);
   if (explicit) return { archetype: explicit, role, source: "explicit" };
-  if (role !== "body") return { archetype: "statement", role, source: "role" };
 
   const sceneContent = content ?? deriveSceneContent(scene);
+  // Мультипликационный кадр сильнее роли: у сериала первая и последняя сцены —
+  // такие же сцены с персонажами, а не текстовый `statement` посреди мультфильма.
+  if (sceneContent.data.cartoon) return { archetype: "cartoon-shot", role, source: "cartoon" };
+  if (role !== "body") return { archetype: "statement", role, source: "role" };
+
   const ranked = rankArchetypes(sceneContent);
   const distinct = ranked.find(archetype => archetype !== previous);
   if (distinct) return { archetype: distinct, role, source: "heuristic" };
