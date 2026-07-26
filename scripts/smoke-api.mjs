@@ -594,7 +594,13 @@ try {
     projectRecord: created.project,
     platforms: ["youtube_video"],
     recipe: candidateRequest.recipe,
-    artifacts: candidateRequest.artifacts,
+    // Обложка обязательна для одобрения с тех пор, как каждая площадка стала
+    // требовать cover_frame: фикстура одобряемого кандидата обязана её нести,
+    // иначе smoke проверяет не одобрение, а свой устаревший набор артефактов.
+    artifacts: [
+      ...candidateRequest.artifacts,
+      { name: `${candidateRequest.recipe.id}.cover.png`, type: "image/png", bytes: 4096, sha256: "c".repeat(64) }
+    ],
     manifestSha256: candidateRequest.manifestSha256,
     rights: { status: "allowed", assetIds: [createdAsset.asset.id] },
     evidence: { status: "server_verified", verifier: "smoke-internal-worker-v1" },
