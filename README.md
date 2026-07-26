@@ -90,7 +90,7 @@ npm run check        # validate · unit · smoke:api · media (2 real MP4s) · b
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Interactive board (drag/rotate/scale cards, links, photos) | ✅ VERIFIED | Live in browser, auto-save to `localStorage` |
-| Topic → source cards wizard (async draft, cancel) | ✅ VERIFIED | Browser AI bridge (ChatGPT/Gemini/DeepSeek/Perplexity) or any OpenAI-compatible API (Ollama local free, OpenRouter, Groq, Together, etc.) |
+| Topic → source cards wizard (async draft, cancel) | ✅ VERIFIED | Browser AI bridge — a **separate local service** on `127.0.0.1:8788` (ChatGPT/Gemini/DeepSeek/Perplexity through a logged-in Chrome tab), not shipped in this repo — or any OpenAI-compatible API (Ollama local free, OpenRouter, Groq, Together, etc.) |
 | Multilingual voiceover (Piper RU/EN/ES/DE/FR, ElevenLabs BYOK 29+ languages) | ✅ VERIFIED | Language is a project parameter, not hardcoded; timeline/SRT from measured audio duration; loudness normalization (loudnorm) |
 | Free visual generation (Pollinations, no key) | ✅ VERIFIED | Opt-in toggle "Generate backgrounds (free, Pollinations)" in render panel |
 | Premium visuals (FAL BYOK) + stock fallback (Pexels BYOK) | ✅ VERIFIED | Honest fail-open cascade: FAL → Pollinations → Pexels, each source yields to next with warning in manifest |
