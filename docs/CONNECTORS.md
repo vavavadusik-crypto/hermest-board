@@ -25,6 +25,61 @@ Current executable routes are the no-key public research aggregate, Commons sear
 
 Autopublishing remains disabled.
 
+## Design Services
+
+Documentation for every row below was checked on **2026-07-26**. Only official,
+public, documented APIs with legal authentication are listed; where an operation has
+no public API, this document says so instead of inventing an adapter.
+
+| Service | What the public API can do for the Board | What a developer must have | Status in this repository |
+| --- | --- | --- | --- |
+| [Figma REST API](https://developers.figma.com/docs/rest-api/) | Read a design file (`GET /v1/files/{file_key}`), read published styles (`GET /v1/files/{file_key}/styles`), render nodes to PNG/JPG/SVG/PDF links (`GET /v1/images/{file_key}`) | Figma account; personal access token created in Settings → Security with `file_content:read` and `library_content:read`, sent in the `X-Figma-Token` header; OAuth2 app for acting on behalf of other users. No platform review for personal tokens | **Implemented** in `src/connectors/figma-design.js`. `design.import` and `brand.assets` report `configured_adapter` and `executable` once `FIGMA_ACCESS_TOKEN` is set, `blocked` without it |
+| [Canva Connect APIs](https://www.canva.dev/docs/connect/) | Upload assets (`POST /rest/v1/asset-uploads`, `asset:write`), export a design (`POST /rest/v1/exports`, `design:content:read`), read brand templates | Integration registered in the [Developer Portal](https://www.canva.com/developers/integrations); OAuth 2.0 authorization code with PKCE (SHA-256) and a server-side client secret. A **public** integration must pass Canva review; a **private** integration requires Canva Enterprise. Brand template APIs additionally require a user plan that includes brand templates | `design.import` / `design.export` / `brand.assets` — `oauth_skeleton`, blockers `canva_integration_review_required`, `canva_brand_template_plan_required` |
+| [Adobe Creative Cloud Libraries API](https://developer.adobe.com/creative-cloud-libraries/) | Read brand elements (colors, character styles, graphics) from a user's Creative Cloud libraries | Adobe Developer Console project with the Creative Cloud Libraries API added, OAuth 2.0 Web credentials, scopes `openid,creative_sdk,profile,address,AdobeID,email,cc_files,cc_libraries` | `brand.assets` — `oauth_skeleton`, blocker `adobe_developer_console_project_required` |
+| [Adobe Firefly Services](https://developer.adobe.com/firefly-services/docs/guides/) | Generative image APIs plus Photoshop, Lightroom and Content Tagging automation | Adobe Developer Console project with OAuth **Server-to-Server** credentials; tokens from `https://ims-na1.adobelogin.com/ims/token/v3` with scopes `openid,AdobeID,session,additional_info,read_organizations,firefly_api,ff_apis`; an entitled (paid/enterprise) Adobe organization | `image.generate` — adapter target, blocker `adobe_firefly_entitlement_required` |
+| [Google Drive API v3](https://developers.google.com/workspace/drive/api/guides/about-sdk) | Search and read brand files (`GET https://www.googleapis.com/drive/v3/files`), download content (`files.get?alt=media`), deliver rendered videos (`POST https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable`) | Google Cloud project with the Drive API enabled, OAuth consent screen, OAuth client. `drive.file` is a non-sensitive scope with a streamlined verification path; `drive` and `drive.readonly` are restricted scopes that require full verification and a security assessment | `design.import` / `design.export` — `oauth_skeleton`, blocker `google_oauth_app_verification_required` |
+
+Adobe Express add-ons are **not** an outside REST surface: they run inside the Adobe
+Express editor and are distributed through the Adobe Express Marketplace, so they
+cannot be driven from this backend and no adapter is planned for them.
+
+### Figma Adapter
+
+`src/connectors/figma-design.js` is the only design adapter that exists as code.
+It exposes three operations and nothing else:
+
+- `importFile({ fileKey, depth })` — document metadata and page names, not the raw node tree;
+- `readBrandAssets({ fileKey })` — published style keys, names, types and descriptions;
+- `renderNodeImages({ fileKey, nodeIds, format, scale })` — render links per node, with
+  unrenderable nodes returned separately in `failed`.
+
+Safety properties, all covered by `test/unit/figma-design.test.mjs` against a fake
+`fetchImpl` (the suite never touches the network):
+
+- the token is read only from the `FIGMA_ACCESS_TOKEN` server env, never from a request
+  body, and a missing token fails before any outbound call;
+- every request goes through `safeFetch` from `src/media/ssrf-guard.js` with an
+  `api.figma.com` allowlist, so a redirect to a private or loopback address is refused;
+- file keys, node ids, image format and scale are validated before they reach a URL;
+- responses are size-bounded and requests are timeout-bounded;
+- provider error bodies are dropped unread — callers get a status-derived fact
+  (`rejected the access token`, `was not found`, `failed with status N`), never upstream text;
+- `429` is retried according to the documented `Retry-After` header, capped at 10 seconds.
+
+There is no HTTP route exposing this adapter yet; it is a server-side module consumed
+by the capability layer, and the registry claims exactly that and no more.
+
+Server-side environment variables for these services (never sent from the browser,
+never accepted from a request body):
+
+```text
+FIGMA_ACCESS_TOKEN
+CANVA_CLIENT_ID, CANVA_CLIENT_SECRET, CANVA_REDIRECT_URI
+GOOGLE_DRIVE_CLIENT_ID, GOOGLE_DRIVE_CLIENT_SECRET, GOOGLE_DRIVE_REDIRECT_URI
+ADOBE_CC_LIBRARIES_CLIENT_ID, ADOBE_CC_LIBRARIES_CLIENT_SECRET, ADOBE_CC_LIBRARIES_REDIRECT_URI
+ADOBE_FIREFLY_CLIENT_ID, ADOBE_FIREFLY_CLIENT_SECRET
+```
+
 ## Immutable Approval Candidate
 
 Before any social adapter may execute, approval must bind an exact sealed record:

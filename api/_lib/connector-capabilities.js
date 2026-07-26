@@ -25,7 +25,20 @@ const CAPABILITY_DEFINITIONS = Object.freeze([
     adapter("fal-image-v1", ["fal"], false, ["server", "local_media"], "server_env"),
     adapter("replicate-image-v1", ["replicate"], false, ["server", "local_media"], "server_env"),
     adapter("stability-image-v1", ["stability"], false, ["server", "local_media"], "server_env"),
-    adapter("openai-image-v1", ["openai"], false, ["server", "local_media"], "request_byok")
+    adapter("openai-image-v1", ["openai"], false, ["server", "local_media"], "request_byok"),
+    // Firefly Services authenticates with OAuth client_credentials against Adobe IMS,
+    // so it is a server env pair rather than a user OAuth connection, and it needs a
+    // paid/enterprise entitlement on the Adobe organization.
+    // https://developer.adobe.com/firefly-services/docs/guides/ (checked 2026-07-26)
+    adapter(
+      "adobe-firefly-image-v1",
+      ["adobe-firefly"],
+      false,
+      ["server"],
+      "server_env",
+      ["ADOBE_FIREFLY_CLIENT_ID", "ADOBE_FIREFLY_CLIENT_SECRET"],
+      ["adobe_firefly_entitlement_required"]
+    )
   ]),
   capability("speech.synthesize", false, [
     adapter("local-flite-v1", [], true, ["local_media"], "none"),
@@ -45,6 +58,95 @@ const CAPABILITY_DEFINITIONS = Object.freeze([
     adapter("vercel-blob-v1", ["vercel-blob"], false, ["server"], "server_env"),
     adapter("cloudflare-r2-v1", ["cloudflare-r2"], false, ["server"], "server_env"),
     adapter("supabase-object-v1", ["supabase"], false, ["server"], "server_env")
+  ]),
+  // Design service capabilities. Every endpoint and auth mode below was verified
+  // against official documentation on 2026-07-26; see docs/CONNECTORS.md for the
+  // links. Nothing here is executable until the matching adapter module exists.
+  capability("design.import", false, [
+    // Implemented in src/connectors/figma-design.js (importFile, renderNodeImages).
+    // Figma REST: GET /v1/files/{file_key} and GET /v1/images/{file_key} with a
+    // personal access token in X-Figma-Token.
+    // https://developers.figma.com/docs/rest-api/ (checked 2026-07-26)
+    adapter("figma-file-import-v1", ["figma"], true, ["server", "local_media"], "server_env", ["FIGMA_ACCESS_TOKEN"]),
+    // Canva Connect: OAuth 2.0 authorization code + PKCE; a public integration is
+    // usable only after Canva review, a private one needs Canva Enterprise.
+    // https://www.canva.dev/docs/connect/ (checked 2026-07-26)
+    adapter(
+      "canva-design-import-v1",
+      ["canva"],
+      false,
+      ["server"],
+      "oauth",
+      ["CANVA_CLIENT_ID", "CANVA_CLIENT_SECRET"],
+      ["canva_integration_review_required"]
+    ),
+    // Drive API v3 files.list/files.get. drive.file is the non-sensitive scope, but
+    // any published OAuth app still needs Google verification.
+    // https://developers.google.com/workspace/drive/api/guides/api-specific-auth (checked 2026-07-26)
+    adapter(
+      "google-drive-import-v1",
+      ["google-drive"],
+      false,
+      ["server"],
+      "oauth",
+      ["GOOGLE_DRIVE_CLIENT_ID", "GOOGLE_DRIVE_CLIENT_SECRET"],
+      ["google_oauth_app_verification_required"]
+    )
+  ]),
+  capability("brand.assets", false, [
+    // Implemented in src/connectors/figma-design.js (readBrandAssets).
+    // Figma REST: GET /v1/files/{file_key}/styles returns published styles.
+    // https://developers.figma.com/docs/rest-api/scopes/ (checked 2026-07-26)
+    adapter("figma-brand-assets-v1", ["figma"], true, ["server", "local_media"], "server_env", ["FIGMA_ACCESS_TOKEN"]),
+    // Canva brand template endpoints additionally require the acting user to be on a
+    // Canva plan that includes brand templates.
+    // https://www.canva.dev/docs/connect/api-reference/brand-templates/ (checked 2026-07-26)
+    adapter(
+      "canva-brand-templates-v1",
+      ["canva"],
+      false,
+      ["server"],
+      "oauth",
+      ["CANVA_CLIENT_ID", "CANVA_CLIENT_SECRET"],
+      ["canva_integration_review_required", "canva_brand_template_plan_required"]
+    ),
+    // CC Libraries API: Adobe Developer Console project with OAuth Web credentials
+    // and the cc_files/cc_libraries scopes.
+    // https://developer.adobe.com/creative-cloud-libraries/ (checked 2026-07-26)
+    adapter(
+      "adobe-cc-libraries-v1",
+      ["adobe-cc-libraries"],
+      false,
+      ["server"],
+      "oauth",
+      ["ADOBE_CC_LIBRARIES_CLIENT_ID", "ADOBE_CC_LIBRARIES_CLIENT_SECRET"],
+      ["adobe_developer_console_project_required"]
+    )
+  ]),
+  capability("design.export", false, [
+    // Canva Connect: POST /rest/v1/asset-uploads (asset:write) and
+    // POST /rest/v1/exports (design:content:read).
+    // https://www.canva.dev/docs/connect/api-reference/assets/create-asset-upload-job/ (checked 2026-07-26)
+    adapter(
+      "canva-asset-upload-v1",
+      ["canva"],
+      false,
+      ["server"],
+      "oauth",
+      ["CANVA_CLIENT_ID", "CANVA_CLIENT_SECRET"],
+      ["canva_integration_review_required"]
+    ),
+    // Drive API v3 uploads: POST https://www.googleapis.com/upload/drive/v3/files.
+    // https://developers.google.com/workspace/drive/api/guides/manage-uploads (checked 2026-07-26)
+    adapter(
+      "google-drive-upload-v1",
+      ["google-drive"],
+      false,
+      ["server"],
+      "oauth",
+      ["GOOGLE_DRIVE_CLIENT_ID", "GOOGLE_DRIVE_CLIENT_SECRET"],
+      ["google_oauth_app_verification_required"]
+    )
   ]),
   capability("publish.draft", true, [
     adapter("youtube-publish-v1", ["youtube"], false, ["server"], "oauth", ["YOUTUBE_CLIENT_ID", "YOUTUBE_CLIENT_SECRET"]),
@@ -138,6 +240,9 @@ function evaluateAdapter(definition, context) {
   if (!definition.implemented) blockers.push("adapter_not_implemented");
   if (definition.configuration === "oauth") blockers.push("oauth_token_exchange_not_implemented");
   if (definition.implemented && runtimeAvailable && !configured) blockers.push("provider_credentials_missing");
+  // Platform-side gates (app review, plan entitlement, console project) stay listed
+  // even when everything on our side is ready: they are not ours to clear.
+  blockers.push(...definition.platformBlockers);
 
   return {
     adapterId: definition.id,
@@ -244,14 +349,15 @@ function capability(id, approvalRequired, adapters) {
   return Object.freeze({ id, approvalRequired, adapters: Object.freeze(adapters) });
 }
 
-function adapter(id, providerIds, implemented, runtimes, configuration, credentialEnv = []) {
+function adapter(id, providerIds, implemented, runtimes, configuration, credentialEnv = [], platformBlockers = []) {
   return Object.freeze({
     id,
     providerIds: Object.freeze(providerIds),
     implemented,
     runtimes: Object.freeze(runtimes),
     configuration,
-    credentialEnv: Object.freeze(credentialEnv)
+    credentialEnv: Object.freeze(credentialEnv),
+    platformBlockers: Object.freeze(platformBlockers)
   });
 }
 
