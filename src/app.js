@@ -8,6 +8,26 @@ import {
   accessBadge
 } from "./ui/connector-labels.js";
 import { buildDemoProject } from "./ui/demo-project.js";
+import {
+  DEFAULT_TARGET_DURATION_SECONDS,
+  DURATION_QUICK_MARKS,
+  DURATION_SLIDER_MAX_POSITION,
+  describeDurationHint,
+  resolveTypedDuration,
+  secondsToSliderPosition,
+  sliderPositionToSeconds,
+  snapDurationSeconds
+} from "./ui/duration-input.js";
+import {
+  buildDurationWarning,
+  countNarrationCharacters,
+  deriveSceneCountFromDuration,
+  describeDurationBudget,
+  DURATION_PLAN_LIMITS,
+  estimateNarrationDurationMs,
+  formatDurationLabel,
+  normalizeTargetDurationSeconds
+} from "./domain/duration-plan.js";
 
     const STORAGE_KEY = "hermest-board:v1";
     const AI_SETTINGS_LOCAL_KEY = "hermest-board:ai-settings:v1";
@@ -103,6 +123,7 @@ import { buildDemoProject } from "./ui/demo-project.js";
     const durationWarning = document.getElementById("durationWarning");
     const durationQuick = document.getElementById("durationQuick");
     const durationMarks = document.getElementById("durationMarks");
+    const sceneCountHint = document.getElementById("sceneCountHint");
     const topbar = document.querySelector(".topbar");
 
     // Топбар растёт вместе с командной строкой и раскрытыми настройками, поэтому
@@ -559,7 +580,27 @@ import { buildDemoProject } from "./ui/demo-project.js";
       const brollMode = BROLL_MODES.includes(source.brollMode)
         ? source.brollMode
         : (BROLL_MODES.includes(fallback.brollMode) ? fallback.brollMode : "auto");
-      return { language, voice, narrationProvider, music, generateVisuals, brollMode };
+      // Цель длительности приходит из JSON проекта — источник недоверенный:
+      // мусор и выход за лимиты домена молча превращаются в «цель не задана».
+      const targetDuration = safeTargetDuration(source.targetDurationSeconds)
+        ?? safeTargetDuration(fallback.targetDurationSeconds);
+      return {
+        language,
+        voice,
+        narrationProvider,
+        music,
+        generateVisuals,
+        brollMode,
+        ...(targetDuration === null ? {} : { targetDurationSeconds: targetDuration })
+      };
+    }
+
+    function safeTargetDuration(value) {
+      try {
+        return normalizeTargetDurationSeconds(value ?? null);
+      } catch (_) {
+        return null;
+      }
     }
 
     function normalizeServer(input, fallback) {
@@ -628,6 +669,8 @@ import { buildDemoProject } from "./ui/demo-project.js";
       applyView();
       setSelected(selectedId);
       drawLinks();
+      // Подсказка о длительности живёт от объёма текста доски — он меняется здесь.
+      refreshDurationFeedback();
     }
 
     function createCard(card) {
@@ -1078,9 +1121,184 @@ import { buildDemoProject } from "./ui/demo-project.js";
     renderLocalVideoButton.addEventListener("click", () => renderLocalVideo());
     cancelLocalRenderButton.addEventListener("click", cancelLocalRender);
     createEditionButton.addEventListener("click", createEdition);
-    wizardDraftButton.addEventListener("click", draftFromTopic);
+    // Кнопка сборки — submit командной строки: Enter в поле темы и клик идут
+    // одним путём, поэтому отдельного click-обработчика у неё нет.
     wizardCancelButton.addEventListener("click", cancelDraftJob);
     void loadBridgeModels();
+
+    // ——— Свободная длительность ролика ———
+    // Ползунок, поле m:ss и быстрые метки — три вида на одно значение. Оно живёт
+    // здесь, а не в трёх DOM-узлах, чтобы виды не разъезжались.
+    const DRAFT_MIN_SCENES = 2;
+    const DRAFT_MAX_SCENES = 12;
+
+    let targetDurationSeconds = DEFAULT_TARGET_DURATION_SECONDS;
+
+    function initDurationControls() {
+      durationSlider.max = String(DURATION_SLIDER_MAX_POSITION);
+      durationSlider.min = "0";
+      durationSlider.step = "1";
+      durationMarks.replaceChildren(...DURATION_QUICK_MARKS.map(seconds => {
+        const option = document.createElement("option");
+        option.value = String(secondsToSliderPosition(seconds));
+        option.label = formatDurationLabel(seconds);
+        return option;
+      }));
+      durationQuick.replaceChildren(...DURATION_QUICK_MARKS.map(seconds => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.seconds = String(seconds);
+        button.textContent = formatDurationLabel(seconds);
+        button.setAttribute("aria-pressed", "false");
+        button.setAttribute("aria-label", `Выбрать длительность ${formatDurationLabel(seconds)}`);
+        button.addEventListener("click", () => applyTargetDuration(seconds));
+        return button;
+      }));
+      syncDurationFromBrief();
+    }
+
+    /**
+     * Единственная точка записи значения: обновляет оба контрола, метки, бриф и
+     * подсказку. persist=false — «показать то, что уже выбрано в проекте», без
+     * навязывания цели проекту, который её не задавал.
+     */
+    function applyTargetDuration(seconds, { persist = true, syncTextField = true } = {}) {
+      const value = snapDurationSeconds(seconds);
+      targetDurationSeconds = value;
+      const label = formatDurationLabel(value);
+      durationSlider.value = String(secondsToSliderPosition(value));
+      durationSlider.setAttribute("aria-valuetext", label);
+      if (syncTextField) {
+        durationValueInput.value = label;
+        durationValueInput.removeAttribute("aria-invalid");
+      }
+      for (const button of durationQuick.querySelectorAll("button")) {
+        button.setAttribute("aria-pressed", String(Number(button.dataset.seconds) === value));
+      }
+      if (persist && state.brief) state.brief.targetDurationSeconds = value;
+      refreshDurationFeedback();
+    }
+
+    // Проект без выбранной цели не получает её задним числом: ползунок просто
+    // показывает, на сколько тянет уже написанный текст доски.
+    function syncDurationFromBrief() {
+      const stored = normalizeTargetDurationSeconds(state.brief?.targetDurationSeconds ?? null);
+      if (stored !== null) {
+        applyTargetDuration(stored, { persist: false });
+        return;
+      }
+      applyTargetDuration(estimateBoardDurationSeconds(), { persist: false });
+    }
+
+    function estimateBoardDurationSeconds() {
+      const characters = boardNarrationCharacters();
+      if (characters === 0) return DEFAULT_TARGET_DURATION_SECONDS;
+      const scenes = Math.max(1, state.cards.length);
+      const estimatedMs = estimateNarrationDurationMs(characters)
+        + scenes * DURATION_PLAN_LIMITS.anchorPaddingMs;
+      return snapDurationSeconds(Math.round(estimatedMs / 1000));
+    }
+
+    // Рендер озвучивает заголовок и текст карточки (buildStoryboard склеивает их
+    // в одну реплику), поэтому объём считается по тем же двум полям.
+    function boardNarrationCharacters() {
+      return state.cards.reduce(
+        (total, card) => total + countNarrationCharacters(`${card.title || ""} ${card.text || ""}`),
+        0
+      );
+    }
+
+    function manualSceneCount() {
+      const value = Number(wizardSceneCountInput.value);
+      if (!Number.isFinite(value) || value < DRAFT_MIN_SCENES) return null;
+      return Math.min(DRAFT_MAX_SCENES, Math.trunc(value));
+    }
+
+    function effectiveSceneCount() {
+      const manual = manualSceneCount();
+      if (manual !== null) return manual;
+      // На непустой доске сцен ровно столько, сколько карточек: врать про
+      // расчётное число, когда фактическое видно глазами, нельзя.
+      if (state.cards.length > 0) return state.cards.length;
+      return deriveSceneCountFromDuration(targetDurationSeconds, {
+        minScenes: DRAFT_MIN_SCENES,
+        maxScenes: DRAFT_MAX_SCENES
+      }).sceneCount;
+    }
+
+    function refreshDurationFeedback() {
+      const sceneCount = effectiveSceneCount();
+      const narrationCharacters = boardNarrationCharacters();
+      const budget = describeDurationBudget({ targetDurationSeconds, narrationCharacters, sceneCount });
+      const hint = describeDurationHint({ budget, sceneCount, hasBoard: state.cards.length > 0 });
+      durationHint.textContent = hint.text;
+      durationHint.dataset.status = hint.status;
+      showDurationWarning(budget, sceneCount, narrationCharacters);
+      updateSceneCountHint(sceneCount);
+    }
+
+    function updateSceneCountHint(sceneCount) {
+      const derived = deriveSceneCountFromDuration(targetDurationSeconds, {
+        minScenes: DRAFT_MIN_SCENES,
+        maxScenes: DRAFT_MAX_SCENES
+      });
+      const capped = derived.capped
+        ? ` Под ${formatDurationLabel(targetDurationSeconds)} просится ${derived.recommendedSceneCount}, но за один проход собирается не больше ${DRAFT_MAX_SCENES} — остальное добавь карточками.`
+        : "";
+      sceneCountHint.textContent = manualSceneCount() === null
+        ? `Пусто — система возьмёт ${derived.sceneCount} под выбранную длительность.${capped}`
+        : `Ручное значение ${sceneCount} сильнее автоматики (система предложила бы ${derived.sceneCount}).${capped}`;
+    }
+
+    // То же предупреждение, что планировщик пишет в manifest после рендера, но
+    // с оценкой вместо замера: честнее сказать заранее, чем после десяти минут
+    // синтеза.
+    function showDurationWarning(budget, sceneCount, narrationCharacters) {
+      if (narrationCharacters === 0 || budget.status === "ok" || budget.status === "unset") {
+        durationWarning.hidden = true;
+        durationWarning.textContent = "";
+        return;
+      }
+      const projectedDurationMs = estimateNarrationDurationMs(narrationCharacters)
+        + sceneCount * DURATION_PLAN_LIMITS.anchorPaddingMs;
+      durationWarning.textContent = buildDurationWarning({
+        target: targetDurationSeconds,
+        projectedDurationMs,
+        budget
+      });
+      durationWarning.hidden = false;
+    }
+
+    function commitTypedDuration() {
+      const typed = durationValueInput.value;
+      const result = resolveTypedDuration(typed, targetDurationSeconds);
+      applyTargetDuration(result.seconds, { syncTextField: false });
+      durationValueInput.value = result.label;
+      if (!result.accepted) {
+        durationValueInput.setAttribute("aria-invalid", "true");
+        // Ввод пользователя показываем только через textContent и обрезанным.
+        wizardStatus.textContent = `Не понял «${String(typed).slice(0, 24)}» — оставил ${result.label}. Формат: минуты:секунды, например 2:35.`;
+        return;
+      }
+      durationValueInput.removeAttribute("aria-invalid");
+      if (result.clamped) {
+        wizardStatus.textContent = `Ближайшая доступная длительность — ${result.label} (диапазон ${formatDurationLabel(DURATION_PLAN_LIMITS.minTargetSeconds)} … ${formatDurationLabel(DURATION_PLAN_LIMITS.maxTargetSeconds)}).`;
+      }
+    }
+
+    durationSlider.addEventListener("input", () => {
+      applyTargetDuration(sliderPositionToSeconds(durationSlider.value));
+    });
+    durationValueInput.addEventListener("change", commitTypedDuration);
+    durationValueInput.addEventListener("blur", commitTypedDuration);
+    wizardSceneCountInput.addEventListener("input", refreshDurationFeedback);
+    commandBar.addEventListener("submit", event => {
+      event.preventDefault();
+      // Enter в поле m:ss обязан применить набранное до запуска сборки.
+      commitTypedDuration();
+      void draftFromTopic();
+    });
+    initDurationControls();
 
     // Заполняет селект моделей живым списком провайдеров моста; deepseek — дефолт
     // (сейчас самый надёжный для JSON-драфта), известные особенности ffmpeg.
@@ -1152,7 +1370,9 @@ import { buildDemoProject } from "./ui/demo-project.js";
         wizardTopicInput.focus();
         return;
       }
-      const sceneCount = Math.min(Math.max(Number(wizardSceneCountInput.value) || 6, 2), 12);
+      // Число сцен считает система из выбранной длительности; ручное значение
+      // из «Настроек» отправляется, только когда пользователь его задал.
+      const sceneCount = manualSceneCount();
       const byokPreset = selectedByokPreset();
       let endpoint;
       let model = wizardModelSelect.value || undefined;
@@ -1166,6 +1386,8 @@ import { buildDemoProject } from "./ui/demo-project.js";
         endpoint = { kind: "openai", baseUrl, apiKey: wizardByokKey.value, model: byokModel };
         model = undefined;
       }
+      // Запуск сборки — явный выбор: показанная длительность становится целью проекта.
+      if (state.brief) state.brief.targetDurationSeconds = targetDurationSeconds;
       setWizardBusy(true);
       wizardElapsedTimer.start();
       wizardStatus.textContent = byokPreset
@@ -1179,7 +1401,8 @@ import { buildDemoProject } from "./ui/demo-project.js";
           headers: { "content-type": "application/json", "x-hermest-local-media": "1" },
           body: JSON.stringify({
             topic,
-            sceneCount,
+            ...(sceneCount === null ? {} : { sceneCount }),
+            targetDurationSeconds,
             research: wizardResearchInput.checked,
             model,
             endpoint,
@@ -2741,6 +2964,8 @@ import { buildDemoProject } from "./ui/demo-project.js";
       state.links = incoming.links;
       state.cards = incoming.cards;
       selectedId = state.cards[0]?.id || null;
+      // Только после того, как карточки на месте: оценка длительности читает их.
+      syncDurationFromBrief();
     }
 
     function formatStorageStatus(data) {

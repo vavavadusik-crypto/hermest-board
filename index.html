@@ -504,6 +504,11 @@
 
     .command-actions button {
       height: 42px;
+      /* Глобальная кнопка — inline-grid, поэтому иконку и подпись надо явно
+         поставить в строку, иначе они лягут друг на друга. */
+      grid-auto-flow: column;
+      grid-auto-columns: max-content;
+      place-content: center;
     }
 
     .command-hint,
