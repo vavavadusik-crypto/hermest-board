@@ -47,6 +47,19 @@ for (const expected of [
     narration: { provider: "piper", language: "en", voice: "en_US-lessac-medium" }
   },
   {
+    // Третья форма кадра проверяется настоящим рендером, а не только разметкой:
+    // квадрат — единственный формат, где высота сцены ограничивает сильнее
+    // ширины, и промах виден только на готовом файле.
+    label: "english instagram_feed",
+    fixture: enFixture,
+    platform: "instagram_feed",
+    recipeId: "instagram-1x1-1080p",
+    width: 1080,
+    height: 1080,
+    repeat: false,
+    narration: { provider: "piper", language: "en", voice: "en_US-lessac-medium" }
+  },
+  {
     label: "russian youtube_video",
     fixture: ruFixture,
     platform: "youtube_video",
