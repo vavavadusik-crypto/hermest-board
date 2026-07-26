@@ -97,6 +97,9 @@ export function createPiperNarrationAdapter(dependencies = {}) {
     // Домен спрашивает адаптер, умеет ли он темп речи, прежде чем планировать
     // пересинтез: ElevenLabs, например, не умеет — и решение должно это учесть.
     supportsSpeechRate: true,
+    // Локальный синтез отдаёт голос сырым, поэтому канонизация делает ещё и
+    // полировку. Внешний TTS отдаёт уже обработанный — его второй проход портит.
+    producesRawVoice: true,
     async synthesize({ text, language = "ru", voice, outputPath, lengthScale, signal } = {}) {
       signal?.throwIfAborted();
       const script = normalizeNarrationScript(text);

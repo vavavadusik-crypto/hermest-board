@@ -137,7 +137,8 @@ export async function renderProject({
           tool: "ffmpeg",
           argv: buildNarrationCanonicalizeArgs({
             inputFile: sceneRawFile,
-            outputFile: sceneWavFile
+            outputFile: sceneWavFile,
+            polish: narrationAdapter.producesRawVoice === true
           })
         };
         await runMediaTool(canonicalizeCommand.tool, canonicalizeCommand.argv, {

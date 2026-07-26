@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { VOICE_POLISH_FILTER } from "../../src/media/ffmpeg-args.js";
 import {
   buildRenderManifest,
   hashJson
@@ -207,6 +208,42 @@ test("render manifest accepts narration canonicalization command evidence", () =
   const canonicalize = manifest.commands.find(command => command.id === "narration-canonicalize");
   assert.equal(canonicalize.tool, "ffmpeg");
   assert.equal(canonicalize.argv.at(-1), "<run>/narration.partial.wav");
+});
+
+test("render manifest accepts the voice polish chain but not a doctored one", () => {
+  const polishedCanonicalize = {
+    ...validCanonicalizeCommand,
+    argv: [
+      "-hide_banner", "-loglevel", "error", "-n",
+      "-i", "/tmp/private-run/narration.raw.wav",
+      "-af", VOICE_POLISH_FILTER,
+      "-ar", "48000", "-ac", "1", "-c:a", "pcm_s16le",
+      "/tmp/private-run/narration.partial.wav"
+    ]
+  };
+  const manifest = build({
+    commands: [validPiperCommand, polishedCanonicalize, validRenderCommand]
+  });
+  const canonicalize = manifest.commands.find(command => command.id === "narration-canonicalize");
+  assert.ok(canonicalize.argv.includes(VOICE_POLISH_FILTER));
+
+  // Манифест — аудит фактически выполненного, поэтому цепочка сверяется
+  // целиком: подменённый порог компрессора должен быть отвергнут.
+  assert.throws(
+    () => build({
+      commands: [
+        validPiperCommand,
+        {
+          ...polishedCanonicalize,
+          argv: polishedCanonicalize.argv.map(arg =>
+            arg === VOICE_POLISH_FILTER ? arg.replace("threshold=-20dB", "threshold=-40dB") : arg
+          )
+        },
+        validRenderCommand
+      ]
+    }),
+    /Command argv schema mismatch/
+  );
 });
 
 test("render manifest rejects canonicalization argv that changes the audio contract", () => {

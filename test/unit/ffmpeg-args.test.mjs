@@ -4,7 +4,8 @@ import test from "node:test";
 import {
   buildFliteAudioArgs,
   buildNarrationCanonicalizeArgs,
-  buildVideoRenderArgs
+  buildVideoRenderArgs,
+  VOICE_POLISH_FILTER
 } from "../../src/media/ffmpeg-args.js";
 
 test("flite args keep narration text out of argv and use generated safe paths", () => {
@@ -39,6 +40,49 @@ test("narration canonicalize args resample provider audio to the 48k mono contra
     }),
     /safe generated path/
   );
+});
+
+test("voice polish is opt-in and keeps its filters in the order the chain depends on", () => {
+  const polished = buildNarrationCanonicalizeArgs({
+    inputFile: "/tmp/hermest-board-run/narration.raw.wav",
+    outputFile: "/tmp/hermest-board-run/narration.partial.wav",
+    polish: true
+  });
+
+  assert.deepEqual(polished, [
+    "-hide_banner", "-loglevel", "error", "-n",
+    "-i", "/tmp/hermest-board-run/narration.raw.wav",
+    "-af", VOICE_POLISH_FILTER,
+    "-ar", "48000", "-ac", "1", "-c:a", "pcm_s16le",
+    "/tmp/hermest-board-run/narration.partial.wav"
+  ]);
+
+  // Порядок — не вкусовщина: деэссер обязан стоять до подъёма присутствия,
+  // экситер после компрессора, лимитер перед нормализацией. Сравнивать по
+  // позиции, а не split(","): аргумент firequalizer сам содержит запятые.
+  const order = [
+    "highpass=",
+    "deesser=",
+    "firequalizer=",
+    "acompressor=",
+    "aexciter=",
+    "aecho=",
+    "alimiter=",
+    "loudnorm="
+  ].map(name => VOICE_POLISH_FILTER.indexOf(name));
+  assert.equal(order.includes(-1), false, "every filter of the accepted chain must be present");
+  assert.deepEqual(order, [...order].sort((left, right) => left - right));
+
+  // Всё, кроме явного true, оставляет прежний argv: внешний TTS отдаёт уже
+  // обработанный голос, второй проход компрессора его портит.
+  for (const value of [undefined, false, null, 0, "", "true", 1]) {
+    const args = buildNarrationCanonicalizeArgs({
+      inputFile: "/tmp/hermest-board-run/narration.raw.wav",
+      outputFile: "/tmp/hermest-board-run/narration.partial.wav",
+      polish: value
+    });
+    assert.equal(args.includes("-af"), false, `polish: ${JSON.stringify(value)} must not add a filter`);
+  }
 });
 
 test("video args map a generated color stream and narration to H.264/AAC MP4", () => {

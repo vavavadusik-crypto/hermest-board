@@ -16,6 +16,9 @@ export function createFliteNarrationAdapter(dependencies = {}) {
 
   return Object.freeze({
     id: FLITE_PROVIDER,
+    // Тот же контракт, что у Piper: локальный синтез сырой и полируется на
+    // канонизации. См. producesRawVoice в piper-tts.js.
+    producesRawVoice: true,
     async synthesize({ text, language = "en", voice = "slt", outputPath, signal } = {}) {
       signal?.throwIfAborted();
       const script = normalizeScript(text);

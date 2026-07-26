@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 
+import { VOICE_POLISH_FILTER } from "./ffmpeg-args.js";
+
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const TOOL_TEXT_KEYS = ["ffmpeg", "ffprobe", "renderer", "sceneComposer", "chrome"];
 const TTS_KEYS = [
@@ -328,6 +330,13 @@ function validateNarrationCanonicalizeArgv(argv) {
   const cursor = argvCursor(argv);
   cursor.expect("-hide_banner", "-loglevel", "error", "-n", "-i");
   if (!isSafeGeneratedPath(cursor.take())) throw new TypeError("invalid canonicalize input");
+  // Полировка голоса опциональна — её получает только локальный синтез. Но если
+  // она в argv есть, цепочка обязана совпасть с эталонной целиком: манифест
+  // аудирует то, что реально было выполнено, а не то, что «похоже на правду».
+  if (argv[cursor.position()] === "-af") {
+    cursor.expect("-af");
+    if (cursor.take() !== VOICE_POLISH_FILTER) throw new TypeError("invalid voice polish chain");
+  }
   cursor.expect("-ar", "48000", "-ac", "1", "-c:a", "pcm_s16le");
   if (!isSafeGeneratedPath(cursor.take())) throw new TypeError("invalid canonicalize output");
   cursor.finish();

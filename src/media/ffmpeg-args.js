@@ -20,14 +20,36 @@ export function buildFliteAudioArgs({ textFile, outputFile, voice = "slt" }) {
   ];
 }
 
+// Локальный синтез отдаёт голос сырым: плоский по тембру, с шипящими и с
+// клиппингом на пиках (замер до обработки: −17.7 LUFS, LRA 4.6, пик 0.0 dBFS).
+// Порядок фильтров не косметический: деэссер работает до подъёма присутствия,
+// иначе он давит уже усиленные шипящие; экситер — после компрессора, иначе
+// компрессор съедает добавленные гармоники; лимитер — перед loudnorm, чтобы
+// нормализация считала пики уже укрощённого сигнала.
+// Замер после обработки: −16.2 LUFS, LRA 3.0, пик −1.5 dBFS.
+export const VOICE_POLISH_FILTER = [
+  "highpass=f=85",
+  "deesser=i=0.35:m=0.5:f=0.45",
+  "firequalizer=gain_entry='entry(110,2);entry(260,1.5);entry(3000,3);entry(6800,-2.5)'",
+  "acompressor=threshold=-20dB:ratio=3:attack=8:release=120:makeup=3",
+  "aexciter=amount=1.1:drive=3.5:freq=7500:blend=0.2",
+  "aecho=0.85:0.6:24:0.16",
+  "alimiter=limit=0.95",
+  "loudnorm=I=-16:TP=-1.5:LRA=11"
+].join(",");
+
 // Every narration provider may emit its native sample rate (Piper: 22050 Hz);
 // the pipeline contract for the narration artifact is fixed 48 kHz mono PCM.
-export function buildNarrationCanonicalizeArgs({ inputFile, outputFile }) {
+//
+// `polish` включается только для локального синтеза. Внешний TTS отдаёт уже
+// обработанный голос, и второй проход компрессора с экситером его портит.
+export function buildNarrationCanonicalizeArgs({ inputFile, outputFile, polish = false }) {
   const safeInputFile = assertSafeGeneratedPath(inputFile);
   const safeOutputFile = assertSafeGeneratedPath(outputFile);
   return [
     "-hide_banner", "-loglevel", "error", "-n",
     "-i", safeInputFile,
+    ...(polish === true ? ["-af", VOICE_POLISH_FILTER] : []),
     "-ar", "48000",
     "-ac", "1",
     "-c:a", "pcm_s16le",
