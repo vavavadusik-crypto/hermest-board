@@ -95,6 +95,28 @@ import { buildDemoProject } from "./ui/demo-project.js";
     const wizardByokKey = document.getElementById("wizardByokKey");
     const wizardStatus = document.getElementById("wizardStatus");
     const wizardElapsed = document.getElementById("wizardElapsed");
+    const commandBar = document.getElementById("commandBar");
+    const commandSettings = document.getElementById("commandSettings");
+    const durationSlider = document.getElementById("durationSlider");
+    const durationValueInput = document.getElementById("durationValue");
+    const durationHint = document.getElementById("durationHint");
+    const durationWarning = document.getElementById("durationWarning");
+    const durationQuick = document.getElementById("durationQuick");
+    const durationMarks = document.getElementById("durationMarks");
+    const topbar = document.querySelector(".topbar");
+
+    // Топбар растёт вместе с командной строкой и раскрытыми настройками, поэтому
+    // боковая панель узнаёт его фактическую высоту, а не догадывается о ней.
+    function syncTopbarHeight() {
+      if (!topbar) return;
+      document.documentElement.style.setProperty("--topbar-height", `${Math.round(topbar.offsetHeight)}px`);
+    }
+
+    if (topbar && typeof ResizeObserver === "function") {
+      new ResizeObserver(syncTopbarHeight).observe(topbar);
+    }
+    window.addEventListener("resize", syncTopbarHeight);
+    syncTopbarHeight();
 
     // OpenAI-совместимые провайдеры: свой ключ ИЛИ бесплатный. baseUrl совпадает
     // с OPENAI_COMPATIBLE_PRESETS на сервере; "" = свой URL (пользователь вводит).
@@ -3699,15 +3721,13 @@ import { buildDemoProject } from "./ui/demo-project.js";
     // Онбординг: заметный вход в главный сценарий «Тема → видео» и первый-запуск приветствие.
     const ONBOARD_KEY = "hermest-board:onboarded";
 
+    // Командная строка всегда на экране, поэтому «открыть мастер» — это просто
+    // поставить курсор в поле темы; никакой панели разворачивать не нужно.
     function openWizard(prefillTopic) {
-      sidePanel.hidden = false;
       if (typeof prefillTopic === "string" && prefillTopic) {
         wizardTopicInput.value = prefillTopic.slice(0, 300);
       }
-      // Фокус синхронно (панель уже видима) с preventScroll, затем плавный скролл к wizard.
       wizardTopicInput.focus({ preventScroll: true });
-      const panel = document.querySelector(".topic-wizard-panel");
-      if (panel) panel.scrollIntoView({ block: "center", behavior: "smooth" });
     }
 
     // Один клик — готовый пример борда (детерминированный, без ключей и без сети),
@@ -3720,8 +3740,6 @@ import { buildDemoProject } from "./ui/demo-project.js";
     }
 
     function initOnboarding() {
-      const startButton = document.getElementById("startWizard");
-      if (startButton) startButton.addEventListener("click", () => openWizard());
       const demoButton = document.getElementById("loadDemoBoard");
       if (demoButton) demoButton.addEventListener("click", loadDemoProject);
 
