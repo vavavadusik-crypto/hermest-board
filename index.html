@@ -338,18 +338,21 @@
       top: 12px;
       left: 12px;
       right: 12px;
-      height: 54px;
       z-index: 30;
-      display: grid;
-      grid-template-columns: minmax(170px, 260px) 1fr auto;
-      gap: 10px;
-      align-items: center;
       padding: 8px;
       border: 1px solid var(--line);
       border-radius: 10px;
       background: var(--panel);
       box-shadow: 0 18px 44px var(--shadow);
       backdrop-filter: blur(16px);
+    }
+
+    .topbar-head {
+      display: grid;
+      grid-template-columns: minmax(170px, 260px) 1fr auto;
+      gap: 10px;
+      align-items: center;
+      min-height: 38px;
     }
 
     .brand {
@@ -401,6 +404,204 @@
       background: linear-gradient(135deg, var(--accent), #93c5fd);
       border-color: transparent;
       font-weight: 900;
+    }
+
+    /* Командная строка: тема + свободная длительность + одна главная кнопка.
+       Верх намеренно пуст — всё остальное живёт в свёрнутых «Настройках». */
+    .command-bar {
+      display: grid;
+      grid-template-columns: minmax(220px, 2.1fr) minmax(260px, 1.3fr) auto;
+      gap: 12px;
+      align-items: end;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(123, 220, 255, .14);
+    }
+
+    .command-bar label,
+    .command-settings label > span,
+    .command-legend {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      margin-bottom: 6px;
+    }
+
+    .command-topic input {
+      width: 100%;
+      height: 42px;
+      border-radius: 9px;
+      border: 1px solid rgba(123, 220, 255, .3);
+      background: rgba(3, 9, 18, .72);
+      color: var(--text);
+      outline: none;
+      padding: 0 12px;
+      font-size: 15px;
+    }
+
+    .duration-row {
+      display: grid;
+      grid-template-columns: 1fr 84px;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .duration-row input[type="range"] {
+      width: 100%;
+      height: 42px;
+      margin: 0;
+      accent-color: var(--accent);
+      background: transparent;
+    }
+
+    .duration-row input[type="text"] {
+      width: 100%;
+      height: 42px;
+      border-radius: 9px;
+      border: 1px solid rgba(123, 220, 255, .3);
+      background: rgba(3, 9, 18, .72);
+      color: var(--text);
+      outline: none;
+      padding: 0 8px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      font-weight: 800;
+    }
+
+    .duration-row input[aria-invalid="true"] {
+      border-color: rgba(244, 63, 94, .8);
+    }
+
+    .duration-quick {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 7px;
+    }
+
+    .duration-quick button {
+      width: auto;
+      height: 26px;
+      padding: 0 9px;
+      font-size: 11px;
+      font-weight: 750;
+      color: #cfefff;
+      background: rgba(3, 9, 18, .5);
+    }
+
+    .duration-quick button[aria-pressed="true"] {
+      color: #041016;
+      background: linear-gradient(135deg, var(--accent), #93c5fd);
+      border-color: transparent;
+    }
+
+    .command-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .command-actions button {
+      height: 42px;
+      /* Глобальная кнопка — inline-grid, поэтому иконку и подпись надо явно
+         поставить в строку, иначе они лягут друг на друга. */
+      grid-auto-flow: column;
+      grid-auto-columns: max-content;
+      place-content: center;
+    }
+
+    .command-hint,
+    .command-warning {
+      margin: 9px 0 0;
+      font-size: 12px;
+      line-height: 1.4;
+      color: #8fb3c6;
+    }
+
+    .command-hint[data-status="short"],
+    .command-hint[data-status="long"] {
+      color: var(--warn);
+    }
+
+    .command-hint[data-status="ok"] {
+      color: var(--accent);
+    }
+
+    .command-warning {
+      color: #fecdd3;
+      border-left: 2px solid rgba(244, 63, 94, .7);
+      padding-left: 9px;
+    }
+
+    .command-notice {
+      margin: 6px 0 0;
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--warn);
+    }
+
+    .command-warning[hidden],
+    .command-notice[hidden] { display: none; }
+
+    .command-status {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #9fd7e6;
+    }
+
+    .command-settings {
+      margin-top: 10px;
+      border-top: 1px solid rgba(123, 220, 255, .14);
+      padding-top: 8px;
+    }
+
+    .command-settings > summary {
+      cursor: pointer;
+      list-style: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 9px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: #cfefff;
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .command-settings > summary::-webkit-details-marker { display: none; }
+    .command-settings > summary::before { content: "▸"; color: var(--accent); }
+    .command-settings[open] > summary::before { content: "▾"; }
+
+    .command-settings-body {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+      gap: 0 14px;
+      max-height: 44vh;
+      overflow: auto;
+      margin-top: 6px;
+      padding-right: 4px;
+    }
+
+    /* Видимый фокус: клавиатурный проход по командной строке должен быть заметен. */
+    .topbar :focus-visible,
+    .side-panel :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      clip-path: inset(50%);
+      white-space: nowrap;
+      border: 0;
     }
 
     .board-wrap {
@@ -592,9 +793,11 @@
     .side-panel {
       position: fixed;
       right: 12px;
-      top: 78px;
+      /* Топбар растёт вместе с командной строкой и раскрытыми настройками,
+         поэтому его фактическую высоту измеряет JS (--topbar-height). */
+      top: calc(var(--topbar-height, 54px) + 24px);
       width: 308px;
-      max-height: calc(100vh - 96px);
+      max-height: calc(100vh - var(--topbar-height, 54px) - 42px);
       z-index: 25;
       overflow: auto;
       padding: 14px;
@@ -961,11 +1164,16 @@
     }
 
     @media (max-width: 860px) {
-      .topbar {
+      .topbar-head {
         grid-template-columns: 1fr auto;
-        height: auto;
       }
       .deck-title { grid-column: 1 / -1; }
+      .command-bar {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+      }
+      .command-actions button { flex: 1; }
+      .command-settings-body { max-height: 38vh; }
       .side-panel {
         left: 12px;
         right: 12px;
@@ -986,22 +1194,135 @@
     </section>
 
     <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark">H</div>
-        <span>Hermest Board</span>
+      <div class="topbar-head">
+        <div class="brand">
+          <div class="brand-mark">H</div>
+          <span>Hermest Board</span>
+        </div>
+        <input class="deck-title" id="deckTitle" value="Hermest: оболочка над ИИ-агентами" aria-label="Название борда">
+        <nav class="toolbar" aria-label="Инструменты">
+          <button id="addCard" aria-label="Добавить карточку" title="Добавить карточку">＋</button>
+          <button id="connectMode" aria-label="Соединить выбранные карточки" title="Соединить выбранные карточки">⛓</button>
+          <button id="fitView" aria-label="Показать все карточки" title="Показать все карточки">⌖</button>
+          <button id="openSettings" aria-label="Настройки" title="Настройки">⚙</button>
+          <button id="togglePanel" aria-label="Панель настроек" title="Панель настроек">☰</button>
+          <button id="recordMode" aria-label="Режим записи" title="Режим записи">◉</button>
+          <button id="exportJson" aria-label="Экспорт JSON" title="Экспорт JSON">⇩</button>
+          <button id="importJson" aria-label="Импорт JSON" title="Импорт JSON">⇧</button>
+        </nav>
       </div>
-      <input class="deck-title" id="deckTitle" value="Hermest: оболочка над ИИ-агентами" aria-label="Название борда">
-      <nav class="toolbar" aria-label="Инструменты">
-        <button id="startWizard" class="cta-primary" title="Собрать видео из темы — главный сценарий"><span class="cta-icon" aria-hidden="true">🎬</span><span class="cta-label">Тема → видео</span></button>
-        <button id="addCard" aria-label="Добавить карточку" title="Добавить карточку">＋</button>
-        <button id="connectMode" aria-label="Соединить выбранные карточки" title="Соединить выбранные карточки">⛓</button>
-        <button id="fitView" aria-label="Показать все карточки" title="Показать все карточки">⌖</button>
-        <button id="openSettings" aria-label="Настройки" title="Настройки">⚙</button>
-        <button id="togglePanel" aria-label="Панель настроек" title="Панель настроек">☰</button>
-        <button id="recordMode" aria-label="Режим записи" title="Режим записи">◉</button>
-        <button id="exportJson" aria-label="Экспорт JSON" title="Экспорт JSON">⇩</button>
-        <button id="importJson" aria-label="Импорт JSON" title="Импорт JSON">⇧</button>
-      </nav>
+
+      <form class="command-bar" id="commandBar" aria-label="Собрать ролик из темы">
+        <div class="command-topic">
+          <label for="wizardTopic">Тема ролика</label>
+          <input id="wizardTopic" type="text" maxlength="300" autocomplete="off" enterkeyhint="go"
+                 placeholder="Например: Квантовые компьютеры простыми словами">
+        </div>
+        <div class="command-duration" role="group" aria-labelledby="durationLegend">
+          <span class="command-legend" id="durationLegend">Длительность ролика</span>
+          <div class="duration-row">
+            <input id="durationSlider" type="range" min="0" max="525" step="1" value="45"
+                   list="durationMarks" aria-label="Длительность ролика, ползунок"
+                   aria-describedby="durationHint" aria-valuetext="1:00">
+            <label class="visually-hidden" for="durationValue">Длительность в формате минуты:секунды</label>
+            <input id="durationValue" type="text" inputmode="numeric" maxlength="8" spellcheck="false"
+                   value="1:00" aria-describedby="durationHint">
+          </div>
+          <datalist id="durationMarks"></datalist>
+          <div class="duration-quick" id="durationQuick" role="group" aria-label="Быстрый выбор длительности"></div>
+        </div>
+        <div class="command-actions">
+          <button id="wizardDraft" type="submit" class="cta-primary" title="Собрать карточки из темы и подготовить ролик выбранной длительности"><span class="cta-icon" aria-hidden="true">🎬</span><span class="cta-label">Собрать видео</span></button>
+          <button id="wizardCancel" type="button" class="btn-danger" title="Отменить текущую сборку" aria-label="Отменить сборку черновика" hidden>Отменить</button>
+        </div>
+      </form>
+
+      <p class="command-hint" id="durationHint" data-status="unset">Выбери длительность — система сама рассчитает число сцен и объём текста.</p>
+      <p class="command-notice" id="durationNotice" role="status" aria-live="polite" hidden></p>
+      <p class="command-warning" id="durationWarning" role="alert" hidden></p>
+      <div class="command-status" id="wizardStatus" role="status" aria-live="polite">Готово. Введи тему и нажми «Собрать видео».</div>
+      <span class="job-elapsed" id="wizardElapsed" aria-hidden="true" hidden></span>
+
+      <details class="command-settings" id="commandSettings">
+        <summary id="commandSettingsSummary">Настройки: сцены, модель, голос, музыка, фон</summary>
+        <div class="command-settings-body">
+          <div>
+            <div class="field">
+              <label for="wizardSceneCount"><span>Сцен (по умолчанию считает система)</span></label>
+              <input id="wizardSceneCount" type="number" min="2" max="12" placeholder="авто">
+              <div class="mini-note" id="sceneCountHint">Пусто — число сцен выводится из выбранной длительности. Значение здесь всегда сильнее автоматики.</div>
+            </div>
+            <label class="check-item"><input id="wizardResearch" type="checkbox" checked> Искать источники</label>
+            <div class="field">
+              <label for="wizardModel"><span>ИИ-модель</span></label>
+              <select id="wizardModel"></select>
+            </div>
+            <div id="wizardByokConfig" class="byok-config" hidden>
+              <div class="field">
+                <label for="wizardByokBaseUrl"><span>Base URL (OpenAI-совместимый /v1)</span></label>
+                <input id="wizardByokBaseUrl" type="text" autocomplete="off" spellcheck="false" placeholder="https://openrouter.ai/api/v1">
+              </div>
+              <div class="field">
+                <label for="wizardByokModel"><span>Модель</span></label>
+                <input id="wizardByokModel" type="text" autocomplete="off" spellcheck="false" placeholder="напр. meta-llama/llama-3.3-70b-instruct">
+              </div>
+              <div class="field">
+                <label for="wizardByokKey"><span>API-ключ (пусто для Ollama)</span></label>
+                <input id="wizardByokKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-...">
+              </div>
+              <div class="mini-note">Свой или бесплатный API (Ollama, OpenRouter, Hugging Face…). Ключ уходит на локальный worker только на время запроса и не попадает в проект, localStorage и manifest.</div>
+            </div>
+          </div>
+          <div>
+            <div class="field">
+              <label for="narrationLanguage"><span>Язык озвучки</span></label>
+              <select id="narrationLanguage"></select>
+            </div>
+            <div class="field">
+              <label for="narrationVoice"><span>Голос</span></label>
+              <select id="narrationVoice"></select>
+            </div>
+            <div class="field">
+              <label for="narrationProvider"><span>TTS-провайдер</span></label>
+              <select id="narrationProvider">
+                <option value="">Авто — Piper (локально, бесплатно)</option>
+                <option value="elevenlabs">ElevenLabs (BYOK, 29+ языков)</option>
+              </select>
+            </div>
+            <div class="mini-note" id="narrationHint"></div>
+            <div class="field">
+              <label for="musicBed"><span>Музыка</span></label>
+              <select id="musicBed">
+                <option value="">Авто — подложка приглушается под голос</option>
+                <option value="off">Без музыки</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="check-item"><input id="generateVisualsToggle" type="checkbox"> Генерировать фоны сцен (бесплатно, Pollinations)</label>
+            <div class="mini-note">Без ключа: ИИ рисует фон под каждую сцену. Выключено — тёмный брендированный фон. Свой FAL-ключ (в настройках) даёт премиум-качество.</div>
+            <div class="field">
+              <label for="brollMode"><span>Фон сцен (B-roll)</span></label>
+              <select id="brollMode">
+                <option value="auto">Авто — бесплатно, приоритет</option>
+                <option value="free">Только бесплатно / локально</option>
+                <option value="premium">Разрешить платные ключи (BYOK)</option>
+                <option value="deterministic">Только композиция (offline)</option>
+              </select>
+            </div>
+            <div class="mini-note">Авто и «бесплатно» работают без единого ключа: сток/генерация из бесплатных источников, иначе — брендированная композиция. «BYOK» подключает ваши платные ключи как премиум. Это монтаж сцен, не «text-to-video».</div>
+            <div class="field">
+              <label><span>API-ключи (BYOK)</span></label>
+              <div id="byokProviders" class="artifact-list" aria-live="polite"></div>
+              <div class="mini-note">Ключи живут только в памяти локального worker до его перезапуска и не попадают в проект, localStorage и manifest.</div>
+            </div>
+            <div class="panel-row wide">
+              <button id="loadDemoBoard" type="button" title="Открыть готовый пример борда без запуска модели и без ключей">Открыть готовый пример</button>
+            </div>
+            <div class="mini-note">Браузерная ИИ-модель (через локальный мост, без API-ключа) исследует тему и собирает карточки прямо на доску. Дальше — обычный рендер.</div>
+          </div>
+        </div>
+      </details>
     </header>
 
     <aside class="side-panel" id="sidePanel">
@@ -1055,49 +1376,6 @@
         <div class="panel-row wide">
           <button id="recordVideo" title="Записать WebM через выбор окна Chrome">Записать WebM</button>
         </div>
-        <div class="panel-section topic-wizard-panel">
-          <h2>Тема → видео</h2>
-          <div class="mini-note">Браузерная ИИ-модель (через локальный мост, без API-ключа) исследует тему и собирает карточки прямо на доску. Дальше — обычный рендер.</div>
-          <div class="field">
-            <label><span>Тема ролика</span></label>
-            <input id="wizardTopic" type="text" maxlength="300" placeholder="Например: Квантовые компьютеры простыми словами" autocomplete="off">
-          </div>
-          <div class="panel-row two">
-            <div class="field">
-              <label><span>Сцен</span></label>
-              <input id="wizardSceneCount" type="number" min="2" max="12" value="6">
-            </div>
-            <label class="check-item"><input id="wizardResearch" type="checkbox" checked> Искать источники</label>
-          </div>
-          <div class="field">
-            <label><span>ИИ-модель</span></label>
-            <select id="wizardModel"></select>
-          </div>
-          <div id="wizardByokConfig" class="byok-config" hidden>
-            <div class="field">
-              <label><span>Base URL (OpenAI-совместимый /v1)</span></label>
-              <input id="wizardByokBaseUrl" type="text" autocomplete="off" spellcheck="false" placeholder="https://openrouter.ai/api/v1">
-            </div>
-            <div class="field">
-              <label><span>Модель</span></label>
-              <input id="wizardByokModel" type="text" autocomplete="off" spellcheck="false" placeholder="напр. meta-llama/llama-3.3-70b-instruct">
-            </div>
-            <div class="field">
-              <label><span>API-ключ (пусто для Ollama)</span></label>
-              <input id="wizardByokKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-...">
-            </div>
-            <div class="mini-note">Свой или бесплатный API (Ollama, OpenRouter, Hugging Face…). Ключ уходит на локальный worker только на время запроса и не попадает в проект, localStorage и manifest.</div>
-          </div>
-          <div class="panel-row two">
-            <button id="wizardDraft" title="Собрать карточки из темы браузерной ИИ-моделью">Собрать из темы</button>
-            <button id="wizardCancel" class="btn-danger" title="Отменить текущую сборку" aria-label="Отменить сборку черновика" hidden>Отменить</button>
-          </div>
-          <div class="panel-row wide">
-            <button id="loadDemoBoard" title="Открыть готовый пример борда без запуска модели и без ключей">Открыть готовый пример</button>
-          </div>
-          <div class="auth-status" id="wizardStatus" role="status" aria-live="polite">Готово. Введи тему и нажми «Собрать из темы».</div>
-          <span class="job-elapsed" id="wizardElapsed" aria-hidden="true" hidden></span>
-        </div>
         <div class="panel-section local-render-panel">
           <h2>Настоящий локальный MP4</h2>
           <div class="mini-note">Работает только через локальный `npm run dev`: Board ставит job в приватный FFmpeg worker, проверяет MP4/WAV и возвращает manifest. Публикация не выполняется.</div>
@@ -1110,46 +1388,7 @@
               <option value="instagram_reels">Instagram Reels 9:16</option>
             </select>
           </div>
-          <div class="field">
-            <label><span>Язык озвучки</span></label>
-            <select id="narrationLanguage"></select>
-          </div>
-          <div class="field">
-            <label><span>Голос</span></label>
-            <select id="narrationVoice"></select>
-          </div>
-          <div class="field">
-            <label><span>TTS-провайдер</span></label>
-            <select id="narrationProvider">
-              <option value="">Авто — Piper (локально, бесплатно)</option>
-              <option value="elevenlabs">ElevenLabs (BYOK, 29+ языков)</option>
-            </select>
-          </div>
-          <div class="mini-note" id="narrationHint"></div>
-          <label class="check-item"><input id="generateVisualsToggle" type="checkbox"> Генерировать фоны сцен (бесплатно, Pollinations)</label>
-          <div class="mini-note">Без ключа: ИИ рисует фон под каждую сцену. Выключено — тёмный брендированный фон. Свой FAL-ключ (в настройках) даёт премиум-качество.</div>
-          <div class="field">
-            <label><span>Фон сцен (B-roll)</span></label>
-            <select id="brollMode">
-              <option value="auto">Авто — бесплатно, приоритет</option>
-              <option value="free">Только бесплатно / локально</option>
-              <option value="premium">Разрешить платные ключи (BYOK)</option>
-              <option value="deterministic">Только композиция (offline)</option>
-            </select>
-          </div>
-          <div class="mini-note">Авто и «бесплатно» работают без единого ключа: сток/генерация из бесплатных источников, иначе — брендированная композиция. «BYOK» подключает ваши платные ключи как премиум. Это монтаж сцен, не «text-to-video».</div>
-          <div class="field">
-            <label><span>Музыка</span></label>
-            <select id="musicBed">
-              <option value="">Авто — подложка приглушается под голос</option>
-              <option value="off">Без музыки</option>
-            </select>
-          </div>
-          <div class="field">
-            <label><span>API-ключи (BYOK)</span></label>
-            <div id="byokProviders" class="artifact-list" aria-live="polite"></div>
-            <div class="mini-note">Ключи живут только в памяти локального worker до его перезапуска и не попадают в проект, localStorage и manifest.</div>
-          </div>
+          <div class="mini-note">Язык, голос, музыка и фон сцен переехали в «Настройки» верхней командной строки — рендер берёт их оттуда.</div>
           <div class="panel-row two">
             <button id="renderLocalVideo" title="Создать настоящий локальный MP4 через FFmpeg">Рендер MP4</button>
             <button id="cancelLocalRender" class="btn-danger" title="Отменить текущий render job" aria-label="Отменить рендер MP4" disabled>Отмена</button>

@@ -41,10 +41,10 @@ From the running app (Russian UI — an English UI is not shipped yet).
 | <a href="docs/media/screenshot-first-run.webp"><img src="docs/media/screenshot-first-run.webp" width="100%" alt="First-run overlay 'Из темы — в готовое видео' with four mode chips and a topic field"></a> | <a href="docs/media/screenshot-board.webp"><img src="docs/media/screenshot-board.webp" width="100%" alt="Demo board 'Почему небо голубое' with six scene cards and the inspector panel"></a> |
 | Onboarding overlay on first open: one topic field, and the four ways to run the product — local & free, free key, own key (BYOK), cloud if you want it. Footer states that nothing leaves the machine without your action. | Demo project «Почему небо голубое»: six scene cards on the canvas, and the right inspector with block transform controls plus the project Plan / Roadmap / Video tabs. Auto-save is on. |
 
-| «Тема → видео» wizard | Mobile |
+| Top command bar | Mobile |
 |:--|:--|
-| <a href="docs/media/screenshot-topic-to-video.webp"><img src="docs/media/screenshot-topic-to-video.webp" width="100%" alt="'Тема → видео' side panel with topic, scene count, source search and AI model selector"></a> | <a href="docs/media/screenshot-mobile.webp"><img src="docs/media/screenshot-mobile.webp" width="220" alt="Board on a 390×844 mobile viewport"></a> |
-| The wizard panel: topic, number of scenes, "search sources" toggle, and the AI-model selector (browser bridge or any OpenAI-compatible API). The panel is explicit that real local MP4 rendering only works under `npm run dev`, where the private FFmpeg worker runs. | 390×844 viewport. The header toolbar wraps onto its own row and the side panel stacks below the canvas — one column, no horizontal scrolling. |
+| <a href="docs/media/screenshot-topic-to-video.webp"><img src="docs/media/screenshot-topic-to-video.webp" width="100%" alt="Top command bar with a topic field, a free duration slider, an m:ss box and one build button"></a> | <a href="docs/media/screenshot-mobile.webp"><img src="docs/media/screenshot-mobile.webp" width="220" alt="Top command bar stacked into one column on a 390×844 mobile viewport"></a> |
+| The permanent top bar: topic field, a free duration slider (15 s … 60 min) with an `m:ss` box and quick marks, and one build button. Under it — how much narration the chosen length needs versus how much the board holds. Scene count, model, BYOK, voice, music and B-roll sit in the collapsed "Настройки" block. | 390×844 viewport. The command bar stacks into one column, the side panel moves below the canvas — no horizontal scrolling. |
 
 ---
 
@@ -121,10 +121,14 @@ Legend: ✅ VERIFIED (tested, works) · 🚧 PARTIAL (skeleton/foundation exists
 Перетаскивание/поворот/масштаб карточек, связи между узлами, фото на карточку, редактирование
 текста на месте, план и roadmap проекта, авто-тур с озвучкой, автосохранение и экспорт/импорт JSON.
 
-### Wizard «тема → видео»
-Панель **«Тема → видео»**: вводишь тему → ИИ-модель исследует источники и раскладывает карточки
-прямо на доску. Драфт **асинхронный** (ставится в очередь и опрашивается — долгие reasoning-чаты
-не вешают интерфейс), с отменой. Модель выбирается в панели:
+### Командная строка «тема → видео»
+Постоянная **верхняя строка**: поле темы, свободный ползунок длительности (15 с … 60 мин, шаг
+1 с на коротких роликах) с полем ручного ввода `м:сс` и одна кнопка. Enter запускает сборку:
+ИИ-модель исследует источники и раскладывает карточки прямо на доску. Число сцен считает система
+из выбранной длительности; ручное переопределение и остальные параметры — в свёрнутом блоке
+«Настройки». Под ползунком видно, сколько закадрового текста требует выбранная длительность и
+сколько его есть сейчас. Драфт **асинхронный** (ставится в очередь и опрашивается — долгие
+reasoning-чаты не вешают интерфейс), с отменой. Модель выбирается в «Настройках»:
 
 - **браузерный мост** (без API-ключа) — ChatGPT / Gemini / DeepSeek / Perplexity через локальный
   `browser-ai-bridge`, где «ключом» служит залогиненная вкладка Chrome;
