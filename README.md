@@ -29,8 +29,8 @@ Full renders of the same project, straight out of the pipeline (~18 s each):
 
 Both files come from the same project. The 9:16 cut is an honest aspect-ratio reframe, not a semantic
 re-edit — see [`docs/RENDER_PIPELINE.md`](docs/RENDER_PIPELINE.md) for that caveat and for everything
-the pipeline emits alongside the MP4s (SRT, thumbnails, `storyboard.json`, manifest with hashes and
-provenance, SHA-256 sidecar).
+the pipeline emits alongside the MP4s (SRT, cover frame PNG, `storyboard.json`, manifest with hashes
+and provenance, SHA-256 sidecar).
 
 ### Screenshots
 
@@ -94,7 +94,7 @@ npm run check        # validate · unit · smoke:api · media (2 real MP4s) · b
 | Multilingual voiceover (Piper RU/EN/ES/DE/FR, ElevenLabs BYOK 29+ languages) | ✅ VERIFIED | Language is a project parameter, not hardcoded; timeline/SRT from measured audio duration; loudness normalization (loudnorm) |
 | Free visual generation (Pollinations, no key) | ✅ VERIFIED | Opt-in toggle "Generate backgrounds (free, Pollinations)" in render panel |
 | Premium visuals (FAL BYOK) + stock fallback (Pexels BYOK) | ✅ VERIFIED | Honest fail-open cascade: FAL → Pollinations → Pexels, each source yields to next with warning in manifest |
-| Deterministic FFmpeg render (H.264/AAC MP4, 1920×1080 + 1080×1920, SRT, thumbnails, manifest with hashes/provenance, SHA-256 sidecar) | ✅ VERIFIED | Every render goes to a private directory under physical `/tmp`; worker deliberately absent on public Vercel |
+| Deterministic FFmpeg render (H.264/AAC MP4, 1920×1080 + 1080×1920, SRT, cover frame PNG, manifest with hashes/provenance, SHA-256 sidecar) | ✅ VERIFIED | Cover is cut from the finished master at a deterministic moment — after the opening scene has assembled — verified by its own PNG header and required by the publish pack. Every render goes to a private directory under physical `/tmp`; worker deliberately absent on public Vercel |
 | Premium motion composition (branded motion frames, Ken Burns drift, b-roll under transparent overlay, music with auto-ducking under voice) | ✅ VERIFIED | Procedural CC0 music in `assets/music/` |
 | BYOK provider keys (ElevenLabs / FAL / Pexels) | ✅ VERIFIED | Keys live only in local worker memory (`process.env`), never in project/`localStorage`/manifest |
 | Separate BYOK AI assistant (OpenAI-compatible providers) | ✅ VERIFIED | For queries about current board |
@@ -152,8 +152,10 @@ reasoning-чаты не вешают интерфейс), с отменой. М�
   музыкальная подложка с auto-ducking под голос.
 
 ### Рендер
-Детерминированный FFmpeg → H.264/AAC MP4 (1920×1080 и 1080×1920), SRT, обложки, `storyboard.json`,
-manifest с хешами/провенансом и SHA-256 sidecar. Каждый рендер идёт в приватный каталог под
+Детерминированный FFmpeg → H.264/AAC MP4 (1920×1080 и 1080×1920), SRT, обложка `<рецепт>.cover.png`,
+`storyboard.json`, manifest с хешами/провенансом и SHA-256 sidecar. Обложка режется из готового
+мастера в момент, когда первая сцена уже собралась (иначе в кадр попадают недолетевшие элементы),
+и проверяется по собственному PNG-заголовку: заявленный размер обязан совпасть с рецептом. Каждый рендер идёт в приватный каталог под
 физическим `/tmp`. Worker намеренно отсутствует на публичном Vercel и ничего не публикует.
 
 ### BYOK и настройки

@@ -55,8 +55,29 @@ visual acquisition per scene (see Visuals)  →  scene frames (Chromium composer
 ffmpeg render (safe argv, no shell)  →  <recipeId>.mp4  (H.264 / AAC)
    │
    ▼
-loudness measure + ffprobe  →  buildRenderManifest(...)  →  verified artifacts
+loudness measure + ffprobe  →  cover frame (<recipeId>.cover.png)
+   │
+   ▼
+buildRenderManifest(...)  →  verified artifacts
 ```
+
+## Cover frame (`resolveCoverFrameSeconds`, `src/domain/cover-frame.js`)
+
+The cover is cut from the **finished master**, never composed separately: a
+thumbnail that is not a frame of the shipped video is a lie about the video.
+
+The moment is deterministic and belongs to the domain, not to ffmpeg. Archetype
+scenes assemble themselves on screen — staggered entrances finish around 2.65 s
+in — so the middle of a five-second opening scene would catch the movement
+mid-flight. The rule is therefore *the later of the scene middle and the settle
+point*, clamped inside the scene and inside the clip; a scene too short to settle
+yields its latest frame instead of its middle.
+
+Validation does not go through `probeMediaFile`: ffprobe reports no duration for
+a single still and fails on it. The PNG header is self-sufficient — signature
+plus IHDR prove both the format and the frame size, and the size must equal the
+recipe. The publish pack requires the cover: a candidate without it is sealed but
+cannot be approved (`cover_frame_artifact_missing`).
 
 ## TTS / narration (`selectNarrationAdapter`, `src/media/narration.js`)
 

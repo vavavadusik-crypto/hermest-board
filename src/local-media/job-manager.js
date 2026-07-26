@@ -331,9 +331,17 @@ function buildVerifiedRenderEvidence(record, result) {
   if (manifestArtifact.name !== expectedManifestName || manifestArtifact.type !== "application/json") {
     throw new TypeError("Render manifest evidence mismatch");
   }
+  const expectedCoverName = `${recipe.id}.cover.png`;
   const videoArtifact = artifacts.find(artifact => artifact.name === expectedVideoName);
   if (!videoArtifact || videoArtifact.type !== "video/mp4") {
     throw new TypeError("Verified render video evidence is missing");
+  }
+  // Обложка — такой же обязательный выход рендера, как мастер: она уходит в
+  // publish-пак, поэтому её байты и хеш обязаны проверяться на диске наравне
+  // с видео, а не приниматься на слово.
+  const coverArtifact = artifacts.find(artifact => artifact.name === expectedCoverName);
+  if (!coverArtifact || coverArtifact.type !== "image/png") {
+    throw new TypeError("Verified render cover frame evidence is missing");
   }
   return {
     recipe: {

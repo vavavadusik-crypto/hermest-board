@@ -30,6 +30,8 @@ const REAL_MANIFEST_FIXTURE = path.resolve("test/fixtures/youtube-16x9-1080p.rea
 // test/fixtures/youtube-16x9-1080p.real.manifest.json): tts в tools,
 // loudness в qc, probe.scenes у storyboard.json, у mp4 —
 // probe.durationSeconds и вложенный probe.video.{width,height}.
+const COVER_BYTES = 182_400;
+
 function fullManifestFixture() {
   return {
     schemaVersion: 1,
@@ -101,6 +103,13 @@ function fullManifestFixture() {
           audio: { channels: 2, codec: "aac", sampleRate: 48000 },
           video: { codec: "h264", width: 1920, height: 1080 }
         }
+      },
+      {
+        name: "youtube-16x9-1080p.cover.png",
+        type: "image/png",
+        bytes: COVER_BYTES,
+        sha256: "f".repeat(64),
+        probe: { width: 1920, height: 1080, atSeconds: 1.25 }
       }
     ]
   };
@@ -119,8 +128,8 @@ function fullAnalyticsExpectation() {
     sceneCount: 6,
     footageCount: 2,
     musicUsed: true,
-    artifactCount: 6,
-    totalBytes: 1400 + 4032044 + 512 + 9_100_000,
+    artifactCount: 7,
+    totalBytes: 1400 + 4032044 + 512 + 9_100_000 + COVER_BYTES,
     videoBytes: 9_100_000,
     videoSha256: "a".repeat(64),
     videoName: "youtube-16x9-1080p.mp4",

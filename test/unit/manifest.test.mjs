@@ -328,6 +328,76 @@ test("render manifest fails closed on a malformed loudness report", () => {
   );
 });
 
+const validCoverFrameCommand = {
+  id: "cover-frame",
+  tool: "ffmpeg",
+  argv: [
+    "-hide_banner", "-loglevel", "error", "-n",
+    "-ss", "2.500",
+    "-i", "/tmp/private-run/youtube-16x9-1080p.mp4",
+    "-frames:v", "1",
+    "-update", "1",
+    "-vf", "scale=1920:1080",
+    "-c:v", "png",
+    "/tmp/private-run/youtube-16x9-1080p.cover.partial.png"
+  ]
+};
+
+test("render manifest accepts cover frame command evidence and redacts its run paths", () => {
+  const manifest = build({
+    commands: [validTtsCommand, validRenderCommand, validCoverFrameCommand]
+  });
+  const coverFrame = manifest.commands.find(command => command.id === "cover-frame");
+
+  assert.equal(coverFrame.tool, "ffmpeg");
+  assert.equal(coverFrame.argv.at(-1), "<run>/youtube-16x9-1080p.cover.partial.png");
+  assert.equal(coverFrame.argv[coverFrame.argv.indexOf("-i") + 1], "<run>/youtube-16x9-1080p.mp4");
+  // Быстрый seek обязан остаться перед входом: иначе обложка снималась бы
+  // декодированием всего ролика, а манифест утверждал бы обратное.
+  assert.ok(coverFrame.argv.indexOf("-ss") < coverFrame.argv.indexOf("-i"));
+});
+
+test("render manifest rejects cover frame argv that leaves the single-PNG contract", () => {
+  const rejected = {
+    "slow seek after the input": [
+      "-hide_banner", "-loglevel", "error", "-n",
+      "-i", "/tmp/private-run/youtube-16x9-1080p.mp4",
+      "-ss", "2.500",
+      "-frames:v", "1", "-update", "1",
+      "-vf", "scale=1920:1080", "-c:v", "png",
+      "/tmp/private-run/cover.partial.png"
+    ],
+    "more than one frame": validCoverFrameCommand.argv.map(arg => (arg === "1" ? "120" : arg)),
+    "overwrite instead of -n": validCoverFrameCommand.argv.map(arg => (arg === "-n" ? "-y" : arg)),
+    "non-PNG output": validCoverFrameCommand.argv.map(arg =>
+      arg.endsWith(".cover.partial.png") ? "/tmp/private-run/cover.partial.webp" : arg
+    ),
+    "input outside the render contract": validCoverFrameCommand.argv.map(arg =>
+      arg.endsWith(".mp4") ? "/tmp/private-run/master.mkv" : arg
+    ),
+    "unsafe output path": validCoverFrameCommand.argv.map(arg =>
+      arg.endsWith(".cover.partial.png") ? "/tmp/private-run/../cover.png" : arg
+    ),
+    "unbounded seek precision": validCoverFrameCommand.argv.map(arg => (arg === "2.500" ? "2.5" : arg)),
+    "filter beyond a plain rescale": validCoverFrameCommand.argv.map(arg =>
+      arg === "scale=1920:1080" ? "scale=1920:1080,drawtext=text=x" : arg
+    ),
+    "trailing argument": [...validCoverFrameCommand.argv, "--extra"]
+  };
+
+  for (const [label, argv] of Object.entries(rejected)) {
+    assert.throws(
+      () => build({ commands: [validTtsCommand, validRenderCommand, { ...validCoverFrameCommand, argv }] }),
+      /Command argv schema mismatch/,
+      `cover frame argv with ${label} must be rejected`
+    );
+  }
+  assert.throws(
+    () => build({ commands: [{ ...validCoverFrameCommand, tool: "piper" }] }),
+    /Unsupported command evidence/
+  );
+});
+
 test("render manifest accepts Piper narration command evidence", () => {
   const manifest = build({ commands: [validPiperCommand, validRenderCommand] });
   const ttsCommand = manifest.commands.find(command => command.tool === "piper");

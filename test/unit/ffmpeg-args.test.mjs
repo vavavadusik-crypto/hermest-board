@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildCoverFrameArgs,
   buildFliteAudioArgs,
   buildNarrationCanonicalizeArgs,
   buildVideoRenderArgs,
@@ -129,6 +130,76 @@ test("video args map a generated color stream and narration to H.264/AAC MP4", (
   assert.ok(args.includes("aac"));
   assert.equal(args[args.indexOf("-af") + 1], "loudnorm=I=-16:TP=-1.5:LRA=11");
   assert.equal(args.at(-1), "/tmp/hermest-board-run/youtube_video.mp4");
+});
+
+test("cover frame args seek before the input and write a single PNG at recipe size", () => {
+  const args = buildCoverFrameArgs({
+    inputFile: "/tmp/hermest-board-run/youtube-16x9-1080p.mp4",
+    outputFile: "/tmp/hermest-board-run/youtube-16x9-1080p.cover.partial.png",
+    atSeconds: 2.5,
+    width: 1920,
+    height: 1080
+  });
+
+  assert.deepEqual(args, [
+    "-hide_banner", "-loglevel", "error", "-n",
+    "-ss", "2.500",
+    "-i", "/tmp/hermest-board-run/youtube-16x9-1080p.mp4",
+    "-frames:v", "1",
+    "-update", "1",
+    "-vf", "scale=1920:1080",
+    "-c:v", "png",
+    "/tmp/hermest-board-run/youtube-16x9-1080p.cover.partial.png"
+  ]);
+  // Быстрый seek — это `-ss` ДО `-i`; обратный порядок декодировал бы весь
+  // ролик до нужной точки.
+  assert.ok(args.indexOf("-ss") < args.indexOf("-i"));
+  assert.ok(args.includes("-n"));
+  assert.equal(args.includes("-y"), false);
+  // Время форматируется фиксированно, как `d=5.500` в остальных билдерах.
+  const verticalArgs = buildCoverFrameArgs({
+    inputFile: "/tmp/run/master.mp4",
+    outputFile: "/tmp/run/master.cover.png",
+    atSeconds: 1 / 3,
+    width: 1080,
+    height: 1920
+  });
+  assert.equal(verticalArgs[verticalArgs.indexOf("-ss") + 1], "0.333");
+  assert.equal(verticalArgs[verticalArgs.indexOf("-vf") + 1], "scale=1080:1920");
+});
+
+test("cover frame args reject unsafe paths and impossible frame geometry", () => {
+  const valid = {
+    inputFile: "/tmp/hermest-board-run/master.mp4",
+    outputFile: "/tmp/hermest-board-run/master.cover.png",
+    atSeconds: 1.25,
+    width: 1920,
+    height: 1080
+  };
+
+  assert.throws(
+    () => buildCoverFrameArgs({ ...valid, inputFile: "/tmp/run/master.mp4:evil=1" }),
+    /safe generated path/
+  );
+  assert.throws(
+    () => buildCoverFrameArgs({ ...valid, inputFile: "/tmp/run/../../etc/passwd" }),
+    /safe generated path/
+  );
+  assert.throws(
+    () => buildCoverFrameArgs({ ...valid, outputFile: "relative/cover.png" }),
+    /safe generated path/
+  );
+  assert.throws(
+    () => buildCoverFrameArgs({ ...valid, outputFile: "/tmp/run/$(touch pwned).png" }),
+    /safe generated path/
+  );
+  for (const atSeconds of [-0.001, 21600.5, Number.NaN, Number.POSITIVE_INFINITY, "soon"]) {
+    assert.throws(() => buildCoverFrameArgs({ ...valid, atSeconds }), /atSeconds must be within/);
+  }
+  for (const size of [0, -1080, 10.5, Number.NaN, "wide"]) {
+    assert.throws(() => buildCoverFrameArgs({ ...valid, width: size }), /width must be a positive integer/);
+    assert.throws(() => buildCoverFrameArgs({ ...valid, height: size }), /height must be a positive integer/);
+  }
 });
 
 test("ffmpeg args reject filter injection and unsupported voices", () => {

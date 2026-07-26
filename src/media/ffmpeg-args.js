@@ -59,6 +59,30 @@ export function buildNarrationCanonicalizeArgs({ inputFile, outputFile, polish =
   ];
 }
 
+// Обложка снимается из уже готового мастера, а не собирается повторно: кадр
+// обязан быть тем же, что видит зритель. `-ss` стоит ДО `-i` — так ffmpeg
+// перематывает по индексу контейнера и не декодирует весь ролик до нужной точки.
+export function buildCoverFrameArgs({ inputFile, outputFile, atSeconds, width, height }) {
+  const safeInputFile = assertSafeGeneratedPath(inputFile);
+  const safeOutputFile = assertSafeGeneratedPath(outputFile);
+  const frameWidth = positiveInteger(width, "width");
+  const frameHeight = positiveInteger(height, "height");
+  const seekSeconds = Number(atSeconds);
+  if (!Number.isFinite(seekSeconds) || seekSeconds < 0 || seekSeconds > 21600) {
+    throw new RangeError("atSeconds must be within 0..21600");
+  }
+  return [
+    "-hide_banner", "-loglevel", "error", "-n",
+    "-ss", seekSeconds.toFixed(3),
+    "-i", safeInputFile,
+    "-frames:v", "1",
+    "-update", "1",
+    "-vf", `scale=${frameWidth}:${frameHeight}`,
+    "-c:v", "png",
+    safeOutputFile
+  ];
+}
+
 export function buildVideoRenderArgs({
   audioFile,
   subtitleFile,
