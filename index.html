@@ -534,7 +534,15 @@
       padding-left: 9px;
     }
 
-    .command-warning[hidden] { display: none; }
+    .command-notice {
+      margin: 6px 0 0;
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--warn);
+    }
+
+    .command-warning[hidden],
+    .command-notice[hidden] { display: none; }
 
     .command-status {
       margin-top: 8px;
@@ -1230,6 +1238,7 @@
       </form>
 
       <p class="command-hint" id="durationHint" data-status="unset">Выбери длительность — система сама рассчитает число сцен и объём текста.</p>
+      <p class="command-notice" id="durationNotice" role="status" aria-live="polite" hidden></p>
       <p class="command-warning" id="durationWarning" role="alert" hidden></p>
       <div class="command-status" id="wizardStatus" role="status" aria-live="polite">Готово. Введи тему и нажми «Собрать видео».</div>
       <span class="job-elapsed" id="wizardElapsed" aria-hidden="true" hidden></span>

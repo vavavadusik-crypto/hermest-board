@@ -43,6 +43,7 @@ test("every command-bar control has a name and the status is announced", () => {
   assert.match(html, /<label class="visually-hidden" for="durationValue">/);
   assert.match(html, /id="wizardStatus"[^>]*role="status"[^>]*aria-live="polite"/);
   assert.match(html, /id="durationWarning"[^>]*role="alert"/);
+  assert.match(html, /id="durationNotice"[^>]*role="status"[^>]*aria-live="polite"/);
   // Видимый фокус для клавиатурного прохода по строке.
   assert.match(html, /\.topbar :focus-visible,[\s\S]{0,80}outline: 2px solid var\(--accent\)/);
 });
@@ -87,7 +88,15 @@ test("the hint and the planner warning are rendered as text, never as markup", (
   assert.doesNotMatch(app, /durationWarning\.innerHTML/);
   assert.doesNotMatch(app, /wizardStatus\.innerHTML/);
   // Тема и набранная длительность — внешний ввод: только textContent.
-  assert.match(app, /wizardStatus\.textContent = `Не понял «\$\{String\(typed\)\.slice\(0, 24\)\}»/);
+  assert.match(app, /showDurationNotice\(`Не понял «\$\{String\(typed\)\.slice\(0, 24\)\}»/);
+  assert.doesNotMatch(app, /durationNotice\.innerHTML/);
+});
+
+test("a note about typing clears itself instead of outliving the input", () => {
+  assert.match(app, /durationNotice\.hidden = !text;/);
+  // Корректный ввод и движение ползунка гасят прошлое замечание.
+  assert.match(app, /showDurationNotice\(result\.clamped[\s\S]{0,220}: ""\);/);
+  assert.match(app, /removeAttribute\("aria-invalid"\);\s*\n\s*\/\/[^\n]*\n\s*showDurationNotice\(""\);/);
 });
 
 test("the side panel is positioned from the measured bar height", () => {

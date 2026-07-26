@@ -121,6 +121,7 @@ import {
     const durationValueInput = document.getElementById("durationValue");
     const durationHint = document.getElementById("durationHint");
     const durationWarning = document.getElementById("durationWarning");
+    const durationNotice = document.getElementById("durationNotice");
     const durationQuick = document.getElementById("durationQuick");
     const durationMarks = document.getElementById("durationMarks");
     const sceneCountHint = document.getElementById("sceneCountHint");
@@ -1171,6 +1172,8 @@ import {
       if (syncTextField) {
         durationValueInput.value = label;
         durationValueInput.removeAttribute("aria-invalid");
+        // Значение пришло не из набора — прошлое замечание о наборе устарело.
+        showDurationNotice("");
       }
       for (const button of durationQuick.querySelectorAll("button")) {
         button.setAttribute("aria-pressed", String(Number(button.dataset.seconds) === value));
@@ -1269,6 +1272,13 @@ import {
       durationWarning.hidden = false;
     }
 
+    // Замечание о наборе живёт отдельно от статуса сборки: иначе «поправил на
+    // 1:00:00» висело бы поверх хода задачи и после исправленного ввода.
+    function showDurationNotice(text) {
+      durationNotice.textContent = text || "";
+      durationNotice.hidden = !text;
+    }
+
     function commitTypedDuration() {
       const typed = durationValueInput.value;
       const result = resolveTypedDuration(typed, targetDurationSeconds);
@@ -1277,13 +1287,13 @@ import {
       if (!result.accepted) {
         durationValueInput.setAttribute("aria-invalid", "true");
         // Ввод пользователя показываем только через textContent и обрезанным.
-        wizardStatus.textContent = `Не понял «${String(typed).slice(0, 24)}» — оставил ${result.label}. Формат: минуты:секунды, например 2:35.`;
+        showDurationNotice(`Не понял «${String(typed).slice(0, 24)}» — оставил ${result.label}. Формат: минуты:секунды, например 2:35.`);
         return;
       }
       durationValueInput.removeAttribute("aria-invalid");
-      if (result.clamped) {
-        wizardStatus.textContent = `Ближайшая доступная длительность — ${result.label} (диапазон ${formatDurationLabel(DURATION_PLAN_LIMITS.minTargetSeconds)} … ${formatDurationLabel(DURATION_PLAN_LIMITS.maxTargetSeconds)}).`;
-      }
+      showDurationNotice(result.clamped
+        ? `Ближайшая доступная длительность — ${result.label} (диапазон ${formatDurationLabel(DURATION_PLAN_LIMITS.minTargetSeconds)} … ${formatDurationLabel(DURATION_PLAN_LIMITS.maxTargetSeconds)}).`
+        : "");
     }
 
     durationSlider.addEventListener("input", () => {
