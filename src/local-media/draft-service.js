@@ -4,6 +4,7 @@
 
 import { draftBoardFromTopic } from "../domain/ai-director.js";
 import { deriveSceneCountFromDuration, normalizeTargetDurationSeconds } from "../domain/duration-plan.js";
+import { createCliTextModel } from "../media/cli-text-model.js";
 import { createOpenAiTextModel } from "../media/openai-text-model.js";
 import { searchResearchSources } from "../media/research-sources.js";
 import { createBridgeTextModel, describeBridgeAvailability } from "../media/text-model.js";
@@ -38,9 +39,10 @@ export async function draftBoardService({
     : deriveSceneCountFromDuration(targetDuration, { minScenes: MIN_SCENES, maxScenes: MAX_SCENES }).sceneCount;
   const scenes = clampSceneCount(sceneCount ?? derivedScenes);
 
-  // Прямой OpenAI-совместимый провайдер не зависит от браузерного моста:
-  // проверять мост в этом режиме значит блокировать драфт без причины.
-  if (!isOpenAiEndpoint(endpoint)) {
+  // Прямой OpenAI-совместимый провайдер и локальный CLI не зависят от
+  // браузерного моста: проверять мост в этих режимах значит блокировать
+  // драфт без причины.
+  if (!isOpenAiEndpoint(endpoint) && !isCliEndpoint(endpoint)) {
     const availability = await (availabilityCheck || describeBridgeAvailability)();
     if (availability?.status !== "executable") {
       const reason = availability?.reason || "text model bridge is not available";
@@ -82,11 +84,24 @@ function isOpenAiEndpoint(endpoint) {
   return endpoint?.kind === "openai";
 }
 
-function createDraftTextModel({ endpoint, model }) {
+function isCliEndpoint(endpoint) {
+  return endpoint?.kind === "cli";
+}
+
+export function createDraftTextModel({ endpoint, model }) {
   if (isOpenAiEndpoint(endpoint)) {
     return createOpenAiTextModel({
       baseUrl: endpoint.baseUrl,
       apiKey: endpoint.apiKey,
+      model: endpoint.model || model
+    });
+  }
+  // Из запроса приходят только id пресета и имя модели: сама команда живёт в
+  // замороженной таблице CLI_MODEL_PRESETS, поля command/args из запроса
+  // фабрика намеренно не читает.
+  if (isCliEndpoint(endpoint)) {
+    return createCliTextModel({
+      preset: endpoint.preset,
       model: endpoint.model || model
     });
   }

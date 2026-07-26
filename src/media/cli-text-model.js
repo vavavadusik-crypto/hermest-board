@@ -1,0 +1,426 @@
+// Text-модель поверх CLI уже установленного у пользователя агента: claude,
+// ollama, codex, gemini. Ключей нет — «ключом» служит логин самого CLI, то есть
+// подписка пользователя. Промпт уходит в stdin, ответ читается из stdout.
+//
+// Главный инвариант: команда НИКОГДА не приходит из тела HTTP-запроса. Из
+// запроса приходит только id пресета и имя модели; сама команда живёт в
+// замороженной таблице ниже либо в env самохостера. Иначе это была бы RCE.
+
+import { spawn } from "node:child_process";
+import { access, constants } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+import { sanitizeError } from "./error-sanitizer.js";
+
+const MAX_STDOUT_BYTES = 1024 * 1024;
+const MAX_STDERR_CAPTURE_BYTES = 8 * 1024;
+const MAX_STDERR_SUMMARY_CHARS = 200;
+const DEFAULT_TIMEOUT_MS = 300000;
+const MAX_TIMEOUT_MS = 30 * 60 * 1000;
+const KILL_GRACE_MS = 2000;
+const MAX_CUSTOM_ARGS = 32;
+const MAX_CUSTOM_ARG_CHARS = 256;
+
+const MODEL_PATTERN = /^[A-Za-z0-9._:\/-]{1,128}$/u;
+// Простое имя резолвится по PATH, абсолютный путь берётся как есть; всё
+// остальное (пробелы, `;`, `$`, кавычки) отсекается до spawn.
+const COMMAND_NAME_PATTERN = /^[A-Za-z0-9._-]{1,64}$/u;
+const SAFE_ABSOLUTE_PATH = /^\/[A-Za-z0-9_./-]{1,512}$/u;
+const CONTROL_CHARS_PATTERN = /[\x00-\x1f\x7f]/u;
+// Управляющие последовательности терминала вычищаются из ответа: stdout
+// недоверенный и уезжает в UI, где ANSI — это подмена того, что видит человек.
+const ANSI_PATTERN = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]/gu;
+const MODEL_PLACEHOLDER = "{model}";
+
+// Дочернему процессу отдаётся не всё окружение сервера, а минимум: HOME (там
+// живёт логин CLI — ради него всё и затевалось), PATH и локаль. Ключи
+// провайдеров сюда намеренно не попадают — CLI авторизуется своим конфигом.
+const INHERITED_ENV_KEYS = Object.freeze([
+  "HOME",
+  "PATH",
+  "LANG",
+  "LC_ALL",
+  "LOGNAME",
+  "USER",
+  "TMPDIR",
+  "XDG_CACHE_HOME",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_HOME",
+  "CODEX_HOME",
+  "OLLAMA_HOST"
+]);
+
+export const CLI_MODEL_PRESETS = Object.freeze({
+  claude: Object.freeze({
+    id: "claude",
+    label: "Claude Code CLI",
+    command: "claude",
+    // `--tools ""` запрещает агенту трогать файлы, `--safe-mode` выключает
+    // CLAUDE.md, навыки, хуки и MCP: нужен ответ модели, а не работа агента.
+    buildArgs: model => withModelFlag(["-p", "--output-format", "text", "--safe-mode", "--tools", ""], "--model", model),
+    defaultModel: "sonnet",
+    promptVia: "stdin",
+    notes: "Проверено на claude 2.1.220: `printf ... | claude -p --output-format text --safe-mode --tools \"\"` вернул чистый stdout, лог и спиннер ушли в stderr. Без --model берётся модель, выбранная в самом CLI."
+  }),
+  ollama: Object.freeze({
+    id: "ollama",
+    label: "Ollama (локально)",
+    command: "ollama",
+    // Модель у ollama — обязательный позиционный аргумент, дефолта у CLI нет.
+    buildArgs: model => {
+      if (!model) throw new RangeError("ollama preset requires an explicit model");
+      return ["run", "--hidethinking", "--nowordwrap", model];
+    },
+    defaultModel: "llama3.1:8b",
+    promptVia: "stdin",
+    notes: "Проверено на ollama 0.31.1 живой локальной моделью omnicoder-9b-65536ctx:latest: промпт из stdin, stdout чистый, спиннер в stderr. --hidethinking убирает блок размышлений reasoning-моделей. defaultModel — общепринятая подсказка, модель должна быть заранее скачана (`ollama pull`)."
+  }),
+  codex: Object.freeze({
+    id: "codex",
+    label: "OpenAI Codex CLI",
+    command: "codex",
+    // read-only sandbox + ephemeral: агент не пишет ни в рабочее дерево, ни в
+    // историю сессий, --color never держит stdout свободным от ANSI.
+    buildArgs: model => withModelFlag(
+      ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "--ephemeral", "--color", "never"],
+      "--model",
+      model
+    ),
+    defaultModel: "",
+    promptVia: "stdin",
+    notes: "Проверено на codex-cli 0.145.0: `codex exec` без позиционного промпта читает инструкции из stdin (документировано в --help и подтверждено прогоном), в stdout уходит только финальный ответ, служебный лог — в stderr. Пустой defaultModel означает «модель из ~/.codex/config.toml»."
+  }),
+  gemini: Object.freeze({
+    id: "gemini",
+    label: "Gemini CLI",
+    command: "gemini",
+    // `-p " "` — не промпт, а переключатель в headless: сам текст приходит из
+    // stdin, а -p дописывается к нему. Без --skip-trust CLI отказывается
+    // работать в недоверенной папке и печатает пустой stdout с кодом 0.
+    buildArgs: model => withModelFlag(
+      ["--skip-trust", "--approval-mode", "plan", "-o", "text", "-p", " "],
+      "--model",
+      model
+    ),
+    defaultModel: "",
+    promptVia: "stdin",
+    notes: "Проверено на gemini 0.51.0: с --skip-trust и промптом в stdin вернулся чистый stdout; --approval-mode plan держит агента в read-only. Пустой defaultModel означает «модель из конфига CLI»; --model gemini-2.5-flash проверен отдельно."
+  })
+});
+
+const CUSTOM_PRESET_ID = "custom";
+
+export function createCliTextModel({
+  preset = "claude",
+  model,
+  env = process.env,
+  spawnImpl = spawn,
+  timeoutMs = DEFAULT_TIMEOUT_MS
+} = {}) {
+  const descriptor = resolveDescriptor(preset, env);
+  const resolvedModel = resolveModel(model, descriptor.defaultModel);
+  const args = descriptor.buildArgs(resolvedModel);
+  assertArgv(args);
+  const executionTimeoutMs = normalizeTimeout(timeoutMs);
+
+  return {
+    provider: `cli:${descriptor.id}`,
+    model: resolvedModel,
+    async complete({ system, prompt, signal, temperature } = {}) {
+      const text = String(prompt ?? "").trim();
+      if (!text) throw new RangeError("Text model prompt is required");
+      // temperature принимается ради единого контракта с HTTP-адаптерами, но
+      // ни один из проверенных CLI не отдаёт сэмплинг наружу флагом. Выдумывать
+      // несуществующий флаг опаснее, чем честно проигнорировать параметр:
+      // вызывающий код (детерминированный перевод изданий) от этого не ломается,
+      // он лишь теряет гарантию нулевой температуры.
+      void temperature;
+      const stdinText = system ? `${String(system).trim()}\n\n${text}` : text;
+
+      const stdout = await runCliCompletion({
+        command: descriptor.command,
+        args,
+        stdinText,
+        env: buildChildEnv(env),
+        spawnImpl,
+        timeoutMs: executionTimeoutMs,
+        signal,
+        label: descriptor.id
+      });
+
+      const content = stripTerminalControl(stdout).trim();
+      if (!content) throw new RangeError(`${descriptor.id} CLI returned an empty completion`);
+      return content;
+    }
+  };
+}
+
+export async function describeCliModelAvailability({ env = process.env, accessImpl = accessExecutable } = {}) {
+  const descriptors = [];
+  for (const preset of Object.values(CLI_MODEL_PRESETS)) descriptors.push({ descriptor: preset, error: null });
+  if (hasCustomCommand(env)) {
+    try {
+      descriptors.push({ descriptor: buildCustomDescriptor(env), error: null });
+    } catch (error) {
+      descriptors.push({ descriptor: null, error, id: CUSTOM_PRESET_ID });
+    }
+  }
+
+  const report = [];
+  for (const entry of descriptors) {
+    if (!entry.descriptor) {
+      report.push({
+        id: entry.id,
+        label: "Custom CLI",
+        status: "missing",
+        command: "",
+        reason: entry.error.message
+      });
+      continue;
+    }
+    const { id, label, command } = entry.descriptor;
+    const executable = await isExecutable(command, env, accessImpl);
+    report.push({
+      id,
+      label,
+      status: executable ? "executable" : "missing",
+      command,
+      reason: executable ? "" : `${command} is not installed or not on PATH`
+    });
+  }
+  return report;
+}
+
+function resolveDescriptor(preset, env) {
+  const id = typeof preset === "string" ? preset.trim() : "";
+  if (!id) throw new RangeError("cli preset is required");
+  if (id === CUSTOM_PRESET_ID) return buildCustomDescriptor(env);
+  const descriptor = Object.prototype.hasOwnProperty.call(CLI_MODEL_PRESETS, id)
+    ? CLI_MODEL_PRESETS[id]
+    : null;
+  if (!descriptor) throw new RangeError(`unknown cli preset: ${id.slice(0, 32)}`);
+  return descriptor;
+}
+
+// Единственная точка, где команда приходит извне таблицы. Это env самохостера,
+// а не HTTP-запрос: значение читается из process.env при старте процесса.
+function buildCustomDescriptor(env) {
+  const command = normalizeCommand(env.HERMEST_CLI_MODEL_COMMAND);
+  const rawArgs = typeof env.HERMEST_CLI_MODEL_ARGS === "string" ? env.HERMEST_CLI_MODEL_ARGS : "";
+  // Разбор без shell: только разрезание по пробелам. Кавычки, подстановки и
+  // операторы не интерпретируются — аргумент с пробелом задать нельзя, и это
+  // намеренно: любая попытка «как в shell» здесь превращается в инъекцию.
+  const templateArgs = rawArgs.split(/\s+/u).filter(Boolean);
+  if (templateArgs.length > MAX_CUSTOM_ARGS) {
+    throw new RangeError(`HERMEST_CLI_MODEL_ARGS must hold at most ${MAX_CUSTOM_ARGS} arguments`);
+  }
+  for (const value of templateArgs) {
+    if (value.length > MAX_CUSTOM_ARG_CHARS) {
+      throw new RangeError(`HERMEST_CLI_MODEL_ARGS holds an argument longer than ${MAX_CUSTOM_ARG_CHARS} characters`);
+    }
+  }
+  const defaultModel = typeof env.HERMEST_CLI_MODEL_NAME === "string" ? env.HERMEST_CLI_MODEL_NAME.trim() : "";
+
+  return Object.freeze({
+    id: CUSTOM_PRESET_ID,
+    label: "Custom CLI",
+    command,
+    buildArgs: model => templateArgs.map(value => (value === MODEL_PLACEHOLDER ? model : value)),
+    defaultModel,
+    promptVia: "stdin",
+    notes: "Команда самохостера из HERMEST_CLI_MODEL_COMMAND/HERMEST_CLI_MODEL_ARGS. Промпт всегда идёт в stdin; {model} в аргументах заменяется на валидированное имя модели."
+  });
+}
+
+function hasCustomCommand(env) {
+  return typeof env.HERMEST_CLI_MODEL_COMMAND === "string" && env.HERMEST_CLI_MODEL_COMMAND.trim() !== "";
+}
+
+function normalizeCommand(value) {
+  const command = typeof value === "string" ? value.trim() : "";
+  if (!command) throw new RangeError("HERMEST_CLI_MODEL_COMMAND is required for the custom preset");
+  if (command.startsWith("/")) {
+    if (!SAFE_ABSOLUTE_PATH.test(command)) {
+      throw new RangeError("HERMEST_CLI_MODEL_COMMAND must be a safe absolute path");
+    }
+    return command;
+  }
+  if (!COMMAND_NAME_PATTERN.test(command)) {
+    throw new RangeError("HERMEST_CLI_MODEL_COMMAND must be a bare binary name or an absolute path");
+  }
+  return command;
+}
+
+function resolveModel(value, defaultModel) {
+  const requested = typeof value === "string" ? value.trim() : "";
+  const model = requested || defaultModel;
+  if (!model) return "";
+  if (!MODEL_PATTERN.test(model)) throw new RangeError("invalid cli model name");
+  return model;
+}
+
+function withModelFlag(args, flag, model) {
+  return model ? [...args, flag, model] : [...args];
+}
+
+function assertArgv(args) {
+  if (!Array.isArray(args) || args.some(value => typeof value !== "string")) {
+    throw new TypeError("cli model arguments must be a string array");
+  }
+  if (args.some(value => CONTROL_CHARS_PATTERN.test(value))) {
+    throw new RangeError("cli model arguments must not contain control characters");
+  }
+}
+
+function normalizeTimeout(value) {
+  if (!Number.isSafeInteger(value) || value <= 0 || value > MAX_TIMEOUT_MS) {
+    throw new RangeError(`cli model timeout must be within 1..${MAX_TIMEOUT_MS}ms`);
+  }
+  return value;
+}
+
+function buildChildEnv(env) {
+  const childEnv = {};
+  for (const key of INHERITED_ENV_KEYS) {
+    const value = env[key];
+    if (typeof value === "string" && value !== "") childEnv[key] = value;
+  }
+  if (!childEnv.PATH) childEnv.PATH = "/usr/local/bin:/usr/bin:/bin";
+  childEnv.NO_COLOR = "1";
+  return childEnv;
+}
+
+function runCliCompletion({ command, args, stdinText, env, spawnImpl, timeoutMs, signal, label }) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error(`${label} CLI completion aborted`));
+      return;
+    }
+
+    let child;
+    try {
+      child = spawnImpl(command, args, {
+        // shell: false — argv уходит в execve как массив, строка команды нигде
+        // не собирается, поэтому метасимволы в имени модели ничего не значат.
+        shell: false,
+        stdio: ["pipe", "pipe", "pipe"],
+        cwd: os.tmpdir(),
+        env
+      });
+    } catch (error) {
+      reject(new Error(`${label} CLI failed to start: ${summarizeDiagnostics(error?.message)}`));
+      return;
+    }
+
+    const stdoutChunks = [];
+    let stdoutBytes = 0;
+    const stderrChunks = [];
+    let stderrBytes = 0;
+    let settled = false;
+    let terminationError = null;
+    let killTimer = null;
+
+    const requestTermination = error => {
+      if (terminationError || settled) return;
+      terminationError = error;
+      child.kill("SIGTERM");
+      killTimer = setTimeout(() => {
+        if (!settled) child.kill("SIGKILL");
+      }, KILL_GRACE_MS);
+    };
+
+    // Промпт всегда в stdin: в argv он был бы виден в `ps` любому процессу и
+    // упёрся бы в ARG_MAX на длинных сценариях.
+    child.stdin.on("error", () => {});
+    child.stdin.end(stdinText);
+
+    child.stdout.on("data", chunk => {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), "utf8");
+      stdoutBytes += buffer.length;
+      if (stdoutBytes > MAX_STDOUT_BYTES) {
+        requestTermination(new RangeError(`${label} CLI output exceeds the allowed size`));
+        return;
+      }
+      stdoutChunks.push(buffer);
+    });
+    child.stderr.on("data", chunk => {
+      if (stderrBytes >= MAX_STDERR_CAPTURE_BYTES) return;
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), "utf8");
+      stderrBytes += buffer.length;
+      stderrChunks.push(buffer);
+    });
+
+    const abortHandler = () => requestTermination(new Error(`${label} CLI completion aborted`));
+    if (signal) signal.addEventListener("abort", abortHandler, { once: true });
+    const timer = setTimeout(() => {
+      requestTermination(new Error(`${label} CLI timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    const settle = callback => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+      if (signal) signal.removeEventListener("abort", abortHandler);
+      callback();
+    };
+
+    child.on("error", error => settle(() => reject(
+      new Error(`${label} CLI failed to start: ${summarizeDiagnostics(error?.message)}`)
+    )));
+    child.on("close", code => settle(() => {
+      if (terminationError) {
+        reject(terminationError);
+        return;
+      }
+      if (code !== 0) {
+        // Наружу уходит код возврата и короткая обезличенная выжимка: сырой
+        // stderr CLI-агента может нести пути, куски конфига и токены.
+        const summary = summarizeDiagnostics(Buffer.concat(stderrChunks).toString("utf8"));
+        reject(new Error(`${label} CLI exited with code ${code}${summary ? `: ${summary}` : ""}`));
+        return;
+      }
+      resolve(Buffer.concat(stdoutChunks).toString("utf8"));
+    }));
+  });
+}
+
+function summarizeDiagnostics(raw) {
+  const text = typeof raw === "string" ? raw : "";
+  if (!text) return "";
+  return sanitizeError(text)
+    .replace(ANSI_PATTERN, " ")
+    .replace(/[A-Za-z]:\\[^\s"'<>]+/gu, "<path>")
+    .replace(/\/[^\s"'<>]+/gu, "<path>")
+    .replace(/[\x00-\x1f\x7f]/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, MAX_STDERR_SUMMARY_CHARS);
+}
+
+function stripTerminalControl(text) {
+  return text.replace(ANSI_PATTERN, "").replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/gu, "");
+}
+
+async function isExecutable(command, env, accessImpl) {
+  if (command.startsWith("/")) return probe(accessImpl, command);
+  const searchPath = typeof env.PATH === "string" ? env.PATH : "";
+  for (const directory of searchPath.split(path.delimiter).filter(Boolean)) {
+    if (await probe(accessImpl, path.join(directory, command))) return true;
+  }
+  return false;
+}
+
+async function probe(accessImpl, candidate) {
+  try {
+    await accessImpl(candidate);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function accessExecutable(candidate) {
+  return access(candidate, constants.X_OK);
+}
