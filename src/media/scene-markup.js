@@ -177,7 +177,7 @@ export function buildSceneMarkup({
   h1 { margin: 0 0 26px; font-size: ${heroFontSize}px; line-height: 1.12; }
   h1 .dot { color: ${THEME.accent}; }
   .lead { color: ${THEME.textMuted}; font-size: ${Math.round(heroFontSize * 0.42)}px; line-height: 1.4; margin: 0; }
-  .progress { position: absolute; left: 50%; transform: translateX(-50%); bottom: ${captionHeight + Math.round(safeHeight * 0.012)}px; display: flex; gap: 10px; }
+  .progress { position: absolute; left: 50%; transform: translateX(-50%); bottom: ${layout.progressBottom}px; display: flex; gap: 10px; }
   .caption-zone {
     position: absolute; left: 0; right: 0; bottom: 0; height: ${captionHeight}px;
     background: linear-gradient(180deg, rgba(4, 9, 18, 0), ${THEME.captionBar} 38%);

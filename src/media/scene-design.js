@@ -7,6 +7,8 @@
 // Практическое следствие: SVG-градиенты через fill="url(#id)" запрещены, все
 // градиенты — CSS-овые, все SVG-заливки сплошные.
 
+import { resolveSubtitleBand } from "./subtitle-band.js";
+
 export const THEME = Object.freeze({
   background: "#050b16",
   panel: "rgba(11, 21, 38, 0.82)",
@@ -79,10 +81,19 @@ function nonNegativeInset(value) {
   return Number.isFinite(number) && number > 0 ? Math.round(number) : 0;
 }
 
+// Высота точек прогресса в шелле: полоса субтитров, ряд точек и сцена стоят
+// друг над другом, поэтому шеллу нужна не только высота полосы.
+const PROGRESS_DOT_HEIGHT = 10;
+
 /**
  * Геометрия кадра. Отступы сцены — максимум из исторического процента и
  * safe zone рецепта: без рецепта раскладка ровно текущая, с рецептом 9:16
  * перестаёт нарушать боковую защитную зону (54px против требуемых 96).
+ *
+ * Низ кадра больше не резервируется «на глаз» (было `height * 0.16` плюс ещё
+ * 3%): `captionHeight` — измеренная высота выжигаемого субтитра из
+ * subtitle-band.js, то есть ровно то, что займёт ffmpeg. Ниже сцены помещаются
+ * ряд точек прогресса и сама полоса субтитров, и ничего не пересекается.
  */
 export function resolveSceneLayout({ width, height, safeZones } = {}) {
   const safeWidth = Number(width);
@@ -98,14 +109,28 @@ export function resolveSceneLayout({ width, height, safeZones } = {}) {
   };
   const isVertical = safeHeight > safeWidth;
   const unit = Math.max(1, Math.round(Math.min(safeWidth, safeHeight) / 100));
-  const captionHeight = Math.round(safeHeight * 0.16);
+  // Без рецепта safe.bottom нет — тогда строка всё равно не должна лежать на
+  // самой кромке, отсюда нижний порог в 5% высоты.
+  const subtitleMarginBottom = Math.max(safe.bottom, Math.round(safeHeight * 0.05));
+  const subtitle = resolveSubtitleBand({
+    width: safeWidth,
+    height: safeHeight,
+    marginBottom: subtitleMarginBottom
+  });
+  const captionHeight = subtitle.bandHeight;
   const barPadX = Math.max(Math.round(safeWidth * 0.04), safe.left, safe.right);
   const barPadY = Math.max(Math.round(safeHeight * 0.028), safe.top);
   const barHeight = Math.round(Math.min(safeWidth, safeHeight) * 0.039);
   const padLeft = Math.max(Math.round(safeWidth * 0.05), safe.left);
   const padRight = Math.max(Math.round(safeWidth * 0.05), safe.right);
   const padTop = Math.max(Math.round(safeHeight * 0.14), barPadY + barHeight + Math.round(safeHeight * 0.02));
-  const padBottom = Math.max(captionHeight + Math.round(safeHeight * 0.03), safe.bottom);
+  const progressGap = Math.max(1, Math.round(Math.min(safeWidth, safeHeight) * 0.012));
+  const progressBottom = captionHeight + progressGap;
+  const stageClearance = Math.max(1, Math.round(Math.min(safeWidth, safeHeight) * 0.012));
+  const padBottom = Math.max(
+    progressBottom + PROGRESS_DOT_HEIGHT + stageClearance,
+    safe.bottom
+  );
   return {
     width: safeWidth,
     height: safeHeight,
@@ -113,6 +138,8 @@ export function resolveSceneLayout({ width, height, safeZones } = {}) {
     unit,
     safe,
     captionHeight,
+    subtitle,
+    progressBottom,
     barPadX,
     barPadY,
     padLeft,

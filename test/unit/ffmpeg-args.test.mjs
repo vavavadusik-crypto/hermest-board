@@ -77,7 +77,10 @@ test("video args map a generated color stream and narration to H.264/AAC MP4", (
   assert.match(filter, /expansion=none/);
   assert.match(filter, /enable='between\(t,0\.000,2\.500\)'/);
   assert.match(filter, /subtitles=filename=\/tmp\/hermest-board-run\/narration\.srt/);
-  assert.match(filter, /MarginV=80/);
+  // MarginV/Fontsize — в единицах ASS-холста 384x288, а не в пикселях кадра:
+  // 80px от низа кадра 1080p = ceil(80 / (1080/288)) = 22 единицы.
+  assert.match(filter, /MarginV=22/);
+  assert.match(filter, /Fontsize=16/);
   assert.ok(args.includes("libx264"));
   assert.ok(args.includes("aac"));
   assert.equal(args[args.indexOf("-af") + 1], "loudnorm=I=-16:TP=-1.5:LRA=11");

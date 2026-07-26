@@ -1,5 +1,7 @@
 import path from "node:path";
 
+import { subtitleForceStyle } from "./subtitle-band.js";
+
 const FLITE_VOICES = new Set(["slt", "awb", "kal", "kal16", "rms"]);
 const VIDEO_CODECS = new Set(["libx264"]);
 const AUDIO_CODECS = new Set(["aac"]);
@@ -65,6 +67,16 @@ export function buildVideoRenderArgs({
   const sampleRate = positiveInteger(recipe?.audioSampleRate, "audioSampleRate");
   const audioChannels = positiveInteger(recipe?.audioChannels, "audioChannels");
   const subtitleMargin = positiveInteger(recipe?.safeZones?.bottom, "safeZones.bottom");
+  // MarginV/Fontsize задаются в единицах ASS-холста 384x288, а не в пикселях
+  // кадра — см. src/media/subtitle-band.js. Раньше сюда клался пиксельный
+  // отступ рецепта, и субтитр промахивался: в 16:9 вставал в 204px от низа
+  // вместо 54px, в 9:16 уезжал за кромку кадра целиком.
+  const subtitleStyle = subtitleForceStyle({
+    width,
+    height,
+    marginBottom: subtitleMargin,
+    maxLines: recipe?.subtitleLayout?.maxLines
+  });
   const loudnessTarget = Number(recipe?.loudnessTargetLufs);
   if (!Number.isFinite(loudnessTarget) || loudnessTarget < -70 || loudnessTarget > -5) {
     throw new RangeError("loudnessTargetLufs must be within -70..-5");
@@ -74,7 +86,7 @@ export function buildVideoRenderArgs({
     throw new RangeError(`durationSeconds exceeds recipe maximum ${recipeMaxDuration}`);
   }
   const colorSource = `color=c=0x111827:s=${width}x${height}:r=${fps}:d=${duration.toFixed(3)}`;
-  const subtitleFilter = `subtitles=filename=${safeSubtitleFile}:force_style='FontName=DejaVu Sans,Alignment=2,MarginV=${subtitleMargin}'`;
+  const subtitleFilter = `subtitles=filename=${safeSubtitleFile}:force_style='${subtitleStyle}'`;
   const titleFilters = sceneTitleFiles.map((scene, index) => {
     const titlePath = assertSafeGeneratedPath(scene?.path);
     const start = Number(scene?.startSeconds);
@@ -204,6 +216,16 @@ export function buildComposedVideoRenderArgs({
   const sampleRate = positiveInteger(recipe?.audioSampleRate, "audioSampleRate");
   const audioChannels = positiveInteger(recipe?.audioChannels, "audioChannels");
   const subtitleMargin = positiveInteger(recipe?.safeZones?.bottom, "safeZones.bottom");
+  // MarginV/Fontsize задаются в единицах ASS-холста 384x288, а не в пикселях
+  // кадра — см. src/media/subtitle-band.js. Раньше сюда клался пиксельный
+  // отступ рецепта, и субтитр промахивался: в 16:9 вставал в 204px от низа
+  // вместо 54px, в 9:16 уезжал за кромку кадра целиком.
+  const subtitleStyle = subtitleForceStyle({
+    width,
+    height,
+    marginBottom: subtitleMargin,
+    maxLines: recipe?.subtitleLayout?.maxLines
+  });
   const loudnessTarget = Number(recipe?.loudnessTargetLufs);
   if (!Number.isFinite(loudnessTarget) || loudnessTarget < -70 || loudnessTarget > -5) {
     throw new RangeError("loudnessTargetLufs must be within -70..-5");
@@ -302,7 +324,7 @@ export function buildComposedVideoRenderArgs({
     }
   }
   const concatLabels = sceneFrames.map((_frame, index) => `[v${index}]`).join("");
-  const subtitleFilter = `subtitles=filename=${safeSubtitleFile}:force_style='FontName=DejaVu Sans,Alignment=2,MarginV=${subtitleMargin}'`;
+  const subtitleFilter = `subtitles=filename=${safeSubtitleFile}:force_style='${subtitleStyle}'`;
   const narrationInput = inputIndex;
   const musicArgs = [];
   const audioFilterSegments = [];
