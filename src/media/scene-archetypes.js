@@ -48,29 +48,113 @@ function skeletonBars({ count, widths, className }) {
 // classic — текущий макет: заголовок слева, круговая схема справа.
 // ---------------------------------------------------------------------------
 
+// Круговая схема укладывается в ТРИ спутника, не в шесть. На шести подписи
+// сходились друг с другом, боковые вылезали за границу SVG и обрезались, а
+// центральная надпись ложилась на правый узел. Три узла ставятся треугольником
+// (верх, низ-право, низ-лево), холст шире круга, и под каждую подпись остаётся
+// своя половина ширины.
+const DIAGRAM_MAX_NODES = 3;
+const DIAGRAM_ASPECT = 1.34;
+
+// DejaVu Sans, кириллица: замеренная средняя ширина знака ≈ 0.62 кегля для
+// обычного начертания и ≈ 0.66 для полужирного (по кадру: 23 знака подписи при
+// кегле 29px заняли 410px). В SVG переноса строк нет, поэтому длина строки
+// считается заранее и обрезается по доступной ширине.
+const GLYPH_WIDTH_RATIO = 0.62;
+const GLYPH_WIDTH_RATIO_BOLD = 0.66;
+
+function charsThatFit(availableWidth, fontSize, ratio = GLYPH_WIDTH_RATIO) {
+  return Math.max(4, Math.floor(availableWidth / (fontSize * ratio)));
+}
+
+/** Строка из слов, которая влезает в `maxChars`; остаток — во вторую строку. */
+function wrapLabel(text, maxChars, maxLines) {
+  const words = String(text ?? "").split(/\s+/u).filter(Boolean);
+  const lines = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= maxChars || !current) {
+      current = candidate;
+      continue;
+    }
+    lines.push(current);
+    current = word;
+    if (lines.length === maxLines - 1) break;
+  }
+  if (current && lines.length < maxLines) lines.push(current);
+  const used = lines.join(" ").length;
+  const tail = String(text ?? "").slice(used).trim();
+  if (tail && lines.length) lines[lines.length - 1] = clampText(`${lines.at(-1)} ${tail}`, maxChars);
+  return lines.map(line => clampText(line, maxChars));
+}
+
 function topicDiagram({ centerLabel, orbitLabels, activeIndex, size }) {
-  const half = size / 2;
-  const orbitRadius = half * 0.72;
-  const nodes = orbitLabels.map((label, index) => {
-    const angle = (Math.PI * 2 * index) / Math.max(orbitLabels.length, 1) - Math.PI / 2;
-    const x = half + orbitRadius * Math.cos(angle);
-    const y = half + orbitRadius * Math.sin(angle);
+  const viewWidth = Math.round(size * DIAGRAM_ASPECT);
+  const viewHeight = size;
+  const centerX = viewWidth / 2;
+  const centerY = viewHeight / 2;
+  // Орбита — эллипс, а не окружность: холст шире, чем выше, и на круглой орбите
+  // две нижние подписи сходились друг с другом посреди схемы.
+  const orbitRadiusX = size * 0.42;
+  const orbitRadiusY = size * 0.34;
+  const centerRadius = size * 0.24;
+  const nodeRadius = size * 0.055;
+  const labelFont = Math.max(12, Math.round(size * 0.05));
+  const centerFont = Math.max(14, Math.round(size * 0.046));
+  const labels = orbitLabels.slice(0, DIAGRAM_MAX_NODES);
+  const active = labels.length ? Math.abs(activeIndex) % labels.length : 0;
+  const bottomSpread = orbitRadiusX * Math.cos(Math.PI / 6);
+
+  const nodes = labels.map((label, index) => {
+    const angle = (Math.PI * 2 * index) / Math.max(labels.length, 1) - Math.PI / 2;
+    const x = centerX + orbitRadiusX * Math.cos(angle);
+    const y = centerY + orbitRadiusY * Math.sin(angle);
     const color = accentColor(index);
-    const isActive = index === activeIndex;
-    const nodeRadius = isActive ? 46 : 34;
-    const linkLength = Math.hypot(x - half, y - half).toFixed(1);
+    const isActive = index === active;
+    const radius = isActive ? nodeRadius * 1.3 : nodeRadius;
+    // Подпись центрируется по узлу, поэтому её половина ограничена и краем
+    // холста, и серединой между соседними узлами. Без первого ограничения
+    // боковые подписи обрезались краем SVG, без второго — сходились друг с
+    // другом посреди схемы.
+    const halfWidth = Math.min(x, viewWidth - x, index === 0 ? viewWidth : bottomSpread);
+    const labelChars = charsThatFit(
+      halfWidth * 2,
+      labelFont,
+      isActive ? GLYPH_WIDTH_RATIO_BOLD : GLYPH_WIDTH_RATIO
+    );
+    // Верхний узел подписывается сверху, нижние — снизу: иначе подпись верхнего
+    // узла падает на центральный круг.
+    const above = y < centerY;
+    const labelY = above ? y - radius - labelFont * 0.6 : y + radius + labelFont * 1.05;
+    // Связь начинается на границе центрального круга, а не в его центре: линия
+    // из центра проходила прямо под названием темы.
+    const linkX = centerX + centerRadius * Math.cos(angle);
+    const linkY = centerY + centerRadius * Math.sin(angle);
+    const linkLength = Math.hypot(x - linkX, y - linkY).toFixed(1);
     return `
-      <line class="dg-link" style="--i:${index};--len:${linkLength}" stroke-dasharray="${linkLength}" x1="${half}" y1="${half}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#24405f" stroke-width="2"/>
+      <line class="dg-link" style="--i:${index};--len:${linkLength}" stroke-dasharray="${linkLength}" x1="${linkX.toFixed(1)}" y1="${linkY.toFixed(1)}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#24405f" stroke-width="${Math.max(2, Math.round(size * 0.005))}"/>
       <g class="dg-node${isActive ? " dg-node-active" : ""}" style="--i:${index}" transform-origin="${x.toFixed(1)}px ${y.toFixed(1)}px">
-        <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${nodeRadius}" fill="#0b1526" stroke="${color}" stroke-width="${isActive ? 4 : 2}"/>
-        <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6" fill="${color}"/>
+        <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${radius.toFixed(1)}" fill="#0b1526" stroke="${color}" stroke-width="${isActive ? 4 : 2}"/>
+        <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(radius * 0.18).toFixed(1)}" fill="${color}"/>
       </g>
-      <text class="dg-label" style="--i:${index}" x="${x.toFixed(1)}" y="${(y + nodeRadius + 26).toFixed(1)}" text-anchor="middle" fill="${isActive ? THEME.text : THEME.textMuted}" font-size="19" font-family="DejaVu Sans" font-weight="${isActive ? 700 : 400}">${escapeHtml(clampText(label, 26))}</text>`;
+      <text class="dg-label" style="--i:${index}" x="${x.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="middle" fill="${isActive ? THEME.text : THEME.textMuted}" font-size="${labelFont}" font-family="DejaVu Sans" font-weight="${isActive ? 700 : 400}">${escapeHtml(clampText(label, labelChars))}</text>`;
   });
-  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg" role="img">
-    <g class="dg-center" transform-origin="${half}px ${half}px">
-      <circle cx="${half}" cy="${half}" r="${half * 0.34}" fill="rgba(45,212,191,0.08)" stroke="${THEME.accent}" stroke-width="3"/>
-      <text x="${half}" y="${half + 8}" text-anchor="middle" fill="${THEME.text}" font-size="26" font-family="DejaVu Sans" font-weight="700">${escapeHtml(clampText(centerLabel, 18))}</text>
+
+  // Тема в центре переносится на две строки: в одну строку она обрезалась до
+  // «Как Herm…» и от заголовка сцены не оставалось ничего.
+  // Вписанный в окружность прямоугольник по двум строкам: ширина = 2r·cos(45°)
+  // с запасом на скругление.
+  const centerChars = charsThatFit(centerRadius * 1.3, centerFont, GLYPH_WIDTH_RATIO_BOLD);
+  const centerLines = wrapLabel(centerLabel, centerChars, 2);
+  const centerTop = centerY + centerFont * 0.34 - ((centerLines.length - 1) * centerFont * 0.58);
+  const centerText = centerLines
+    .map((line, index) => `<text x="${centerX}" y="${(centerTop + index * centerFont * 1.16).toFixed(1)}" text-anchor="middle" fill="${THEME.text}" font-size="${centerFont}" font-family="DejaVu Sans" font-weight="700">${escapeHtml(line)}</text>`)
+    .join("");
+  return `<svg width="${viewWidth}" height="${viewHeight}" viewBox="0 0 ${viewWidth} ${viewHeight}" xmlns="http://www.w3.org/2000/svg" role="img">
+    <g class="dg-center" transform-origin="${centerX}px ${centerY}px">
+      <circle cx="${centerX}" cy="${centerY}" r="${centerRadius.toFixed(1)}" fill="rgba(45,212,191,0.08)" stroke="${THEME.accent}" stroke-width="3"/>
+      ${centerText}
     </g>
     ${nodes.join("")}
   </svg>`;
@@ -78,18 +162,25 @@ function topicDiagram({ centerLabel, orbitLabels, activeIndex, size }) {
 
 function buildClassic(ctx) {
   const { layout, content, topic, sceneIndex, sceneTitles } = ctx;
-  const diagramSize = layout.isVertical
-    ? Math.round(layout.width * 0.68)
-    : Math.round(layout.height * 0.52);
+  // Схема больше не ужимается в маленький бокс: она берёт всю высоту сцены,
+  // сколько позволяет её же ширина вместе с рамкой панели.
+  const panelPadRatio = 0.05;
+  const panelGrowth = 1 + panelPadRatio * 2;
+  const availableWidth = layout.isVertical ? layout.stageWidth : layout.stageWidth * 0.5;
+  const availableHeight = layout.isVertical ? layout.stageHeight * 0.55 : layout.stageHeight;
+  const diagramSize = Math.max(
+    140,
+    Math.floor(Math.min(availableHeight / panelGrowth, availableWidth / (DIAGRAM_ASPECT * panelGrowth)))
+  );
   const diagram = topicDiagram({
     centerLabel: topic,
-    orbitLabels: sceneTitles.slice(0, 6),
+    orbitLabels: sceneTitles.length ? sceneTitles : [content.title],
     activeIndex: sceneIndex,
     size: diagramSize
   });
   return {
     stageFlex: layout.isVertical
-      ? "flex-direction:column;align-items:center;text-align:center;gap:48px;"
+      ? "flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:48px;"
       : "flex-direction:row;align-items:center;justify-content:space-between;gap:64px;",
     stage: `${headlineBlock({ topic, title: content.title, lead: content.lead })}
     <div class="diagram-panel"><div class="dg-drift">${diagram}</div></div>`,
@@ -97,7 +188,7 @@ function buildClassic(ctx) {
   .headline { max-width: ${layout.isVertical ? "100%" : "46%"}; }
   .diagram-panel {
     background: ${THEME.panel}; border: 1px solid ${THEME.panelBorder}; border-radius: 18px;
-    padding: ${Math.round(diagramSize * 0.06)}px;
+    padding: ${Math.round(diagramSize * panelPadRatio)}px;
     box-shadow: 0 24px 60px rgba(1, 6, 14, 0.6);
   }
   @keyframes center-in { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
@@ -222,7 +313,7 @@ function buildDeviceMockup(ctx) {
         </div>
       </div>
     </div>`;
-  const copy = headlineBlock({ topic, title: content.title, lead: content.lead, className: "headline dv-copy" });
+  const copy = headlineBlock({ topic, title: content.title, lead: content.leadBesideList, className: "headline dv-copy" });
   return {
     stageFlex: layout.isVertical
       ? "flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:0;"
@@ -335,14 +426,17 @@ function buildBoardColumns(ctx) {
     stage: `${headlineBlock({ topic, title: content.title, lead: "", className: "headline bc-copy" })}
     <div class="bc-board">${lanesHtml}</div>`,
     css: `
-  .bc-copy { max-width: 100%; margin-bottom: ${s(2.6)}px; }
+  .bc-copy { max-width: 100%; margin-bottom: ${s(2.6)}px; flex: none; }
   .bc-copy h1 { font-size: ${Math.round(ctx.heroFontSize * 0.82)}px; }
+  /* Доска забирает всю высоту, оставшуюся под заголовком: раньше колонки жили
+     в верхней трети кадра, а под ними стояла пустота на пол-экрана. */
   .bc-board {
-    display: flex; flex-direction: ${layout.isVertical ? "column" : "row"}; gap: ${s(1.8)}px;
+    display: flex; flex: 1; min-height: 0;
+    flex-direction: ${layout.isVertical ? "column" : "row"}; gap: ${s(1.8)}px;
     animation: panel-in 0.7s cubic-bezier(0.22, 0.9, 0.3, 1) 0.5s backwards;
   }
   .bc-lane {
-    flex: 1; display: flex; flex-direction: ${layout.isVertical ? "row" : "column"};
+    flex: 1; min-height: 0; display: flex; flex-direction: ${layout.isVertical ? "row" : "column"};
     align-items: ${layout.isVertical ? "center" : "stretch"};
     gap: ${s(1.2)}px; border-radius: ${s(1.4)}px; padding: ${s(1.4)}px;
     ${panelSurface()}
@@ -354,10 +448,15 @@ function buildBoardColumns(ctx) {
     ${layout.isVertical ? `width: 30%; flex: none;` : ""}
   }
   .bc-chip { width: ${s(0.9)}px; height: ${s(0.9)}px; border-radius: ${s(0.3)}px; flex: none; }
-  .bc-cards { display: flex; flex-direction: ${layout.isVertical ? "row" : "column"}; gap: ${s(1)}px; flex: 1; }
+  /* Карточки остаются нормального размера и лежат сверху колонки: растянутые
+     на всю высоту, они превращались в пустые прямоугольники. */
+  .bc-cards {
+    display: flex; flex-direction: ${layout.isVertical ? "row" : "column"};
+    gap: ${s(1)}px; flex: 1; min-height: 0; justify-content: flex-start;
+  }
   .bc-card {
-    position: relative; display: flex; align-items: center; gap: ${s(0.8)}px; flex: 1;
-    padding: ${s(1)}px ${s(1.1)}px; border-radius: ${s(0.9)}px;
+    position: relative; display: flex; align-items: center; gap: ${s(0.8)}px; flex: none;
+    padding: ${s(1.2)}px ${s(1.3)}px; border-radius: ${s(0.9)}px;
     background: rgba(17, 32, 54, 0.82); border: 1px solid rgba(36, 64, 95, 0.7);
     animation: rise-in 0.45s cubic-bezier(0.22, 0.9, 0.3, 1) calc(0.95s + var(--i) * 0.11s) backwards;
   }
@@ -457,20 +556,25 @@ function buildChecklist(ctx) {
   return {
     stageFlex: layout.isVertical
       ? "flex-direction:column;align-items:stretch;justify-content:center;gap:0;"
-      : `flex-direction:row;align-items:center;justify-content:space-between;gap:${s(5)}px;`,
-    stage: `${headlineBlock({ topic, title: content.title, lead: layout.isVertical ? "" : content.lead, className: "headline cl-copy" })}
+      : `flex-direction:row;align-items:stretch;justify-content:space-between;gap:${s(5)}px;`,
+    stage: `${headlineBlock({ topic, title: content.title, lead: layout.isVertical ? "" : content.leadBesideList, className: "headline cl-copy" })}
     <ul class="cl-list">${rowsHtml}<li class="cl-sweep"></li></ul>`,
     css: `
-  .cl-copy { max-width: ${layout.isVertical ? "100%" : "40%"}; margin-bottom: ${layout.isVertical ? `${s(3)}px` : "0"}; }
+  .cl-copy {
+    max-width: ${layout.isVertical ? "100%" : "40%"}; margin-bottom: ${layout.isVertical ? `${s(3)}px` : "0"};
+    ${layout.isVertical ? "" : "display: flex; flex-direction: column; justify-content: center;"}
+  }
   .cl-list {
     position: relative; overflow: hidden; list-style: none; margin: 0; padding: ${s(1.8)}px;
-    display: flex; flex-direction: column; gap: ${s(1.2)}px;
-    flex: ${layout.isVertical ? "none" : "1"}; border-radius: ${s(1.6)}px;
+    display: flex; flex-direction: column; justify-content: center; gap: ${s(1.2)}px;
+    flex: 1; min-height: 0; border-radius: ${s(1.6)}px;
     ${panelSurface()}
     animation: panel-in 0.7s cubic-bezier(0.22, 0.9, 0.3, 1) 0.5s backwards;
   }
+  /* Пункты подрастают под высоту панели, но не безгранично: пять полос во весь
+     кадр читались бы уже не как чеклист. */
   .cl-row {
-    display: flex; align-items: center; gap: ${s(1.3)}px;
+    display: flex; align-items: center; flex: 1 1 auto; max-height: ${s(9)}px; gap: ${s(1.3)}px;
     padding: ${s(1.1)}px ${s(1.2)}px; border-radius: ${s(0.9)}px;
     background: rgba(17, 32, 54, 0.6); border: 1px solid rgba(36, 64, 95, 0.6);
     animation: rise-in 0.5s cubic-bezier(0.22, 0.9, 0.3, 1) calc(0.75s + var(--i) * 0.2s) backwards;
@@ -521,32 +625,41 @@ function buildComparison(ctx) {
       ${side(pair.right, 1, "after")}
     </div>`,
     css: `
-  .cp-copy { max-width: 100%; margin-bottom: ${s(2.8)}px; text-align: ${layout.isVertical ? "center" : "left"}; }
+  .cp-copy { max-width: 100%; margin-bottom: ${s(2.8)}px; flex: none; text-align: ${layout.isVertical ? "center" : "left"}; }
   .cp-copy h1 { font-size: ${Math.round(ctx.heroFontSize * 0.86)}px; }
+  /* Стороны берут всю высоту сцены: двумя низкими плашками во всю ширину это
+     читалось как список из двух пунктов, а не как сравнение. */
   .cp-split {
-    display: flex; flex-direction: ${layout.isVertical ? "column" : "row"};
+    display: flex; flex: 1; min-height: 0;
+    flex-direction: ${layout.isVertical ? "column" : "row"};
     align-items: stretch; gap: ${s(2)}px;
   }
   .cp-side {
-    flex: 1; display: flex; flex-direction: column; gap: ${s(1.2)}px;
-    padding: ${s(2.2)}px; border-radius: ${s(1.6)}px;
+    flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center;
+    gap: ${s(1.4)}px; padding: ${s(2.6)}px; border-radius: ${s(1.6)}px;
     ${panelSurface()}
   }
+  /* Явный контраст сторон: «до» приглушено и утоплено, «после» подсвечено. */
   .cp-before {
     border-color: rgba(255, 93, 115, 0.45);
+    background: rgba(9, 15, 27, 0.72);
     animation: cp-in-before 0.7s cubic-bezier(0.22, 0.9, 0.3, 1) 0.55s backwards, amb-breathe 12s ease-in-out 1.4s infinite;
   }
+  .cp-before .cp-text { color: ${THEME.textMuted}; font-weight: 400; }
   .cp-after {
     border-color: rgba(45, 212, 191, 0.5);
+    border-width: ${s(0.2)}px;
+    background: linear-gradient(160deg, rgba(20, 46, 52, 0.9), rgba(11, 21, 38, 0.86));
     animation: cp-in-after 0.7s cubic-bezier(0.22, 0.9, 0.3, 1) 0.72s backwards, cp-glow 6.5s ease-in-out 1.6s infinite;
   }
+  .cp-after .cp-text { font-size: ${s(2.7)}px; }
   .cp-label {
-    font-size: ${s(1.6)}px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase;
+    font-size: ${s(1.8)}px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase;
     color: ${THEME.textMuted};
   }
   .cp-before .cp-label { color: ${THEME.accentRed}; }
   .cp-after .cp-label { color: ${THEME.accent}; }
-  .cp-text { color: ${THEME.text}; font-size: ${s(2.2)}px; line-height: 1.28; font-weight: 700; }
+  .cp-text { color: ${THEME.text}; font-size: ${s(2.4)}px; line-height: 1.28; font-weight: 700; }
   .cp-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: ${s(0.8)}px; }
   .cp-item {
     color: ${THEME.textMuted}; font-size: ${s(1.6)}px; padding-left: ${s(1.6)}px; position: relative;
@@ -650,6 +763,26 @@ function buildStatHighlight(ctx) {
   };
 }
 
+/**
+ * Подпись под числом не должна начинаться с этого же числа: в кадре «3» и под
+ * ним «3 формата» читаются как «3 3 формата». Само число (и его единица, если
+ * она уже вынесена в чип) срезаются с начала подписи.
+ */
+function labelWithoutLeadingNumber(label, number) {
+  const raw = String(number?.raw ?? "");
+  if (!raw) return label;
+  let text = label.trimStart();
+  if (!text.startsWith(raw)) return label;
+  text = text.slice(raw.length).trimStart();
+  const unit = String(number?.unit ?? "");
+  if (unit && text.toLocaleLowerCase().startsWith(unit.toLocaleLowerCase())) {
+    text = text.slice(unit.length).trimStart();
+  }
+  // Ничего, кроме числа, в подписи не было — тогда лучше оставить как есть,
+  // чем показать пустую строку под цифрой.
+  return text || label;
+}
+
 function buildMetricGrid(ctx) {
   const { layout, content, topic, s } = ctx;
   const numbers = content.numbers.length
@@ -661,7 +794,8 @@ function buildMetricGrid(ctx) {
     id: `mgnum${index}`
   }));
   const tiles = numbers.map((number, index) => {
-    const label = content.bullets[index] ?? content.bullets[0] ?? "";
+    const source = content.bullets[index] ?? content.bullets[0] ?? "";
+    const label = labelWithoutLeadingNumber(source, number);
     return `<div class="mg-tile" style="--i:${index};border-color:${accentColor(index)}">
         <div class="mg-figure">${counters[index].html}${number.unit ? `<span class="mg-unit">${escapeHtml(number.unit)}</span>` : ""}</div>
         ${label ? `<div class="mg-label">${escapeHtml(clampText(label, 46))}</div>` : ""}
@@ -673,20 +807,25 @@ function buildMetricGrid(ctx) {
     stage: `${headlineBlock({ topic, title: content.title, lead: "", className: "headline mg-copy" })}
     <div class="mg-grid">${tiles}</div>`,
     css: `
-  .mg-copy { max-width: 100%; margin-bottom: ${s(3)}px; text-align: ${layout.isVertical ? "center" : "left"}; }
+  .mg-copy { max-width: 100%; margin-bottom: ${s(3)}px; flex: none; text-align: ${layout.isVertical ? "center" : "left"}; }
   .mg-copy h1 { font-size: ${Math.round(ctx.heroFontSize * 0.84)}px; }
-  .mg-grid { display: grid; grid-template-columns: repeat(${columns}, minmax(0, 1fr)); gap: ${s(1.8)}px; }
+  .mg-grid {
+    display: grid; flex: 1; min-height: 0;
+    grid-template-columns: repeat(${columns}, minmax(0, 1fr)); gap: ${s(1.8)}px;
+  }
   .mg-tile {
-    display: flex; flex-direction: column; gap: ${s(1)}px;
+    display: flex; flex-direction: column; justify-content: center; gap: ${s(1)}px;
     padding: ${s(2)}px; border-radius: ${s(1.5)}px;
     ${panelSurface()}
     border-left-width: ${s(0.4)}px;
     animation: panel-in 0.62s cubic-bezier(0.22, 0.9, 0.3, 1) calc(0.55s + var(--i) * 0.15s) backwards, amb-float 10s ease-in-out calc(var(--i) * -2.2s) infinite;
   }
-  .mg-figure { display: flex; align-items: baseline; gap: ${s(0.5)}px; color: ${THEME.text}; }
-  .mg-value { font-size: ${s(layout.isVertical ? 7 : 6)}px; font-weight: 700; line-height: 1; letter-spacing: -1px; }
-  .mg-unit { font-size: ${s(2.4)}px; font-weight: 700; color: ${THEME.accent}; }
-  .mg-label { color: ${THEME.textMuted}; font-size: ${s(1.5)}px; line-height: 1.3; }
+  .mg-figure { display: flex; align-items: baseline; gap: ${s(0.6)}px; color: ${THEME.text}; }
+  /* Плитка теперь во всю высоту сцены, поэтому и число крупнее: прежний кегль
+     терялся посреди пустой карточки. */
+  .mg-value { font-size: ${s(layout.isVertical ? 8 : 9)}px; font-weight: 700; line-height: 1; letter-spacing: -2px; }
+  .mg-unit { font-size: ${s(3)}px; font-weight: 700; color: ${THEME.accent}; }
+  .mg-label { color: ${THEME.textMuted}; font-size: ${s(1.8)}px; line-height: 1.3; }
   .sr-value { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }${counters.map(counter => counter.css).join("")}`
   };
 }
@@ -712,14 +851,19 @@ function buildFlowSteps(ctx) {
     stage: `${headlineBlock({ topic, title: content.title, lead: "", className: "headline fs-copy" })}
     <div class="fs-flow">${flowHtml}</div>`,
     css: `
-  .fs-copy { max-width: 100%; margin-bottom: ${s(3)}px; text-align: ${layout.isVertical ? "center" : "left"}; }
+  .fs-copy { max-width: 100%; margin-bottom: ${s(3)}px; flex: none; text-align: ${layout.isVertical ? "center" : "left"}; }
   .fs-copy h1 { font-size: ${Math.round(ctx.heroFontSize * 0.84)}px; }
+  /* Шаги тянутся по высоте, но не во всю сцену: ряд из пяти колонок высотой в
+     кадр читался бы уже не как поток, а как таблица. */
   .fs-flow {
-    display: flex; flex-direction: ${layout.isVertical ? "column" : "row"};
-    align-items: ${layout.isVertical ? "stretch" : "center"}; justify-content: center; gap: ${s(1.2)}px;
+    display: flex; flex: 1; min-height: 0;
+    max-height: ${Math.round(layout.stageHeight * (layout.isVertical ? 1 : 0.6))}px;
+    align-self: center; width: 100%;
+    flex-direction: ${layout.isVertical ? "column" : "row"};
+    align-items: stretch; justify-content: center; gap: ${s(1.2)}px;
   }
   .fs-step {
-    flex: 1; display: flex; align-items: center; gap: ${s(1.1)}px;
+    flex: 1; min-height: 0; display: flex; align-items: center; gap: ${s(1.1)}px;
     padding: ${s(1.5)}px ${s(1.6)}px; border-radius: ${s(1.2)}px;
     ${panelSurface()}
     border-color: rgba(36, 64, 95, 0.8);
@@ -763,17 +907,24 @@ function buildQuote(ctx) {
       ${quote.source ? `<div class="qt-source">${escapeHtml(quote.source)}</div>` : ""}
     </div>`,
     css: `
-  .qt-wrap { position: relative; max-width: ${layout.isVertical ? "100%" : "82%"}; animation: amb-float 14s ease-in-out 0s infinite; }
+  /* Глиф кавычки участвует в потоке, а не висит абсолютом над текстом: пока он
+     был вне потока, центрировался только текст, и вся композиция вместе с
+     кавычкой уезжала в верхнюю половину кадра. */
+  .qt-wrap {
+    position: relative; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    max-width: ${layout.isVertical ? "100%" : "88%"};
+    animation: amb-float 14s ease-in-out 0s infinite;
+  }
   .qt-glyph {
-    position: absolute; top: -${Math.round(glyphSize * 0.42)}px; left: 50%;
-    transform: translateX(-50%);
-    font-size: ${glyphSize}px; line-height: 1; color: rgba(45, 212, 191, 0.16);
+    font-size: ${glyphSize}px; line-height: 0.72; height: ${Math.round(glyphSize * 0.42)}px;
+    color: rgba(45, 212, 191, 0.16);
     animation: amb-sway 18s ease-in-out 0s infinite;
   }
-  .qt-kicker { position: relative; animation: rise-in 0.5s ease-out 0.3s backwards; }
+  .qt-kicker { position: relative; margin-top: ${s(1.4)}px; animation: rise-in 0.5s ease-out 0.3s backwards; }
   .qt-text {
     position: relative; margin: ${s(1.6)}px 0 0; color: ${THEME.text};
-    font-size: ${Math.round(ctx.heroFontSize * 0.86)}px; line-height: 1.28; font-weight: 700;
+    font-size: ${Math.round(ctx.heroFontSize * 0.94)}px; line-height: 1.24; font-weight: 700;
     animation: rise-in 0.7s cubic-bezier(0.22, 0.9, 0.3, 1) 0.5s backwards;
   }
   .qt-source {

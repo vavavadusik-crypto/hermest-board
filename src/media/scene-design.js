@@ -71,9 +71,27 @@ export function splitSentences(value) {
     .filter(Boolean);
 }
 
-export function pickLeadSentence(narration, title) {
+/**
+ * Предложение целиком состоит из перечисления `items`? Тогда абзац и список в
+ * одном кадре — это один и тот же текст дважды.
+ */
+function isCoveredByItems(sentence, items) {
+  if (!items.length) return false;
+  const rest = items.reduce((text, item) => text.replaceAll(item, " "), sentence);
+  return !/[\p{L}\p{N}]/u.test(rest);
+}
+
+/**
+ * Лид сцены: первое предложение, которое не повторяет ни заголовок, ни уже
+ * разобранное перечисление. Второе условие и лечит кадр, где слева абзацем
+ * стояли те же пять пунктов, что и списком справа.
+ */
+export function pickLeadSentence(narration, title, items = []) {
   const titleKey = sentenceKey(title);
-  return splitSentences(narration).find(sentence => sentenceKey(sentence) !== titleKey) ?? "";
+  const list = Array.isArray(items) ? items.filter(Boolean) : [];
+  return splitSentences(narration).find(
+    sentence => sentenceKey(sentence) !== titleKey && !isCoveredByItems(sentence, list)
+  ) ?? "";
 }
 
 function nonNegativeInset(value) {

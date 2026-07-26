@@ -255,13 +255,17 @@ export function deriveSceneContent(scene) {
   if (!scene || typeof scene !== "object") throw new TypeError("Scene is required");
   const title = clampText(scene.title, 120);
   const narration = String(scene.narration ?? scene.text ?? "");
-  const lead = clampText(pickLeadSentence(narration, scene.title), 180);
   const titleKey = sentenceKey(scene.title);
   const body = splitSentences(narration)
     .filter(sentence => sentenceKey(sentence) !== titleKey)
     .join(" ");
   const data = normalizeSceneData(scene.sceneData);
   const items = data.items ?? extractListItems(body);
+  const lead = clampText(pickLeadSentence(narration, scene.title), 180);
+  // Лид для архетипов, которые рядом с текстом показывают ещё и сам список:
+  // там первая фраза оказывается ровно тем перечислением, что справа, и кадр
+  // показывает один текст дважды. Архетипам без списка отдаётся обычный лид.
+  const leadBesideList = clampText(pickLeadSentence(narration, scene.title, items), 180);
   const sentences = splitSentences(body);
   const bullets = items.length
     ? items
@@ -273,6 +277,7 @@ export function deriveSceneContent(scene) {
   return {
     title,
     lead,
+    leadBesideList,
     body,
     items,
     bullets,
