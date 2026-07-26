@@ -7,6 +7,7 @@ import { renderProject } from "../media/render-project.js";
 import { describeBridgeAvailability } from "../media/text-model.js";
 import { createDraftJobManager } from "./draft-job-manager.js";
 import { draftBoardService } from "./draft-service.js";
+import { planSeriesService } from "./series-service.js";
 import { editionService, toPublicEdition } from "./edition-service.js";
 import { createLocalMediaJobManager } from "./job-manager.js";
 import { createProviderKeyStore } from "./provider-keys.js";
@@ -62,7 +63,8 @@ export function createLocalMediaRequestHandler({
   maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
   providerKeys = createProviderKeyStore(),
   describeBridge = describeBridgeAvailability,
-  runEdition = editionService
+  runEdition = editionService,
+  planSeries = planSeriesService
 } = {}) {
   if (!manager || typeof manager.submit !== "function") {
     throw new TypeError("A local media job manager is required");
@@ -74,7 +76,7 @@ export function createLocalMediaRequestHandler({
     throw new RangeError(`maxBodyBytes must be within 64..${DEFAULT_MAX_BODY_BYTES}`);
   }
 
-  const context = { manager, draftManager, maxBodyBytes, providerKeys, describeBridge, runEdition };
+  const context = { manager, draftManager, maxBodyBytes, providerKeys, describeBridge, runEdition, planSeries };
   return function localMediaHandler(request, response, next) {
     void routeRequest(request, response, context, next).catch(error => {
       // Fail-closed: любой сбой обработчика (включая сбой самой отправки
@@ -99,7 +101,7 @@ export function createLocalMediaRequestHandler({
 }
 
 async function routeRequest(request, response, context, next) {
-  const { manager, draftManager, maxBodyBytes, providerKeys, describeBridge, runEdition } = context;
+  const { manager, draftManager, maxBodyBytes, providerKeys, describeBridge, runEdition, planSeries } = context;
   const host = String(request.headers.host || "");
   if (!isLoopbackHost(host) || !isAllowedOrigin(request.headers.origin, host)) {
     throw new HttpError(403, "local_media_origin_forbidden");
@@ -207,6 +209,10 @@ async function routeRequest(request, response, context, next) {
       // Мультрежим — булев флаг и ничего больше: сценарий целиком строит домен,
       // из запроса не приходит ни труппа, ни реплики.
       cartoon: body.cartoon === true,
+      // План сезона приходит от клиента, но доверия ему не больше, чем ответу
+      // модели: domain перепроверит форму и упадёт с внятной ошибкой.
+      series: body.series ?? null,
+      episodeNumber: body.episodeNumber ?? null,
       sceneCount: body.sceneCount,
       targetDurationSeconds: body.targetDurationSeconds,
       voice: body.voice,
@@ -216,6 +222,26 @@ async function routeRequest(request, response, context, next) {
       endpoint: sanitizeDraftEndpoint(body.endpoint)
     });
     sendJson(response, 202, { ok: true, job });
+    return;
+  }
+
+  // План сезона — короткий синхронный вызов: одна реплика модели, никакого
+  // рендера, поэтому job здесь был бы церемонией ради церемонии.
+  if (request.method === "POST" && pathname === `${API_PREFIX}/series`) {
+    requireMutationRequest(request);
+    const body = await readJsonBody(request, maxBodyBytes);
+    validateSeriesBody(body);
+    const result = await planSeries({
+      topic: body.topic,
+      language: body.language,
+      episodeCount: body.episodeCount,
+      episodeDurationSeconds: body.episodeDurationSeconds ?? null,
+      audience: body.audience,
+      tone: body.tone,
+      model: body.model,
+      endpoint: sanitizeDraftEndpoint(body.endpoint)
+    });
+    sendJson(response, 200, { ok: true, ...result });
     return;
   }
 
@@ -372,6 +398,30 @@ async function readJsonBody(request, maxBodyBytes) {
 // Граница доверия: любой ввод враждебен. Здесь проверяются только тип и
 // границы длины с явными кодами — семантику (URL, allowlist моделей, схему
 // board) по-прежнему валидируют менеджеры и адаптеры.
+function validateSeriesBody(body) {
+  const topic = body.topic;
+  if (topic === undefined || topic === null || (typeof topic === "string" && !topic.trim())) {
+    throw new HttpError(400, "series_topic_required");
+  }
+  if (typeof topic !== "string" || topic.length > MAX_DRAFT_TOPIC_CHARS) {
+    throw new HttpError(400, "series_topic_invalid");
+  }
+  requireOptionalBoundedString(body.language, 32, "series_language_invalid");
+  requireOptionalBoundedString(body.audience, 200, "series_audience_invalid");
+  requireOptionalBoundedString(body.tone, 200, "series_tone_invalid");
+  requireOptionalBoundedString(body.model, 64, "series_model_invalid");
+  if (body.episodeCount !== undefined && body.episodeCount !== null) {
+    if (typeof body.episodeCount !== "number" || !Number.isFinite(body.episodeCount)) {
+      throw new HttpError(400, "series_episode_count_invalid");
+    }
+  }
+  if (body.episodeDurationSeconds !== undefined && body.episodeDurationSeconds !== null) {
+    if (typeof body.episodeDurationSeconds !== "number" || !Number.isFinite(body.episodeDurationSeconds)) {
+      throw new HttpError(400, "series_episode_duration_invalid");
+    }
+  }
+}
+
 function validateDraftBody(body) {
   const topic = body.topic;
   if (topic === undefined || topic === null || (typeof topic === "string" && !topic.trim())) {
@@ -395,6 +445,14 @@ function validateDraftBody(body) {
       || body.targetDurationSeconds < MIN_TARGET_DURATION_SECONDS
       || body.targetDurationSeconds > MAX_TARGET_DURATION_SECONDS) {
       throw new HttpError(400, "draft_target_duration_invalid");
+    }
+  }
+  if (body.episodeNumber !== undefined && body.episodeNumber !== null) {
+    if (!Number.isSafeInteger(body.episodeNumber) || body.episodeNumber < 1) {
+      throw new HttpError(400, "draft_episode_number_invalid");
+    }
+    if (!body.series || typeof body.series !== "object" || Array.isArray(body.series)) {
+      throw new HttpError(400, "draft_series_plan_required");
     }
   }
   if (body.research !== undefined && body.research !== null && typeof body.research !== "boolean") {

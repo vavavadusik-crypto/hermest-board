@@ -3,6 +3,7 @@
 // не будет), fail-open по research (источники — усиление, а не условие).
 
 import { draftBoardFromTopic } from "../domain/ai-director.js";
+import { buildEpisodeBrief } from "../domain/series-plan.js";
 import { deriveSceneCountFromDuration, normalizeTargetDurationSeconds } from "../domain/duration-plan.js";
 import { createCliTextModel } from "../media/cli-text-model.js";
 import { createOpenAiTextModel } from "../media/openai-text-model.js";
@@ -23,6 +24,8 @@ export async function draftBoardService({
   voice = "",
   narrationProvider = "",
   research = true,
+  series = null,
+  episodeNumber = null,
   model,
   endpoint,
   signal,
@@ -66,8 +69,18 @@ export async function draftBoardService({
     }
   }
 
+  // Серия сезона снимается не «по теме», а по брифу эпизода: тема, труппа,
+  // факты прошлых серий и биты этой. Кривой план — не повод снимать вслепую:
+  // buildEpisodeBrief упадёт с внятной ошибкой, и это честнее, чем ролик,
+  // который делает вид, что предыдущих серий не было.
+  const episode = series && episodeNumber !== null
+    ? buildEpisodeBrief({ plan: series, episodeNumber })
+    : null;
   const board = await draftBoardFromTopic({
-    topic: cleanTopic,
+    topic: episode ? episode.topic : cleanTopic,
+    ...(episode
+      ? { continuity: episode.continuity, characters: episode.characters, beats: episode.beats }
+      : {}),
     language,
     cartoon: cartoon === true,
     sceneCount: scenes,
