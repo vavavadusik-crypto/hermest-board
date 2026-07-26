@@ -28,6 +28,7 @@ const ALLOWED_COMMAND_TOOLS = Object.freeze({
   render: Object.freeze(["ffmpeg"]),
   "render-composed": Object.freeze(["ffmpeg"]),
   "scene-browser": Object.freeze(["chrome"]),
+  "cover-frame": Object.freeze(["ffmpeg"]),
   "loudness-measure": Object.freeze(["ffmpeg"])
 });
 const LOUDNESS_KEYS = Object.freeze([
@@ -267,6 +268,7 @@ function validateCommandArgv(id, tool, argv, commandIndex) {
     else if (id === "tts") validateTtsArgv(argv);
     else if (id === "narration-canonicalize" && tool === "ffmpeg") validateNarrationCanonicalizeArgv(argv);
     else if (id === "loudness-measure" && tool === "ffmpeg") validateLoudnessMeasureArgv(argv);
+    else if (id === "cover-frame" && tool === "ffmpeg") validateCoverFrameArgv(argv);
     else if (id === "render") validateRenderArgv(argv);
     else if (id === "render-composed" && tool === "ffmpeg") validateComposedRenderArgv(argv);
     else if (id === "scene-browser" && tool === "chrome") validateSceneBrowserArgv(argv);
@@ -323,6 +325,28 @@ function validateLoudnessMeasureArgv(argv) {
     throw new TypeError("invalid loudness filter");
   }
   cursor.expect("-f", "null", "-");
+  cursor.finish();
+}
+
+// Обложка — единственный кадр из уже проверенного мастера. Схема пришпиливает
+// быстрый seek (`-ss` до `-i`), ровно один кадр и PNG-выход: манифест обязан
+// доказывать, что обложка снята с ролика, а не собрана каким-то другим путём.
+function validateCoverFrameArgv(argv) {
+  const cursor = argvCursor(argv);
+  cursor.expect("-hide_banner", "-loglevel", "error", "-n", "-ss");
+  if (!/^\d+\.\d{3}$/.test(cursor.take())) throw new TypeError("invalid cover frame seek");
+  cursor.expect("-i");
+  const inputPath = cursor.take();
+  if (!inputPath.endsWith(".mp4") || !isSafeGeneratedPath(inputPath)) {
+    throw new TypeError("invalid cover frame input");
+  }
+  cursor.expect("-frames:v", "1", "-update", "1", "-vf");
+  if (!/^scale=\d{1,5}:\d{1,5}$/.test(cursor.take())) throw new TypeError("invalid cover frame scale");
+  cursor.expect("-c:v", "png");
+  const outputPath = cursor.take();
+  if (!outputPath.endsWith(".png") || !isSafeGeneratedPath(outputPath)) {
+    throw new TypeError("invalid cover frame output");
+  }
   cursor.finish();
 }
 
