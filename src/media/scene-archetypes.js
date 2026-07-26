@@ -623,12 +623,18 @@ function buildStatHighlight(ctx) {
   }
   .sh-ring { position: relative; display: block; animation: amb-breathe 10s ease-in-out 0s infinite; }
   .sh-arc { animation: sh-arc 1.6s cubic-bezier(0.16, 0.84, 0.24, 1) 0.55s backwards; }
+  /* Число и единица стоят колонкой внутри кольца: строкой единица уезжала к
+     верхнему краю квадрата и ложилась поверх дуги. Вписанный в окружность
+     квадрат — 0.707 диаметра, поэтому кегли считаются от него. */
   .sh-figure {
-    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    gap: ${s(0.6)}px; color: ${THEME.text};
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: ${s(0.2)}px; color: ${THEME.text};
   }
   .sh-value { font-size: ${Math.round(ringSize * 0.34)}px; font-weight: 700; line-height: 1; letter-spacing: -2px; }
-  .sh-unit { font-size: ${Math.round(ringSize * 0.14)}px; font-weight: 700; color: ${THEME.accent}; align-self: flex-start; margin-top: ${s(2)}px; }
+  .sh-unit {
+    font-size: ${Math.round(ringSize * 0.1)}px; font-weight: 700; line-height: 1;
+    letter-spacing: 1px; text-transform: uppercase; color: ${THEME.accent};
+  }
   .sr-value { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .sh-kicker { animation: rise-in 0.5s ease-out 1.2s backwards; }
   .sh-title { font-size: ${Math.round(ctx.heroFontSize * 0.9)}px; animation: rise-in 0.55s cubic-bezier(0.22, 0.9, 0.3, 1) 1.32s backwards; }
