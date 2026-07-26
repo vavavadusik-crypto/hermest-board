@@ -14,6 +14,7 @@ import {
   CHARACTER_VIEWBOX_HEIGHT,
   CHARACTER_VIEWBOX_WIDTH,
   cartoonCharacterCss,
+  resolveCastLooks,
   renderCharacter,
   renderForeground,
   renderSetting,
@@ -1049,6 +1050,7 @@ function buildCartoonShot(ctx) {
     maxFontSize: Math.round(ctx.heroFontSize * 0.62)
   });
 
+  const castLooks = resolveCastLooks(cartoon.cast);
   const cast = cartoon.cast.map((member, castIndex) => {
     const position = positions[castIndex % positions.length];
     return `<div class="toon-slot" style="--i:${castIndex};left:${Math.round(frameWidth * position)}px;">
@@ -1056,7 +1058,7 @@ function buildCartoonShot(ctx) {
         ${renderCharacter({
           id: member.id,
           name: member.name,
-          look: member.look,
+          look: castLooks[castIndex],
           pose: member.pose,
           facing: position > 0.5 ? "left" : "right",
           index: castIndex

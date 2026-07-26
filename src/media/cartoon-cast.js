@@ -321,7 +321,9 @@ export function cartoonCharacterCss() {
      ладонь дошла до лица, предплечье обязано сложиться навстречу плечу. */
   .pose-think { --arm-r: -100deg; --fore-r: -126deg; }
   .pose-facepalm { --arm-r: -142deg; --fore-r: -92deg; }
-  .pose-type { --arm-r: -20deg; --fore-r: 64deg; --arm-l: 20deg; --fore-l: -64deg; }
+    /* Печать: предплечья заведены к центру, кисти сходятся перед корпусом. При
+     мелком сгибе поза читалась как «руки в боки», а не «за клавиатурой». */
+  .pose-type { --arm-r: -32deg; --fore-r: 88deg; --arm-l: 32deg; --fore-l: -88deg; }
   .pose-cheer { --arm-r: -158deg; --fore-r: -10deg; --arm-l: 158deg; --fore-l: 10deg; }
 
   .pose-facepalm .tc-head { transform: scale(var(--head)) rotate(-7deg); }
@@ -372,6 +374,31 @@ function skyline({ width, horizon, characterHeight, skyFloor = 0, seed }) {
     x += buildingWidth + Math.round(characterHeight * (0.04 + random() * 0.12));
   }
   return parts.join("");
+}
+
+/**
+ * Внешность в кадре разводится, даже если её вывели из разных id: две фиолетовые
+ * футболки рядом читаются как один персонаж в двух местах. Детерминизм при этом
+ * сохраняется — правится только тот, кто совпал с уже стоящим в кадре, и правка
+ * зависит только от состава сцены, а не от случайности.
+ */
+export function resolveCastLooks(cast = []) {
+  const takenShirts = new Set();
+  const takenHair = new Set();
+  return cast.map(member => {
+    const base = resolveCharacterLook({ id: member?.id, name: member?.name, look: member?.look });
+    let shirt = base.shirt;
+    if (takenShirts.has(shirt)) {
+      shirt = SHIRT_COLORS.find(color => !takenShirts.has(color)) ?? shirt;
+    }
+    takenShirts.add(shirt);
+    let hairColor = base.hairColor;
+    if (takenHair.has(hairColor)) {
+      hairColor = HAIR_COLORS.find(color => !takenHair.has(color)) ?? hairColor;
+    }
+    takenHair.add(hairColor);
+    return { ...base, shirt, hairColor };
+  });
 }
 
 /**
