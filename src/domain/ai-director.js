@@ -19,6 +19,11 @@ const GRID_ORIGIN = 80;
 const GRID_STEP_X = 420;
 const GRID_STEP_Y = 260;
 const GRID_COLUMNS = 3;
+const MAX_CAST = 3;
+const MAX_LINE_CHARS = 180;
+const MAX_CAPTION_CHARS = 28;
+const CARTOON_POSE_HINTS = "idle, talk, point, type, shrug, facepalm, cheer, think, walk";
+const CARTOON_SETTING_HINTS = "desk, room, street, void";
 
 export function buildDirectorPrompt({
   topic,
@@ -27,7 +32,8 @@ export function buildDirectorPrompt({
   audience,
   tone,
   sources = [],
-  targetDurationSeconds = null
+  targetDurationSeconds = null,
+  cartoon = false
 }) {
   const sourceLines = sources.map(source => {
     const year = source.year ? `, ${source.year}` : "";
@@ -55,6 +61,9 @@ export function buildDirectorPrompt({
       `На это нужно примерно ${budget.recommendedCharacters} непробельных символов закадрового текста суммарно, то есть около ${Math.round(budget.recommendedCharacters / sceneCount)} символов на сцену. Держись этого объёма.`
     ]
     : [];
+  if (cartoon) {
+    return buildCartoonPrompt({ topic, language, sceneCount, audience, tone, durationBlock, researchBlock });
+  }
   return [
     `Ты — режиссёр коротких обучающих видео. Тема: «${topic}».`,
     `Составь план видео из ровно ${sceneCount} сцен на языке "${language}".`,
@@ -66,6 +75,34 @@ export function buildDirectorPrompt({
     ...researchBlock,
     "Ответь ТОЛЬКО валидным JSON без пояснений, строго такой формы:",
     cardShape
+  ].filter(Boolean).join("\n");
+}
+
+// Мультрежим — это сценарий, а не пересказ: сцена держится на реплике, а не на
+// абзаце закадрового текста. Труппа объявляется ОДИН раз на весь ролик и дальше
+// сцены ссылаются на id: внешность персонажа выводится из id детерминированно,
+// поэтому «новый» персонаж в третьей сцене — это другое лицо, даже с тем же именем.
+function buildCartoonPrompt({ topic, language, sceneCount, audience, tone, durationBlock, researchBlock }) {
+  const shape = '{"title": "название ролика", "cast": [{"id": "char-1", "name": "имя", "role": "кто это"}],'
+    + ' "cards": [{"title": "заголовок сцены", "cartoon": {"setting": "desk", "speaker": "char-1",'
+    + ' "line": "реплика персонажа", "pose": "talk", "with": ["char-2"], "withPose": "shrug", "caption": "Понедельник. Офис."}}]}';
+  return [
+    `Ты — сценарист короткого мультфильма. Тема: «${topic}».`,
+    `Напиши ровно ${sceneCount} сцен на языке "${language}".`,
+    audience ? `Аудитория: ${audience}.` : "",
+    tone ? `Тон: ${tone}.` : "",
+    ...durationBlock,
+    `Сначала объяви труппу: от 1 до ${MAX_CAST} персонажей с постоянными id вида "char-1". Дальше ссылайся ТОЛЬКО на эти id — новых персонажей по ходу не вводи.`,
+    "Каждая сцена — одна реплика одного персонажа. Реплика — живая прямая речь, а не пересказ темы: так, как человек сказал бы это вслух.",
+    `Длина реплики — до ${MAX_LINE_CHARS} символов.`,
+    `Поле setting — одно из: ${CARTOON_SETTING_HINTS}.`,
+    `Поле pose (поза говорящего) и withPose (поза второго персонажа) — одно из: ${CARTOON_POSE_HINTS}.`,
+    `caption — короткая подпись места и времени, до ${MAX_CAPTION_CHARS} символов, или пустая строка.`,
+    "with — id остальных персонажей в кадре (0 или 1 персонаж), они молчат.",
+    "Сцены должны складываться в историю: у неё есть завязка и развязка, а не список тезисов.",
+    ...researchBlock,
+    "Ответь ТОЛЬКО валидным JSON без пояснений, строго такой формы:",
+    shape
   ].filter(Boolean).join("\n");
 }
 
@@ -93,6 +130,7 @@ export async function draftBoardFromTopic({
   narrationProvider = "",
   textModel,
   sources = [],
+  cartoon = false,
   maxAttempts = 2,
   signal
 }) {
@@ -111,7 +149,8 @@ export async function draftBoardFromTopic({
     audience,
     tone,
     sources: researchSources,
-    targetDurationSeconds: targetDuration
+    targetDurationSeconds: targetDuration,
+    cartoon
   });
 
   let lastFailure = "";
@@ -139,7 +178,8 @@ export async function draftBoardFromTopic({
         narrationProvider,
         sceneCount: scenes,
         targetDurationSeconds: targetDuration,
-        sources: researchSources
+        sources: researchSources,
+        cartoon
       });
     } catch (error) {
       lastFailure = error.message;
@@ -157,15 +197,23 @@ function assembleBoard(payload, {
   narrationProvider,
   sceneCount,
   targetDurationSeconds = null,
-  sources = []
+  sources = [],
+  cartoon = false
 }) {
+  const troupe = cartoon ? normalizeTroupe(payload.cast) : [];
+  if (cartoon && !troupe.length) throw new RangeError("модель не объявила труппу");
   const allowedSourceIds = new Set(sources.map(source => source.id));
   const cardsInput = Array.isArray(payload.cards) ? payload.cards : [];
   const cards = [];
   for (const [index, card] of cardsInput.entries()) {
     if (cards.length >= sceneCount) break;
     const title = cleanLine(card?.title, MAX_CARD_TITLE_CHARS);
-    const text = cleanLine(card?.text, MAX_CARD_TEXT_CHARS);
+    // В мультрежиме закадровый текст — это и есть реплика: диктор произносит
+    // то, что персонаж говорит в кадре, иначе звук расходится с картинкой.
+    const scene = cartoon ? buildCartoonScene(card?.cartoon, troupe) : null;
+    const text = cartoon
+      ? cleanLine(scene?.line, MAX_CARD_TEXT_CHARS)
+      : cleanLine(card?.text, MAX_CARD_TEXT_CHARS);
     if (!title || !text) continue;
     // Ссылки на источники проходят только из канонического списка — модель не
     // может «сослаться» на несуществующий источник.
@@ -180,6 +228,7 @@ function assembleBoard(payload, {
       y: GRID_ORIGIN + Math.floor(cards.length / GRID_COLUMNS) * GRID_STEP_Y,
       title,
       text,
+      ...(scene ? { sceneType: "cartoon", sceneData: { cartoon: scene } } : {}),
       ...(allowedSourceIds.size ? { sourceRefs } : {})
     });
   }
@@ -202,6 +251,45 @@ function assembleBoard(payload, {
   // Единственный критерий годности драфта — он рендерится нашим же конвейером.
   buildStoryboard(board);
   return board;
+}
+
+// Труппа — источник постоянства: id живёт весь ролик, внешность выводится из него.
+function normalizeTroupe(raw) {
+  if (!Array.isArray(raw)) return [];
+  const troupe = [];
+  const seen = new Set();
+  for (const [index, member] of raw.slice(0, MAX_CAST).entries()) {
+    const name = cleanLine(member?.name, 28);
+    const id = cleanLine(member?.id, 40) || `char-${index + 1}`;
+    if (!name || seen.has(id)) continue;
+    seen.add(id);
+    troupe.push({ id, name });
+  }
+  return troupe;
+}
+
+function buildCartoonScene(raw, troupe) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw) || !troupe.length) return null;
+  const line = cleanLine(raw.line, MAX_LINE_CHARS);
+  if (!line) return null;
+  const byId = new Map(troupe.map(member => [member.id, member]));
+  // Неизвестный говорящий — не повод изобретать персонажа: реплику произносит
+  // первый из объявленной труппы, состав кадра остаётся честным.
+  const speaker = byId.get(cleanLine(raw.speaker, 40)) ?? troupe[0];
+  const companionId = (Array.isArray(raw.with) ? raw.with : [])
+    .map(value => cleanLine(value, 40))
+    .find(value => byId.has(value) && value !== speaker.id);
+  const companion = companionId ? byId.get(companionId) : null;
+  const cast = [{ id: speaker.id, name: speaker.name, pose: cleanLine(raw.pose, 24) || "talk", side: "left", speaking: true }];
+  if (companion) {
+    cast.push({ id: companion.id, name: companion.name, pose: cleanLine(raw.withPose, 24) || "idle", side: "right", speaking: false });
+  }
+  return {
+    setting: cleanLine(raw.setting, 24) || "void",
+    cast,
+    line,
+    caption: cleanLine(raw.caption, MAX_CAPTION_CHARS)
+  };
 }
 
 function normalizeResearchSources(sources) {
