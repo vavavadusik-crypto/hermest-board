@@ -22,6 +22,10 @@ const GRID_COLUMNS = 3;
 const MAX_CAST = 3;
 const MAX_LINE_CHARS = 180;
 const MAX_CAPTION_CHARS = 28;
+const MAX_CONTINUITY_FACTS = 8;
+const MAX_CONTEXT_CHARS = 240;
+const MAX_BEATS = 6;
+const MAX_BEAT_CHARS = 200;
 const CARTOON_POSE_HINTS = "idle, talk, point, type, shrug, facepalm, cheer, think, walk";
 const CARTOON_SETTING_HINTS = "desk, room, street, void";
 
@@ -33,7 +37,10 @@ export function buildDirectorPrompt({
   tone,
   sources = [],
   targetDurationSeconds = null,
-  cartoon = false
+  cartoon = false,
+  continuity = [],
+  characters = [],
+  beats = []
 }) {
   const sourceLines = sources.map(source => {
     const year = source.year ? `, ${source.year}` : "";
@@ -61,8 +68,35 @@ export function buildDirectorPrompt({
       `На это нужно примерно ${budget.recommendedCharacters} непробельных символов закадрового текста суммарно, то есть около ${Math.round(budget.recommendedCharacters / sceneCount)} символов на сцену. Держись этого объёма.`
     ]
     : [];
+  // Серия не начинается с чистого листа: труппа и то, что уже случилось,
+  // приходят данными из плана сезона, а не «памятью» модели.
+  // Промпт — публичный вход, а не внутренний шаг: он чистит контекст сам, иначе
+  // дубликат id или безымянный персонаж уезжает модели вместе с инструкцией
+  // «играть ровно этими».
+  const troupe = normalizeSeriesCharacters(characters);
+  const pastFacts = normalizeContext(continuity, MAX_CONTINUITY_FACTS, MAX_CONTEXT_CHARS);
+  const episodeBeats = normalizeContext(beats, MAX_BEATS, MAX_BEAT_CHARS);
+  const troupeBlock = troupe.length
+    ? [
+      "Постоянная труппа сериала — используй ТОЛЬКО этих персонажей и ровно эти id:",
+      ...troupe.map(character => {
+        const role = character.role ? ` — ${character.role}` : "";
+        const traits = character.traits?.length ? ` (${character.traits.join(", ")})` : "";
+        return `- ${character.id}: ${character.name}${role}${traits}`;
+      })
+    ]
+    : [];
+  const continuityBlock = pastFacts.length
+    ? ["Что уже произошло в предыдущих сериях (опирайся на это, не противоречь):", ...pastFacts.map(fact => `- ${fact}`)]
+    : [];
+  const beatsBlock = episodeBeats.length
+    ? ["Опорные точки этой серии, в этом порядке:", ...episodeBeats.map((beat, index) => `${index + 1}. ${beat}`)]
+    : [];
   if (cartoon) {
-    return buildCartoonPrompt({ topic, language, sceneCount, audience, tone, durationBlock, researchBlock });
+    return buildCartoonPrompt({
+      topic, language, sceneCount, audience, tone, durationBlock, researchBlock,
+      troupeBlock, continuityBlock, beatsBlock
+    });
   }
   return [
     `Ты — режиссёр коротких обучающих видео. Тема: «${topic}».`,
@@ -72,6 +106,8 @@ export function buildDirectorPrompt({
     ...durationBlock,
     "Каждая сцена — карточка с коротким заголовком и 1–2 предложениями закадрового текста.",
     "Первая карточка — цепляющий вход в тему, последняя — вывод или призыв.",
+    ...continuityBlock,
+    ...beatsBlock,
     ...researchBlock,
     "Ответь ТОЛЬКО валидным JSON без пояснений, строго такой формы:",
     cardShape
@@ -82,17 +118,26 @@ export function buildDirectorPrompt({
 // абзаце закадрового текста. Труппа объявляется ОДИН раз на весь ролик и дальше
 // сцены ссылаются на id: внешность персонажа выводится из id детерминированно,
 // поэтому «новый» персонаж в третьей сцене — это другое лицо, даже с тем же именем.
-function buildCartoonPrompt({ topic, language, sceneCount, audience, tone, durationBlock, researchBlock }) {
+function buildCartoonPrompt({
+  topic, language, sceneCount, audience, tone, durationBlock, researchBlock,
+  troupeBlock = [], continuityBlock = [], beatsBlock = []
+}) {
   const shape = '{"title": "название ролика", "cast": [{"id": "char-1", "name": "имя", "role": "кто это"}],'
     + ' "cards": [{"title": "заголовок сцены", "cartoon": {"setting": "desk", "speaker": "char-1",'
     + ' "line": "реплика персонажа", "pose": "talk", "with": ["char-2"], "withPose": "shrug", "caption": "Понедельник. Офис."}}]}';
+  const castInstruction = troupeBlock.length
+    ? "Труппа уже задана выше — верни её в поле cast без изменений (id и имена ровно те же) и ссылайся только на эти id."
+    : `Сначала объяви труппу: от 1 до ${MAX_CAST} персонажей с постоянными id вида "char-1". Дальше ссылайся ТОЛЬКО на эти id — новых персонажей по ходу не вводи.`;
   return [
     `Ты — сценарист короткого мультфильма. Тема: «${topic}».`,
     `Напиши ровно ${sceneCount} сцен на языке "${language}".`,
     audience ? `Аудитория: ${audience}.` : "",
     tone ? `Тон: ${tone}.` : "",
     ...durationBlock,
-    `Сначала объяви труппу: от 1 до ${MAX_CAST} персонажей с постоянными id вида "char-1". Дальше ссылайся ТОЛЬКО на эти id — новых персонажей по ходу не вводи.`,
+    ...troupeBlock,
+    ...continuityBlock,
+    ...beatsBlock,
+    castInstruction,
     "Каждая сцена — одна реплика одного персонажа. Реплика — живая прямая речь, а не пересказ темы: так, как человек сказал бы это вслух.",
     `Длина реплики — до ${MAX_LINE_CHARS} символов.`,
     `Поле setting — одно из: ${CARTOON_SETTING_HINTS}.`,
@@ -131,6 +176,9 @@ export async function draftBoardFromTopic({
   textModel,
   sources = [],
   cartoon = false,
+  continuity = [],
+  characters = [],
+  beats = [],
   maxAttempts = 2,
   signal
 }) {
@@ -150,7 +198,10 @@ export async function draftBoardFromTopic({
     tone,
     sources: researchSources,
     targetDurationSeconds: targetDuration,
-    cartoon
+    cartoon,
+    continuity,
+    characters,
+    beats
   });
 
   let lastFailure = "";
@@ -179,7 +230,8 @@ export async function draftBoardFromTopic({
         sceneCount: scenes,
         targetDurationSeconds: targetDuration,
         sources: researchSources,
-        cartoon
+        cartoon,
+        characters: normalizeSeriesCharacters(characters)
       });
     } catch (error) {
       lastFailure = error.message;
@@ -198,9 +250,12 @@ function assembleBoard(payload, {
   sceneCount,
   targetDurationSeconds = null,
   sources = [],
-  cartoon = false
+  cartoon = false,
+  characters = []
 }) {
-  const troupe = cartoon ? normalizeTroupe(payload.cast) : [];
+  // Труппа сезона сильнее ответа модели: если сериал уже объявил персонажей,
+  // серия обязана играть ими — иначе внешность и имена поплывут между сериями.
+  const troupe = cartoon ? (characters.length ? characters : normalizeTroupe(payload.cast)) : [];
   if (cartoon && !troupe.length) throw new RangeError("модель не объявила труппу");
   const allowedSourceIds = new Set(sources.map(source => source.id));
   const cardsInput = Array.isArray(payload.cards) ? payload.cards : [];
@@ -251,6 +306,34 @@ function assembleBoard(payload, {
   // Единственный критерий годности драфта — он рендерится нашим же конвейером.
   buildStoryboard(board);
   return board;
+}
+
+function normalizeContext(list, maxItems, maxChars) {
+  if (!Array.isArray(list)) return [];
+  return list.map(item => cleanLine(item, maxChars)).filter(Boolean).slice(0, maxItems);
+}
+
+// Персонажи сезона приходят уже нормализованными из series-plan, но режиссёр —
+// отдельный вход, и доверять форме на слово он не обязан.
+function normalizeSeriesCharacters(list) {
+  if (!Array.isArray(list)) return [];
+  const characters = [];
+  const seen = new Set();
+  for (const character of list.slice(0, MAX_CAST)) {
+    const id = cleanLine(character?.id, 40);
+    const name = cleanLine(character?.name, 28);
+    if (!id || !name || seen.has(id)) continue;
+    seen.add(id);
+    characters.push({
+      id,
+      name,
+      ...(character?.role ? { role: cleanLine(character.role, 120) } : {}),
+      ...(Array.isArray(character?.traits) && character.traits.length
+        ? { traits: character.traits.map(trait => cleanLine(trait, 60)).filter(Boolean).slice(0, 5) }
+        : {})
+    });
+  }
+  return characters;
 }
 
 // Труппа — источник постоянства: id живёт весь ролик, внешность выводится из него.
