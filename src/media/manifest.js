@@ -110,6 +110,7 @@ const VALID_ASSET_TYPES = Object.freeze([
   "generative-clip",
   "stock-footage",
   "generated-image",
+  "stock-photo",
   "deterministic"
 ]);
 

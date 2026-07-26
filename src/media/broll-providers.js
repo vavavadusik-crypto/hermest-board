@@ -2,8 +2,13 @@ export const PROVIDER_KINDS = [
   "generative-clip",
   "stock-footage",
   "generated-image",
+  "stock-photo",
   "deterministic"
 ];
+
+// Фон сцены может дать и генератор, и фотосток — для рендера это один класс
+// провайдеров, но происхождение у них разное и в провенансе не смешивается.
+export const STILL_IMAGE_PROVIDER_KINDS = Object.freeze(["generated-image", "stock-photo"]);
 
 export const COST_CLASSES = ["free", "local", "byok"];
 
@@ -229,7 +234,10 @@ function createPollinationsImageDescriptor({ fetchImpl, onWarning }) {
 function createPexelsPhotoDescriptor({ env, fetchImpl, onWarning }) {
   return {
     id: "pexels-photo",
-    kind: "generated-image",
+    // Фотосток — не генерация: снимок сделан человеком и живёт по лицензии
+    // Pexels. Записать его как generated-image значит соврать в провенансе и
+    // потерять правовое основание использования.
+    kind: "stock-photo",
     costClass: "byok",
     timeoutMs: 150000, // REQUEST_TIMEOUT_MS(30s) + DOWNLOAD_TIMEOUT_MS(120s)
     contentType: "image/jpeg",
@@ -257,7 +265,7 @@ function createPexelsPhotoDescriptor({ env, fetchImpl, onWarning }) {
       });
       return {
         ...result,
-        assetType: "generated-image"
+        assetType: "stock-photo"
       };
     }
   };

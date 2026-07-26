@@ -511,6 +511,44 @@ test("render manifest includes footage with assetType", () => {
   assert.equal(manifest.footage[1].provider, "pollinations", "second provider");
 });
 
+test("a licensed stock photo is recorded as stock, never as generation", () => {
+  const manifest = build({
+    footage: [
+      {
+        sceneIndex: 1,
+        assetType: "stock-photo",
+        license: "pexels",
+        sha256: "aa11bb22cc33dd44ee55ff66007788990011223344556677889900aabbccddee",
+        provenance: {
+          source: "stock",
+          provider: "pexels-photos",
+          photoId: "998877",
+          author: "Jane Roe",
+          url: "https://example.com/photo"
+        }
+      }
+    ]
+  });
+  assert.equal(manifest.footage[0].assetType, "stock-photo");
+  assert.equal(manifest.footage[0].provider, "pexels-photos");
+  // Право на использование держится на лицензии стока, а не на факте генерации:
+  // подмена типа стирает основание и в отчёте, и в publish-паке.
+  assert.equal(manifest.footage[0].license, "pexels");
+
+  assert.throws(
+    () => build({
+      footage: [{
+        sceneIndex: 1,
+        assetType: "stock-picture",
+        license: "pexels",
+        sha256: "aa11bb22cc33dd44ee55ff66007788990011223344556677889900aabbccddee",
+        provenance: { source: "stock", provider: "pexels-photos" }
+      }]
+    }),
+    /Invalid assetType/
+  );
+});
+
 test("render manifest rejects footage without assetType", () => {
   assert.throws(
     () => build({

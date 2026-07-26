@@ -102,18 +102,34 @@ Two acquisition kinds, gated by `brollMode`
 overrides `project.brief.brollMode`):
 
 - **Stock b-roll video** — Pexels (`broll-source.js`), keyed.
-- **Generated / stock images** (`image-source.js` cascade, in order):
-  1. **FAL** flux/schnell — BYOK (only if `FAL_API_KEY` present);
-  2. **Pollinations** — free, **no key**, always available (reliable fallback);
-  3. **Pexels photos** — BYOK (only if `PEXELS_API_KEY` present).
+- **Still scene backgrounds** (`broll-providers.js` registry, in cascade order):
+  1. **FAL** flux/schnell — BYOK (only if `FAL_API_KEY` present), `generated-image`;
+  2. **Pollinations** — free, **no key**, always available (reliable fallback),
+     `generated-image`;
+  3. **Pexels photos** — BYOK (only if `PEXELS_API_KEY` present), `stock-photo`.
+  The last one is a photograph taken by a person under the Pexels licence, not a
+  generated image, and the manifest records it as such: the right to use it rests
+  on that licence, so collapsing it into `generated-image` would erase the legal
+  ground along with the truth. Both kinds are still eligible as scene backgrounds
+  (`STILL_IMAGE_PROVIDER_KINDS`).
+  A transient provider failure (5xx, 429, a broken connection, our own timeout) is
+  retried with a bounded backoff before the cascade moves on, so one hiccup of a
+  free service no longer quietly degrades the picture.
 - **Deterministic fallback** — every scene without acquired footage renders a
   generated title-card. A provider outage can never erase the ability to produce
   a complete video.
 
-Image/video generation is **opt-in**: enabled by `project.brief.generateVisuals`
-or the presence of a keyed image provider (`hasKeyedImageProvider`). By default,
-renders are deterministic and offline (no network), which keeps the test gate
-non-flaky. Scene frames are composed by a headless Chromium composer
+Image/video acquisition is **opt-in**, and the rule lives in the domain
+(`resolveFootageMode`, `src/domain/footage-policy.js`), not in the media layer.
+External sources are used only on an explicit intent: `project.brief.generateVisuals`,
+a configured provider key (`hasKeyedImageProvider`) or the operator's
+`HERMEST_BROLL_MODE` override. `brollMode` chooses *which* providers, never
+*whether* — a fresh project carries `brollMode: "auto"`, and that alone is not
+permission to reach the network. So by default renders are deterministic and
+offline, which is both the promise made to the user and what keeps the test gate
+non-flaky. When a project asks for a networked mode without that permission, the
+render does not silently fall back: the manifest carries a warning naming the
+mode that was requested. Scene frames are composed by a headless Chromium composer
 (`scene-frames.js`, `HERMEST_CHROME_PATH`).
 
 ### Scene frame capture (`chrome-cdp.js`)

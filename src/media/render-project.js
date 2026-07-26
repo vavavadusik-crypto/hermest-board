@@ -25,6 +25,7 @@ import {
 } from "../domain/duration-plan.js";
 import { getPlatformRecipe } from "../domain/platform-recipes.js";
 import { resolveCoverFrameSeconds } from "../domain/cover-frame.js";
+import { resolveFootageMode } from "../domain/footage-policy.js";
 import {
   buildComposedVideoRenderArgs,
   buildCoverFrameArgs,
@@ -35,9 +36,9 @@ import {
 import { readPngHeader } from "./png-header.js";
 import { composeSceneFrames, describeSceneComposerAvailability } from "./scene-frames.js";
 import { createPexelsBrollAdapter, describeBrollAvailability } from "./broll-source.js";
-import { createDefaultImageSourceCascade, hasKeyedImageProvider } from "./image-source.js";
+import { hasKeyedImageProvider } from "./image-source.js";
 import { createCachedImageAdapter } from "./asset-cache.js";
-import { createBrollProviderRegistry } from "./broll-providers.js";
+import { createBrollProviderRegistry, STILL_IMAGE_PROVIDER_KINDS } from "./broll-providers.js";
 
 const DEFAULT_STYLE_PRESET = "cinematic dark tech aesthetic, deep blue and teal palette, volumetric light, high detail, no text, no watermark";
 const MAX_GENERATED_BACKGROUNDS = 8;
@@ -84,6 +85,12 @@ export async function renderProject({
     ? process.env.HERMEST_BROLL_MODE
     : undefined;
   const brollMode = validateBrollMode(brollModeOverride ?? project?.brief?.brollMode);
+  const footagePolicy = resolveFootageMode({
+    brollMode,
+    hasModeOverride: Boolean(brollModeOverride),
+    generateVisuals: project?.brief?.generateVisuals === true,
+    hasKeyedProvider: hasKeyedImageProvider(process.env)
+  });
   const estimatedStoryboard = buildStoryboard(project);
   const narration = buildNarrationScript(estimatedStoryboard);
   const recipe = getPlatformRecipe(platform);
@@ -255,7 +262,8 @@ export async function renderProject({
     let musicTrack = null;
     if (composerAvailability.status === "executable") {
       const brollRegistry = createBrollProviderRegistry({ onWarning: msg => footageWarnings.push(msg) });
-      const brollProviders = brollRegistry.buildCascade(brollMode);
+      const brollProviders = brollRegistry.buildCascade(footagePolicy.mode);
+      if (footagePolicy.warning) footageWarnings.push(footagePolicy.warning);
       const brollClips = [];
       const brollOrientation = recipe.height > recipe.width ? "portrait" : "landscape";
 
@@ -299,8 +307,8 @@ export async function renderProject({
         (_scene, sceneIndex) => sceneIndex > 0 && !brollClips[sceneIndex]
       ).length;
 
-      if (scenesWithoutFootage > 0 && brollMode !== "deterministic") {
-        const imageProviders = brollProviders.filter(p => p.kind === "generated-image");
+      if (scenesWithoutFootage > 0 && footagePolicy.mode !== "deterministic") {
+        const imageProviders = brollProviders.filter(p => STILL_IMAGE_PROVIDER_KINDS.includes(p.kind));
         const projectSeed = Number.parseInt(hashJson(project).slice(0, 8), 16);
         const stylePreset = typeof project?.brief?.stylePreset === "string" && project.brief.stylePreset.trim()
           ? project.brief.stylePreset.trim()

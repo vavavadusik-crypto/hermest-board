@@ -4,7 +4,8 @@ import { describe, it } from "node:test";
 import {
   createBrollProviderRegistry,
   PROVIDER_KINDS,
-  COST_CLASSES
+  COST_CLASSES,
+  STILL_IMAGE_PROVIDER_KINDS
 } from "../../src/media/broll-providers.js";
 
 describe("broll-providers — unified provider contract", () => {
@@ -82,6 +83,26 @@ describe("broll-providers — unified provider contract", () => {
     assert.strictEqual(pollinations.costClass, "free", "pollinations is free");
     const availability = pollinations.describeAvailability();
     assert.strictEqual(availability.status, "executable", "pollinations always executable");
+  });
+
+  it("pexels photos are stock, not generation, and the render still treats them as scene backgrounds", () => {
+    const registry = createBrollProviderRegistry({ env: { HERMEST_PEXELS_API_KEY: "test-key" } });
+    const photo = registry.getProvider("pexels-photo");
+    assert.ok(photo !== undefined, "pexels-photo registered");
+    // Снимок сделан человеком и живёт по лицензии Pexels: записать его как
+    // generated-image значит соврать и в происхождении, и в правах.
+    assert.strictEqual(photo.kind, "stock-photo", "pexels photo is stock, not generated");
+    assert.strictEqual(photo.costClass, "byok");
+    assert.ok(PROVIDER_KINDS.includes("stock-photo"), "stock-photo is a declared provider kind");
+
+    // Для подбора фона рендеру важен класс «неподвижная картинка», а не
+    // происхождение, поэтому обе разновидности обязаны попадать в один фильтр.
+    assert.deepEqual([...STILL_IMAGE_PROVIDER_KINDS].sort(), ["generated-image", "stock-photo"]);
+    const stillProviders = registry.buildCascade("auto")
+      .filter(provider => STILL_IMAGE_PROVIDER_KINDS.includes(provider.kind))
+      .map(provider => provider.id);
+    assert.ok(stillProviders.includes("pollinations-image"), "генерация остаётся источником фона");
+    assert.ok(stillProviders.includes("pexels-photo"), "фотосток остаётся источником фона");
   });
 
   it("deterministic-fallback provider always available", () => {
