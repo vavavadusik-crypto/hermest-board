@@ -106,6 +106,51 @@ test("Board agent formatter reads explicit connector state instead of object tru
   assert.doesNotMatch(source, /\$\{value \? "configured" : "missing"\}/);
 });
 
+test("design capabilities keep platform approval gates as named blockers", () => {
+  const env = {
+    FIGMA_ACCESS_TOKEN: SECRET,
+    CANVA_CLIENT_ID: `client-${SECRET}`,
+    CANVA_CLIENT_SECRET: `secret-${SECRET}`,
+    ADOBE_FIREFLY_CLIENT_ID: `client-${SECRET}`,
+    ADOBE_FIREFLY_CLIENT_SECRET: `secret-${SECRET}`
+  };
+  const status = getConnectorCapabilityStatus({ env, runtime: "server" });
+  assert.equal(JSON.stringify(status).includes(SECRET), false);
+
+  const designImport = capability(status, "design.import");
+  assert.equal(designImport.executable, false);
+  assert.equal(designImport.state, "configured_but_adapter_missing");
+  assert.equal(designImport.primary.adapterId, "figma-file-import-v1");
+  assert.equal(designImport.providers.find(provider => provider.id === "figma")?.configured, true);
+  assert.ok(designImport.blockers.includes("adapter_not_implemented"));
+  assert.ok(designImport.blockers.includes("canva_integration_review_required"));
+  assert.ok(designImport.blockers.includes("google_oauth_app_verification_required"));
+
+  const brandAssets = capability(status, "brand.assets");
+  assert.equal(brandAssets.executable, false);
+  assert.ok(brandAssets.blockers.includes("canva_brand_template_plan_required"));
+  assert.ok(brandAssets.blockers.includes("adobe_developer_console_project_required"));
+
+  const designExport = capability(status, "design.export");
+  assert.equal(designExport.executable, false);
+  assert.equal(designExport.state, "oauth_skeleton");
+  assert.ok(designExport.blockers.includes("oauth_token_exchange_not_implemented"));
+  assert.ok(designExport.blockers.includes("canva_integration_review_required"));
+
+  const image = capability(status, "image.generate");
+  const firefly = image.fallbacks.concat(image.primary).find(route => route?.adapterId === "adobe-firefly-image-v1");
+  assert.ok(firefly, "Missing Firefly route");
+  assert.equal(firefly.executable, false);
+  assert.ok(firefly.blockers.includes("adobe_firefly_entitlement_required"));
+});
+
+test("design connectors stay blocked when no design credential is configured", () => {
+  const plan = planConnectorCapability("design.import", { env: {}, runtime: "server" });
+  assert.equal(plan.executable, false);
+  assert.equal(plan.providers.find(provider => provider.id === "figma")?.configured, false);
+  assert.ok(plan.blockers.includes("adapter_not_implemented"));
+});
+
 test("unknown capabilities fail closed", () => {
   assert.throws(
     () => planConnectorCapability("shell.execute", { env: {}, runtime: "server" }),

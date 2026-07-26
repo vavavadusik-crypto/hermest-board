@@ -44,6 +44,7 @@ import {
       ["image_video", "Фото / видео"],
       ["speech", "Голос"],
       ["search_research", "Поиск / research"],
+      ["design_assets", "Дизайн / бренд-ассеты"],
       ["social_publish", "Публикация"],
       ["automation", "Automation"],
       ["storage_db", "Storage / DB"],

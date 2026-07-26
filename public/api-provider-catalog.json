@@ -529,6 +529,66 @@
       "signup": "https://dash.cloudflare.com/",
       "use": "S3-compatible asset storage",
       "status": "server_secret_required"
+    },
+    {
+      "id": "figma",
+      "name": "Figma REST API",
+      "category": "design_assets",
+      "auth": "api_key",
+      "freeMode": "account_token",
+      "env": "FIGMA_ACCESS_TOKEN",
+      "docs": "https://developers.figma.com/docs/rest-api/",
+      "signup": "https://www.figma.com/settings",
+      "use": "Read design files, published styles and rendered node images with a personal access token in X-Figma-Token",
+      "status": "server_secret_required"
+    },
+    {
+      "id": "canva",
+      "name": "Canva Connect APIs",
+      "category": "design_assets",
+      "auth": "oauth",
+      "freeMode": "approval_required",
+      "env": "CANVA_CLIENT_ID",
+      "docs": "https://www.canva.dev/docs/connect/",
+      "signup": "https://www.canva.com/developers/integrations",
+      "use": "Asset upload, design export and brand templates through a reviewed OAuth 2.0 + PKCE integration",
+      "status": "oauth_skeleton"
+    },
+    {
+      "id": "google-drive",
+      "name": "Google Drive API v3",
+      "category": "design_assets",
+      "auth": "oauth",
+      "freeMode": "free_quota",
+      "env": "GOOGLE_DRIVE_CLIENT_ID",
+      "docs": "https://developers.google.com/workspace/drive/api/guides/about-sdk",
+      "signup": "https://console.cloud.google.com/apis/credentials",
+      "use": "Brand asset storage and rendered video delivery through the non-sensitive drive.file scope",
+      "status": "oauth_skeleton"
+    },
+    {
+      "id": "adobe-cc-libraries",
+      "name": "Adobe Creative Cloud Libraries API",
+      "category": "design_assets",
+      "auth": "oauth",
+      "freeMode": "developer_console",
+      "env": "ADOBE_CC_LIBRARIES_CLIENT_ID",
+      "docs": "https://developer.adobe.com/creative-cloud-libraries/",
+      "signup": "https://developer.adobe.com/console/home",
+      "use": "Read brand elements from user Creative Cloud libraries with cc_files/cc_libraries scopes",
+      "status": "oauth_skeleton"
+    },
+    {
+      "id": "adobe-firefly",
+      "name": "Adobe Firefly Services",
+      "category": "image_video",
+      "auth": "api_key",
+      "freeMode": "paid_entitlement",
+      "env": "ADOBE_FIREFLY_CLIENT_ID",
+      "docs": "https://developer.adobe.com/firefly-services/docs/guides/",
+      "signup": "https://developer.adobe.com/console/home",
+      "use": "Server-to-server image generation and asset automation via OAuth client_credentials against Adobe IMS",
+      "status": "server_secret_required"
     }
   ]
 }
