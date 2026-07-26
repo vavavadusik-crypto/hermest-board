@@ -117,9 +117,12 @@ test("design capabilities keep platform approval gates as named blockers", () =>
   const status = getConnectorCapabilityStatus({ env, runtime: "server" });
   assert.equal(JSON.stringify(status).includes(SECRET), false);
 
+  // The Figma route is implemented, so a configured token really does make it
+  // executable; the Canva and Drive routes on the same capability stay blocked and
+  // keep their platform gates listed.
   const designImport = capability(status, "design.import");
-  assert.equal(designImport.executable, false);
-  assert.equal(designImport.state, "configured_but_adapter_missing");
+  assert.equal(designImport.executable, true);
+  assert.equal(designImport.state, "configured_adapter");
   assert.equal(designImport.primary.adapterId, "figma-file-import-v1");
   assert.equal(designImport.providers.find(provider => provider.id === "figma")?.configured, true);
   assert.ok(designImport.blockers.includes("adapter_not_implemented"));
@@ -127,7 +130,8 @@ test("design capabilities keep platform approval gates as named blockers", () =>
   assert.ok(designImport.blockers.includes("google_oauth_app_verification_required"));
 
   const brandAssets = capability(status, "brand.assets");
-  assert.equal(brandAssets.executable, false);
+  assert.equal(brandAssets.executable, true);
+  assert.equal(brandAssets.primary.adapterId, "figma-brand-assets-v1");
   assert.ok(brandAssets.blockers.includes("canva_brand_template_plan_required"));
   assert.ok(brandAssets.blockers.includes("adobe_developer_console_project_required"));
 
@@ -148,7 +152,12 @@ test("design connectors stay blocked when no design credential is configured", (
   const plan = planConnectorCapability("design.import", { env: {}, runtime: "server" });
   assert.equal(plan.executable, false);
   assert.equal(plan.providers.find(provider => provider.id === "figma")?.configured, false);
-  assert.ok(plan.blockers.includes("adapter_not_implemented"));
+  assert.equal(plan.providers.find(provider => provider.id === "figma")?.state, "blocked");
+  assert.ok(plan.blockers.includes("provider_credentials_missing"));
+
+  const brandAssets = planConnectorCapability("brand.assets", { env: {}, runtime: "server" });
+  assert.equal(brandAssets.executable, false);
+  assert.ok(brandAssets.blockers.includes("provider_credentials_missing"));
 });
 
 test("unknown capabilities fail closed", () => {

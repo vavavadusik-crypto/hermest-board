@@ -63,9 +63,11 @@ const CAPABILITY_DEFINITIONS = Object.freeze([
   // against official documentation on 2026-07-26; see docs/CONNECTORS.md for the
   // links. Nothing here is executable until the matching adapter module exists.
   capability("design.import", false, [
-    // Figma REST: GET /v1/files/{file_key} with a personal access token in
-    // X-Figma-Token. https://developers.figma.com/docs/rest-api/ (checked 2026-07-26)
-    adapter("figma-file-import-v1", ["figma"], false, ["server", "local_media"], "server_env", ["FIGMA_ACCESS_TOKEN"]),
+    // Implemented in src/connectors/figma-design.js (importFile, renderNodeImages).
+    // Figma REST: GET /v1/files/{file_key} and GET /v1/images/{file_key} with a
+    // personal access token in X-Figma-Token.
+    // https://developers.figma.com/docs/rest-api/ (checked 2026-07-26)
+    adapter("figma-file-import-v1", ["figma"], true, ["server", "local_media"], "server_env", ["FIGMA_ACCESS_TOKEN"]),
     // Canva Connect: OAuth 2.0 authorization code + PKCE; a public integration is
     // usable only after Canva review, a private one needs Canva Enterprise.
     // https://www.canva.dev/docs/connect/ (checked 2026-07-26)
@@ -92,9 +94,10 @@ const CAPABILITY_DEFINITIONS = Object.freeze([
     )
   ]),
   capability("brand.assets", false, [
+    // Implemented in src/connectors/figma-design.js (readBrandAssets).
     // Figma REST: GET /v1/files/{file_key}/styles returns published styles.
     // https://developers.figma.com/docs/rest-api/scopes/ (checked 2026-07-26)
-    adapter("figma-brand-assets-v1", ["figma"], false, ["server", "local_media"], "server_env", ["FIGMA_ACCESS_TOKEN"]),
+    adapter("figma-brand-assets-v1", ["figma"], true, ["server", "local_media"], "server_env", ["FIGMA_ACCESS_TOKEN"]),
     // Canva brand template endpoints additionally require the acting user to be on a
     // Canva plan that includes brand templates.
     // https://www.canva.dev/docs/connect/api-reference/brand-templates/ (checked 2026-07-26)
