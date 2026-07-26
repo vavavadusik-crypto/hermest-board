@@ -108,6 +108,11 @@ import {
     const wizardSceneCountInput = document.getElementById("wizardSceneCount");
     const wizardResearchInput = document.getElementById("wizardResearch");
     const wizardCartoonInput = document.getElementById("wizardCartoon");
+    const seriesTopicInput = document.getElementById("seriesTopic");
+    const seriesEpisodesInput = document.getElementById("seriesEpisodes");
+    const seriesPlanButton = document.getElementById("seriesPlan");
+    const seriesStatus = document.getElementById("seriesStatus");
+    const seriesList = document.getElementById("seriesList");
     const wizardDraftButton = document.getElementById("wizardDraft");
     const wizardCancelButton = document.getElementById("wizardCancel");
     const wizardModelSelect = document.getElementById("wizardModel");
@@ -1374,9 +1379,13 @@ import {
       if (busy) wizardCancelButton.disabled = false;
     }
 
-    async function draftFromTopic() {
+    async function draftFromTopic({ series = null, episodeNumber = null } = {}) {
       if (activeDraftJobId) return; // гард: сборка уже идёт — не запускать вторую
-      const topic = wizardTopicInput.value.trim();
+      // У серии своя тема — она собрана планом сезона из названия и логлайна,
+      // поэтому поле темы для неё не обязательно.
+      const topic = episodeNumber === null
+        ? wizardTopicInput.value.trim()
+        : (wizardTopicInput.value.trim() || seriesTopicInput.value.trim() || "серия сериала");
       if (!topic) {
         wizardStatus.textContent = "Сначала введи тему ролика.";
         wizardTopicInput.focus();
@@ -1417,6 +1426,7 @@ import {
             targetDurationSeconds,
             research: wizardResearchInput.checked,
             cartoon: wizardCartoonInput?.checked === true,
+            ...(series && episodeNumber !== null ? { series, episodeNumber } : {}),
             model,
             endpoint,
             language: state.brief?.language || "ru",
@@ -1469,6 +1479,116 @@ import {
         if (cancelledView) wizardTopicInput.focus();
       }
     }
+
+    // Сезон живёт дольше одной вкладки: сериал снимается сериями и не за один
+    // вечер, поэтому план переживает перезагрузку. Хранится отдельно от доски —
+    // доска это одна серия, план это весь сериал.
+    const SERIES_KEY = "hermest-board:series:v1";
+    let seasonPlan = null;
+
+    function loadSeasonPlan() {
+      try {
+        const raw = localStorage.getItem(SERIES_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed?.episodes) && parsed.episodes.length ? parsed : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function storeSeasonPlan(plan) {
+      seasonPlan = plan;
+      try {
+        if (plan) localStorage.setItem(SERIES_KEY, JSON.stringify(plan));
+        else localStorage.removeItem(SERIES_KEY);
+      } catch (_) { /* приватный режим или переполнение — план просто не переживёт вкладку */ }
+    }
+
+    function renderSeasonPlan() {
+      seriesList.textContent = "";
+      if (!seasonPlan) {
+        seriesList.hidden = true;
+        return;
+      }
+      for (const episode of seasonPlan.episodes) {
+        const item = document.createElement("li");
+        const text = document.createElement("div");
+        const title = document.createElement("div");
+        title.className = "series-episode-title";
+        title.textContent = `${episode.number}. ${episode.title}`;
+        const logline = document.createElement("div");
+        logline.className = "series-episode-logline";
+        logline.textContent = episode.logline || "";
+        text.append(title, logline);
+        const shoot = document.createElement("button");
+        shoot.type = "button";
+        shoot.className = "btn-secondary";
+        shoot.textContent = "Снять";
+        shoot.title = `Собрать доску серии ${episode.number} с учётом предыдущих`;
+        shoot.addEventListener("click", () => {
+          seriesStatus.hidden = false;
+          seriesStatus.textContent = `Собираю серию ${episode.number}: «${episode.title}».`;
+          void draftFromTopic({ series: seasonPlan, episodeNumber: episode.number });
+        });
+        item.append(text, shoot);
+        seriesList.append(item);
+      }
+      seriesList.hidden = false;
+    }
+
+    async function planSeason() {
+      const topic = seriesTopicInput.value.trim();
+      if (!topic) {
+        seriesStatus.hidden = false;
+        seriesStatus.textContent = "Сначала опиши, о чём сериал.";
+        seriesTopicInput.focus();
+        return;
+      }
+      const episodeCount = Number(seriesEpisodesInput.value) || 4;
+      const byokPreset = selectedByokPreset();
+      let endpoint;
+      let model = wizardModelSelect.value || undefined;
+      if (byokPreset) {
+        const byokModel = wizardByokModel.value.trim();
+        const baseUrl = wizardByokBaseUrl.value.trim();
+        if (!baseUrl || !byokModel) {
+          seriesStatus.hidden = false;
+          seriesStatus.textContent = "Укажи Base URL и модель для своего API.";
+          return;
+        }
+        endpoint = { kind: "openai", baseUrl, apiKey: wizardByokKey.value, model: byokModel };
+        model = undefined;
+      }
+      seriesPlanButton.disabled = true;
+      seriesStatus.hidden = false;
+      seriesStatus.textContent = "Планирую сезон…";
+      try {
+        const result = await fetchJson("/api/local-media/series", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-hermest-local-media": "1" },
+          body: JSON.stringify({
+            topic,
+            episodeCount,
+            language: state.brief?.language || "ru",
+            episodeDurationSeconds: state.brief?.targetDurationSeconds ?? null,
+            model,
+            endpoint
+          })
+        });
+        storeSeasonPlan(result.plan);
+        renderSeasonPlan();
+        seriesStatus.textContent = `Сезон «${result.plan.series.title}»: ${result.plan.episodes.length} серий. Жми «Снять» у нужной.`;
+      } catch (error) {
+        seriesStatus.textContent = friendlyErrorMessage(error, "draft");
+      } finally {
+        seriesPlanButton.disabled = false;
+      }
+    }
+
+    seriesPlanButton?.addEventListener("click", () => void planSeason());
+    seasonPlan = loadSeasonPlan();
+    if (seasonPlan) renderSeasonPlan();
 
     function draftErrorText(error, byokPreset) {
       // Подсказка зависит от пути: BYOK (свой API) не использует мост — не сбивать пользователя с толку.

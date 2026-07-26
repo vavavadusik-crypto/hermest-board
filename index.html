@@ -490,6 +490,20 @@
       background: rgba(3, 9, 18, .5);
     }
 
+    .series-field { grid-column: 1 / -1; }
+    .series-row { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+    /* `.field input[type=number]` шире по специфичности, поэтому селектор здесь
+       тоже начинается с .field — иначе поле растягивается на всю строку. */
+    .field .series-row input[type="number"] { width: 76px; flex: 0 0 auto; }
+    .series-status { margin: 6px 0 0; font-size: 12px; color: var(--muted, #9fb0cc); }
+    .series-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; max-height: 220px; overflow: auto; }
+    .series-list li {
+      display: flex; gap: 8px; align-items: flex-start; justify-content: space-between;
+      padding: 8px 10px; border: 1px solid rgba(120, 150, 200, 0.25); border-radius: 8px;
+    }
+    .series-list .series-episode-title { font-weight: 600; }
+    .series-list .series-episode-logline { font-size: 12px; opacity: 0.8; }
+    .series-list button { flex: none; }
     .duration-quick button[aria-pressed="true"] {
       color: #041016;
       background: linear-gradient(135deg, var(--accent), #93c5fd);
@@ -1254,6 +1268,19 @@
             </div>
             <label class="check-item"><input id="wizardResearch" type="checkbox" checked> Искать источники</label>
             <label class="check-item" title="Вместо закадрового пересказа — сценарий: постоянные персонажи и их реплики в кадре"><input id="wizardCartoon" type="checkbox"> Снять мультфильм</label>
+            <div class="field series-field">
+              <label for="seriesTopic"><span>Сериал</span></label>
+              <input id="seriesTopic" type="text" maxlength="300" autocomplete="off"
+                     placeholder="О чём сериал: например, жизнь вайб-кодера">
+              <div class="series-row">
+                <label class="visually-hidden" for="seriesEpisodes">Серий в сезоне</label>
+                <input id="seriesEpisodes" type="number" min="1" max="12" value="4" aria-describedby="seriesHint">
+                <button id="seriesPlan" type="button" class="btn-secondary">Спланировать сезон</button>
+              </div>
+              <div class="mini-note" id="seriesHint">План дешёвый и быстрый: одна серия снимается отдельной кнопкой, чтобы не запускать часы рендера одним кликом.</div>
+              <p class="series-status" id="seriesStatus" role="status" aria-live="polite" hidden></p>
+              <ol class="series-list" id="seriesList" hidden></ol>
+            </div>
             <div class="field">
               <label for="wizardModel"><span>ИИ-модель</span></label>
               <select id="wizardModel"></select>
