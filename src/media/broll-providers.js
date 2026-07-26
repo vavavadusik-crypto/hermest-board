@@ -80,9 +80,9 @@ export function createBrollProviderRegistry({
 function buildProviderDescriptors({ env, fetchImpl, onWarning }) {
   return [
     createPexelsStockVideoDescriptor({ env, fetchImpl }),
-    createFalImageDescriptor({ env, fetchImpl }),
-    createPollinationsImageDescriptor({ fetchImpl }),
-    createPexelsPhotoDescriptor({ env, fetchImpl }),
+    createFalImageDescriptor({ env, fetchImpl, onWarning }),
+    createPollinationsImageDescriptor({ fetchImpl, onWarning }),
+    createPexelsPhotoDescriptor({ env, fetchImpl, onWarning }),
     createDeterministicFallbackDescriptor()
   ];
 }
@@ -153,7 +153,7 @@ function createPexelsStockVideoDescriptor({ env, fetchImpl }) {
   };
 }
 
-function createFalImageDescriptor({ env, fetchImpl }) {
+function createFalImageDescriptor({ env, fetchImpl, onWarning }) {
   return {
     id: "fal-image",
     kind: "generated-image",
@@ -173,8 +173,8 @@ function createFalImageDescriptor({ env, fetchImpl }) {
     },
 
     async fetchMedia({ prompt, stylePreset, width, height, seed, outputPath, signal }) {
-      const { createFalImageAdapter } = await import("./image-source.js");
-      const adapter = createFalImageAdapter({ env, fetchImpl });
+      const { createFalImageAdapter, withTransientRetry } = await import("./image-source.js");
+      const adapter = withTransientRetry(createFalImageAdapter({ env, fetchImpl }), { onWarning });
       const result = await adapter.generateImage({
         prompt,
         stylePreset,
@@ -192,11 +192,13 @@ function createFalImageDescriptor({ env, fetchImpl }) {
   };
 }
 
-function createPollinationsImageDescriptor({ fetchImpl }) {
+function createPollinationsImageDescriptor({ fetchImpl, onWarning }) {
   return {
     id: "pollinations-image",
     kind: "generated-image",
     costClass: "free",
+    // Бюджет времени общий на все попытки: быстрый 503 успевает повториться,
+    // а зависший запрос не растягивает рендер втрое.
     timeoutMs: 120000, // DOWNLOAD_TIMEOUT_MS
     contentType: "image/png",
 
@@ -205,8 +207,8 @@ function createPollinationsImageDescriptor({ fetchImpl }) {
     },
 
     async fetchMedia({ prompt, stylePreset, width, height, seed, outputPath, signal }) {
-      const { createPollinationsImageAdapter } = await import("./image-source.js");
-      const adapter = createPollinationsImageAdapter({ fetchImpl });
+      const { createPollinationsImageAdapter, withTransientRetry } = await import("./image-source.js");
+      const adapter = withTransientRetry(createPollinationsImageAdapter({ fetchImpl }), { onWarning });
       const result = await adapter.generateImage({
         prompt,
         stylePreset,
@@ -224,7 +226,7 @@ function createPollinationsImageDescriptor({ fetchImpl }) {
   };
 }
 
-function createPexelsPhotoDescriptor({ env, fetchImpl }) {
+function createPexelsPhotoDescriptor({ env, fetchImpl, onWarning }) {
   return {
     id: "pexels-photo",
     kind: "generated-image",
@@ -244,8 +246,8 @@ function createPexelsPhotoDescriptor({ env, fetchImpl }) {
     },
 
     async fetchMedia({ prompt, width, height, outputPath, signal }) {
-      const { createPexelsImageAdapter } = await import("./image-source.js");
-      const adapter = createPexelsImageAdapter({ env, fetchImpl });
+      const { createPexelsImageAdapter, withTransientRetry } = await import("./image-source.js");
+      const adapter = withTransientRetry(createPexelsImageAdapter({ env, fetchImpl }), { onWarning });
       const result = await adapter.generateImage({
         prompt,
         width,

@@ -19,6 +19,12 @@ const DOWNLOAD_TIMEOUT_MS = 120000;
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
 const JPEG_MAGIC = Buffer.from([0xff, 0xd8, 0xff]);
 
+export const TRANSIENT_IMAGE_ERROR_CODE = "IMAGE_SOURCE_TRANSIENT";
+// Бесплатные генераторы отвечают 5xx и 429 под нагрузкой чаще, чем платные.
+// Без повтора одна такая осечка молча роняет сцену на следующий источник
+// каскада, и качество картинки падает без причины, видимой человеку.
+export const IMAGE_RETRY_DELAYS_MS = Object.freeze([400, 1200]);
+
 export function describeImageSourceAvailability({ env = process.env } = {}) {
   // Pollinations — бесплатная генерация без ключа, поэтому источник картинок
   // доступен всегда; платные fal/pexels лишь расширяют список провайдеров.
@@ -44,7 +50,41 @@ export function createDefaultImageSourceCascade({ env = process.env, fetchImpl =
   if (readFalKey(env)) adapters.push(createFalImageAdapter({ env, fetchImpl }));
   adapters.push(createPollinationsImageAdapter({ fetchImpl }));
   if (readPexelsKey(env)) adapters.push(createPexelsImageAdapter({ env, fetchImpl }));
-  return createImageSourceCascade(adapters, { onWarning });
+  return createImageSourceCascade(adapters.map(adapter => withTransientRetry(adapter, { onWarning })), { onWarning });
+}
+
+/**
+ * Повторяет запрос к источнику картинок только на временных отказах провайдера
+ * (5xx, 429, сетевой обрыв, свой таймаут). Отказ по ключу, неверный запрос или
+ * отмена задачи человеком повторов не получают: они не пройдут и со второй
+ * попытки, а отмена обязана оставаться мгновенной.
+ */
+export function withTransientRetry(adapter, {
+  delaysMs = IMAGE_RETRY_DELAYS_MS,
+  onWarning,
+  sleep = defaultSleep
+} = {}) {
+  const delays = Array.isArray(delaysMs) ? delaysMs.filter(delay => Number.isFinite(delay) && delay >= 0) : [];
+  return {
+    ...adapter,
+    async generateImage(request) {
+      let lastError = null;
+      for (let attempt = 0; attempt <= delays.length; attempt += 1) {
+        try {
+          return await adapter.generateImage(request);
+        } catch (error) {
+          lastError = error;
+          const isLastAttempt = attempt === delays.length;
+          if (request?.signal?.aborted || error?.code !== TRANSIENT_IMAGE_ERROR_CODE || isLastAttempt) throw error;
+          onWarning?.(
+            `image source ${adapter.provider} hit a transient failure (${error.message}), retry ${attempt + 1} of ${delays.length}`
+          );
+          await sleep(delays[attempt]);
+        }
+      }
+      throw lastError;
+    }
+  };
 }
 
 export function createFalImageAdapter({ env = process.env, fetchImpl = fetch } = {}) {
@@ -84,7 +124,7 @@ export function createFalImageAdapter({ env = process.env, fetchImpl = fetch } =
         throw new RangeError("FAL rejected the API key");
       }
       if (!response.ok) {
-        throw new RangeError(`FAL generation failed with status ${response.status}`);
+        throw httpFailure("FAL generation", response.status);
       }
       const payload = await readBoundedJson(response, MAX_RESPONSE_BYTES, "FAL response");
       const image = Array.isArray(payload?.images) ? payload.images[0] : null;
@@ -94,7 +134,7 @@ export function createFalImageAdapter({ env = process.env, fetchImpl = fetch } =
 
       const imageResponse = await fetchWithTimeout(fetchImpl, imageUrl, { signal }, DOWNLOAD_TIMEOUT_MS);
       if (!imageResponse.ok) {
-        throw new RangeError(`FAL image download failed with status ${imageResponse.status}`);
+        throw httpFailure("FAL image download", imageResponse.status);
       }
       const imageBytes = await readBoundedBytes(imageResponse, MAX_IMAGE_BYTES, "FAL image");
       if (imageBytes.length === 0) {
@@ -154,7 +194,7 @@ export function createPollinationsImageAdapter({ fetchImpl = fetch } = {}) {
 
       const response = await fetchWithTimeout(fetchImpl, url.href, { signal }, DOWNLOAD_TIMEOUT_MS);
       if (!response.ok) {
-        throw new RangeError(`Pollinations generation failed with status ${response.status}`);
+        throw httpFailure("Pollinations generation", response.status);
       }
       const imageBytes = await readBoundedBytes(response, MAX_IMAGE_BYTES, "Pollinations image");
       if (imageBytes.length === 0 || !hasImageMagic(imageBytes)) {
@@ -208,7 +248,7 @@ export function createPexelsImageAdapter({ env = process.env, fetchImpl = fetch 
         throw new RangeError("Pexels rejected the API key");
       }
       if (!searchResponse.ok) {
-        throw new RangeError(`Pexels photo search failed with status ${searchResponse.status}`);
+        throw httpFailure("Pexels photo search", searchResponse.status);
       }
       const payload = await readBoundedJson(searchResponse, MAX_RESPONSE_BYTES, "Pexels response");
       const photo = selectPexelsPhoto(payload, { width: safeWidth, height: safeHeight });
@@ -217,7 +257,7 @@ export function createPexelsImageAdapter({ env = process.env, fetchImpl = fetch 
 
       const imageResponse = await fetchWithTimeout(fetchImpl, photo.fileUrl, { signal }, DOWNLOAD_TIMEOUT_MS);
       if (!imageResponse.ok) {
-        throw new RangeError(`Pexels photo download failed with status ${imageResponse.status}`);
+        throw httpFailure("Pexels photo download", imageResponse.status);
       }
       const imageBytes = await readBoundedBytes(imageResponse, MAX_IMAGE_BYTES, "Pexels photo");
       if (imageBytes.length === 0 || !hasImageMagic(imageBytes)) {
@@ -304,6 +344,23 @@ function imageDimension(value, name) {
   return dimension;
 }
 
+function transientError(message) {
+  const error = new RangeError(message);
+  error.code = TRANSIENT_IMAGE_ERROR_CODE;
+  return error;
+}
+
+// 5xx — провайдер лежит, 429 — просит подождать: и то и другое проходит со
+// второй попытки. Остальные коды означают, что запрос неверен сам по себе.
+function httpFailure(label, status) {
+  const message = `${label} failed with status ${status}`;
+  return status >= 500 || status === 429 ? transientError(message) : new RangeError(message);
+}
+
+function defaultSleep(delayMs) {
+  return new Promise(resolve => setTimeout(resolve, delayMs));
+}
+
 function hasImageMagic(bytes) {
   return bytes.subarray(0, PNG_MAGIC.length).equals(PNG_MAGIC)
     || bytes.subarray(0, JPEG_MAGIC.length).equals(JPEG_MAGIC);
@@ -328,6 +385,11 @@ async function fetchWithTimeout(fetchImpl, url, options, timeoutMs) {
   }
   try {
     return await fetchImpl(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    // Отмена человеком обязана остаться отменой; всё остальное — обрыв сети
+    // или наш собственный таймаут, а это лечится повторной попыткой.
+    if (upstreamSignal?.aborted) throw error;
+    throw transientError(`image source request failed: ${error?.message || "network error"}`);
   } finally {
     clearTimeout(timer);
     if (upstreamSignal) upstreamSignal.removeEventListener("abort", onAbort);
