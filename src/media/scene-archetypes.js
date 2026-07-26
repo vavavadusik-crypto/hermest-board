@@ -185,9 +185,16 @@ function buildDeviceMockup(ctx) {
   const kind = device.kind === "phone" || (layout.isVertical && device.kind !== "laptop") ? "phone" : "laptop";
   const uiTitle = device.title || clampText(content.title, 28);
   const rows = (device.lines?.length ? device.lines : content.bullets).slice(0, 4);
+  // Подставка ноутбука шире экрана в 1.14 раза, поэтому предел ставится по ней:
+  // при stageWidth * 0.94 подставка вылезала за safe zone в 9:16 (952px против
+  // 888px сцены).
+  const laptopBaseRatio = 1.14;
   const screenWidth = kind === "phone"
     ? Math.round(Math.min(layout.stageWidth * (layout.isVertical ? 0.62 : 0.3), layout.stageHeight * 0.46))
-    : Math.round(layout.isVertical ? layout.stageWidth * 0.94 : layout.stageWidth * 0.52);
+    : Math.min(
+      Math.round(layout.isVertical ? layout.stageWidth * 0.94 : layout.stageWidth * 0.52),
+      Math.floor(layout.stageWidth / laptopBaseRatio)
+    );
   const screenHeight = kind === "phone"
     ? Math.round(screenWidth * 1.9)
     : Math.round(screenWidth * 0.61);
@@ -275,7 +282,7 @@ function buildDeviceMockup(ctx) {
     animation: amb-sheen 8s ease-in-out 1.4s infinite;
   }
   .dv-base {
-    width: ${Math.round(screenWidth * 1.14)}px; height: ${s(1.5)}px; margin: ${s(0.5)}px auto 0;
+    width: ${Math.round(screenWidth * laptopBaseRatio)}px; height: ${s(1.5)}px; margin: ${s(0.5)}px auto 0;
     background: linear-gradient(180deg, #1b2f4b, #0c1626);
     clip-path: polygon(2% 0, 98% 0, 100% 100%, 0 100%);
     border-radius: 0 0 ${s(1)}px ${s(1)}px;

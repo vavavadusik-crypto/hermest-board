@@ -26,7 +26,11 @@ const ARCHETYPE_SET = new Set(SCENE_ARCHETYPES);
 // Ротация на случай, когда единственный подходящий архетип совпал с предыдущей
 // сценой: ритм важнее «идеального» совпадения, две одинаковые композиции подряд
 // и есть то, что выглядит как слайд-шоу.
-const NEUTRAL_ROTATION = Object.freeze(["classic", "device-mockup", "statement", "checklist"]);
+//
+// `statement` здесь быть не должно: он закреплён за ролями opening/closing, и
+// если ротация отдавала его последней «телесной» сцене, та вставала вплотную к
+// закрывающему statement — ровно тот дубль подряд, который ротация и лечит.
+const NEUTRAL_ROTATION = Object.freeze(["classic", "device-mockup", "checklist", "format-trio"]);
 
 const MAX_ITEMS = 5;
 const MAX_ITEM_CHARS = 64;
@@ -40,37 +44,41 @@ const KEYWORDS = Object.freeze({
   checklist: /чеклист|checklist|список|пункт|проверь|убедись|галочк|требовани/iu
 });
 
+// `\b` в JS считает словом только [A-Za-z0-9_], поэтому у кириллического слова
+// в начале строки границы нет и `\bбыло\b` не срабатывает вообще. Из-за этого
+// весь разбор «было/стало» был мёртв для русского текста. Границы — явные
+// lookaround-ы по любой букве или цифре Unicode.
+const WORD_START = "(?<![\\p{L}\\p{N}])";
+const WORD_END = "(?![\\p{L}\\p{N}])";
+
+function contrastPattern(first, second) {
+  return new RegExp(
+    `${WORD_START}(?:${first})${WORD_END}[\\s:—–-]*(.{3,120}?)[.;]\\s*${WORD_START}(?:${second})${WORD_END}[\\s:—–-]*(.{3,120})$`,
+    "iu"
+  );
+}
+
 const CONTRAST_RULES = Object.freeze([
+  { pattern: contrastPattern("было", "стало"), labels: ["Было", "Стало"] },
+  { pattern: contrastPattern("раньше", "теперь|сейчас"), labels: ["Раньше", "Теперь"] },
+  { pattern: contrastPattern("до", "после"), labels: ["До", "После"] },
+  { pattern: contrastPattern("before", "after"), labels: ["Before", "After"] },
   {
-    pattern: /\bбыло\b[\s:—–-]*(.{3,120}?)[.;]\s*\bстало\b[\s:—–-]*(.{3,120})$/iu,
-    labels: ["Было", "Стало"]
-  },
-  {
-    pattern: /\bраньше\b[\s:—–-]*(.{3,120}?)[.;]\s*\b(?:теперь|сейчас)\b[\s:—–-]*(.{3,120})$/iu,
-    labels: ["Раньше", "Теперь"]
-  },
-  {
-    pattern: /\bдо\b[\s:—–-]+(.{3,120}?)[.;]\s*\bпосле\b[\s:—–-]+(.{3,120})$/iu,
-    labels: ["До", "После"]
-  },
-  {
-    pattern: /\bbefore\b[\s:—–-]+(.{3,120}?)[.;]\s*\bafter\b[\s:—–-]+(.{3,120})$/iu,
-    labels: ["Before", "After"]
-  },
-  {
-    pattern: /(.{3,120}?)\s+вместо\s+(.{3,120})$/iu,
+    pattern: new RegExp(`(.{3,120}?)\\s+${WORD_START}вместо${WORD_END}\\s+(.{3,120})$`, "iu"),
     labels: ["Стало", "Было"],
     swap: true
   },
   {
-    pattern: /(.{3,120}?)\s+(?:vs\.?|против)\s+(.{3,120})$/iu,
+    pattern: new RegExp(`(.{3,120}?)\\s+${WORD_START}(?:vs\\.?|против)${WORD_END}\\s+(.{3,120})$`, "iu"),
     labels: ["", ""]
   }
 ]);
 
 const NUMBER_PATTERN = /(\d{1,3}(?:[  ]\d{3})+|\d+(?:[.,]\d+)?)\s*(%|₽|\$|€|тыс\.?|млн|млрд|раз|мин|сек|час(?:ов|а)?|дней|дня|шт|fps|гб|мб|кб|k|х|x)?/giu;
 const QUOTE_PATTERN = /[«"“]([^«»"“”]{8,220})[»"”]/u;
-const ATTRIBUTION_PATTERN = /[—–-]\s*([^.;]{2,60})\s*$/u;
+// Точка в конце предложения обязана быть необязательной: нарратив приходит
+// как «…» — владелец студии.` и подпись под цитатой молча терялась.
+const ATTRIBUTION_PATTERN = /[—–-]\s*([^.;]{2,60})[.…]?\s*$/u;
 
 export function isSceneArchetype(value) {
   return typeof value === "string" && ARCHETYPE_SET.has(value);
@@ -85,8 +93,16 @@ function normalizeArchetype(value) {
 // их не тронет, а в разметке они мусор. Убираем до всех прочих чисток.
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/gu;
 
+// Объект или массив в поле sceneData — мусор, а не текст: `String({})` даёт
+// «[object Object]», и это уезжало прямо в кадр. Берём только примитивы.
+function isRenderableValue(value) {
+  const type = typeof value;
+  return type === "string" || type === "number" || type === "bigint";
+}
+
 function cleanItem(value, limit = MAX_ITEM_CHARS) {
-  const text = String(value ?? "")
+  if (!isRenderableValue(value)) return "";
+  const text = String(value)
     .replace(CONTROL_CHARACTERS, "")
     .replace(/\s+/gu, " ")
     .replace(/^[\s,;.:•·—–-]+/u, "")
