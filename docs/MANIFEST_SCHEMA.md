@@ -163,6 +163,17 @@ Verified output files (MP4, SRT, storyboard.json, narration audio, …):
 carries the ffprobe result (for video: `probe.video.{width,height}`,
 `probe.durationSeconds`), used by analytics for resolution/duration.
 
+The cover frame is an artifact like any other:
+```jsonc
+{ "name": "youtube-16x9-1080p.cover.png", "type": "image/png", "bytes": 182400, "sha256": "…",
+  "probe": { "width": 1920, "height": 1080, "atSeconds": 2.8 } }
+```
+Its `probe` comes from the PNG IHDR chunk, not from ffprobe — ffprobe reports no
+duration for a single still and fails on it. `atSeconds` records the moment the
+frame was taken from the master, so the cover is reproducible from the MP4 alone.
+The extracting call appears in `commands` as `cover-frame` and is validated argv
+by argv like every other ffmpeg invocation.
+
 ## Edition manifest (`buildEditionManifest`, `src/media/edition.js`)
 
 A multilingual **edition** is the same project rendered in another language. Its
