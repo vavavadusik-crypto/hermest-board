@@ -338,60 +338,92 @@ export function cartoonCharacterCss() {
   .pose-walk .tc-arm-right { animation: tc-step-a 0.92s ease-in-out 0s infinite; }`;
 }
 
-// Дома ниже людей: пока силуэты были вровень с персонажами, кадр читался как
-// «человек внутри дома», а не «человек на фоне города».
-function skyline({ width, height, seed }) {
+// Декорации строятся не от линии пола, а от линии горизонта. Пока всё считалось
+// от пола, дальний план оказывался вровень с персонажами: город вырастал им по
+// пояс, и кадр читался как «великаны над макетом», а не «люди на улице».
+// Горизонт — на уровне глаз стоящего человека, всё дальнее уходит за него.
+function horizonFor(floor, characterHeight) {
+  return Math.round(floor - characterHeight * 0.62);
+}
+
+// Силуэты домов растут ВВЕРХ от горизонта: их основания скрыты за ним, как у
+// настоящей улицы, поэтому высота задаётся в ростах человека, а не в долях кадра.
+function skyline({ width, horizon, characterHeight, skyFloor = 0, seed }) {
   const random = seededRandom(seed);
-  const buildings = [];
-  let x = -40;
-  while (x < width + 40) {
-    const buildingWidth = Math.round(70 + random() * 120);
-    const buildingHeight = Math.round(height * (0.12 + random() * 0.2));
-    const top = height - buildingHeight;
-    buildings.push(`<rect x="${x}" y="${top}" width="${buildingWidth}" height="${buildingHeight}" fill="#0d1b30"/>`);
-    const windowRows = Math.floor(buildingHeight / 46);
-    const windowCols = Math.max(1, Math.floor(buildingWidth / 42));
-    for (let row = 0; row < windowRows; row += 1) {
-      for (let col = 0; col < windowCols; col += 1) {
-        if (random() < 0.42) continue;
-        buildings.push(
-          `<rect x="${x + 14 + col * 42}" y="${top + 18 + row * 46}" width="16" height="20" rx="2" fill="#f5b944" opacity="${(0.25 + random() * 0.5).toFixed(2)}"/>`
+  const parts = [];
+  let x = -60;
+  while (x < width + 60) {
+    const buildingWidth = Math.round(characterHeight * (0.34 + random() * 0.5));
+    const buildingHeight = Math.round(characterHeight * (0.28 + random() * 0.44));
+    const top = Math.max(skyFloor, horizon - buildingHeight);
+    parts.push(`<rect x="${x}" y="${top}" width="${buildingWidth}" height="${horizon - top + 8}" fill="#0d1b30"/>`);
+    const step = Math.max(26, Math.round(characterHeight * 0.11));
+    const windowSize = Math.max(8, Math.round(step * 0.36));
+    const rows = Math.floor((horizon - top - step) / step);
+    const cols = Math.max(1, Math.floor((buildingWidth - step * 0.5) / step));
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        if (random() < 0.45) continue;
+        parts.push(
+          `<rect x="${x + Math.round(step * 0.4) + col * step}" y="${top + Math.round(step * 0.6) + row * step}" width="${windowSize}" height="${Math.round(windowSize * 1.25)}" rx="2" fill="#f5b944" opacity="${(0.25 + random() * 0.5).toFixed(2)}"/>`
         );
       }
     }
-    x += buildingWidth + Math.round(6 + random() * 22);
+    x += buildingWidth + Math.round(characterHeight * (0.04 + random() * 0.12));
   }
-  return buildings.join("");
+  return parts.join("");
 }
 
 /**
  * Декорация кадра. Каждая — самостоятельный слой, персонажи ставятся поверх.
  * `groundY` — линия пола: на ней стоят ноги, поэтому декорация обязана
  * согласовать с ней свою геометрию, иначе персонаж «висит».
+ * `characterHeight` задаёт масштаб: мебель и дома меряются в человеке, а не в
+ * долях кадра, иначе в вертикали комната растягивается, а в квадрате сплющивается.
  */
-export function renderSetting({ setting = "void", width, height, groundY, seed = 1 } = {}) {
+export function renderSetting({ setting = "void", width, height, groundY, characterHeight = 0, seed = 1 } = {}) {
   const resolved = normalizeSetting(setting);
   const floor = Math.round(groundY);
+  const scale = Math.max(0.6, characterHeight / 520);
   if (resolved === "street") {
-    return `<rect x="0" y="0" width="${width}" height="${floor}" fill="#0a1426"/>
-      <circle cx="${Math.round(width * 0.82)}" cy="${Math.round(floor * 0.22)}" r="${Math.round(Math.min(width, height) * 0.05)}" fill="#f2f6ff" opacity="0.85"/>
-      <g class="toon-far">${skyline({ width, height: floor, seed })}</g>
+    const horizon = horizonFor(floor, characterHeight);
+    const moonR = Math.round(characterHeight * 0.13);
+    // Луна и крыши считаются от ВЕРХА кадра, а не от роста человека: иначе на
+    // узком кадре они уезжают за границу и небо пропадает целиком.
+    const moonY = Math.round(Math.max(moonR * 1.4, horizon * 0.18));
+    return `<rect x="0" y="0" width="${width}" height="${horizon}" fill="#0a1426"/>
+      <circle cx="${Math.round(width * 0.8)}" cy="${moonY}" r="${moonR}" fill="#f2f6ff" opacity="0.9"/>
+      <circle cx="${Math.round(width * 0.8)}" cy="${moonY}" r="${Math.round(moonR * 2.1)}" fill="#f2f6ff" opacity="0.08"/>
+      <g class="toon-far">${skyline({ width, horizon, characterHeight, skyFloor: Math.round(height * 0.22), seed })}</g>
+      <rect x="0" y="${horizon}" width="${width}" height="${height - horizon}" fill="#101a2c"/>
+      <rect x="0" y="${horizon}" width="${width}" height="${Math.max(3, Math.round(4 * scale))}" fill="#22304a"/>
       <rect x="0" y="${floor}" width="${width}" height="${height - floor}" fill="#141d2e"/>
-      <rect x="0" y="${floor}" width="${width}" height="6" fill="#22304a"/>
-      ${dashedRoad({ width, floor, height })}`;
+      <rect x="0" y="${floor}" width="${width}" height="${Math.max(4, Math.round(6 * scale))}" fill="#26354f"/>
+      ${dashedRoad({ width, from: horizon, to: floor, scale })}`;
   }
   if (resolved === "room" || resolved === "desk") {
-    const scale = Math.max(1, width / 1100);
-    // Стена светлее пола и отбита плинтусом: без разницы тона комната читалась
-    // как та же пустота, только с рамками на ней.
-    return `<rect x="0" y="0" width="${width}" height="${floor}" fill="#182a45"/>
-      <rect x="0" y="${Math.round(floor * 0.62)}" width="${width}" height="${floor - Math.round(floor * 0.62)}" fill="#1c3150"/>
-      <rect x="0" y="${floor - Math.round(10 * scale)}" width="${width}" height="${Math.round(10 * scale)}" fill="#24406a"/>
-      <rect x="0" y="${floor}" width="${width}" height="${height - floor}" fill="#0a1220"/>
-      ${windowFrame({ x: Math.round(width * 0.6), y: Math.round(floor * 0.14), w: Math.round(width * 0.2), h: Math.round(floor * 0.4), seed })}
-      ${posterFrame({ x: Math.round(width * 0.12), y: Math.round(floor * 0.16), w: Math.round(width * 0.12), h: Math.round(floor * 0.26) })}
-      ${shelf({ x: Math.round(width * 0.3), y: Math.round(floor * 0.34), w: Math.round(width * 0.16), scale, seed })}
-      ${plant({ x: Math.round(width * 0.93), baseY: floor, scale })}`;
+    const rail = Math.round(floor - characterHeight * 1.05);
+    const skirting = Math.max(8, Math.round(16 * scale));
+    // Пол — не чёрный провал под ногами, а поверхность: свой тон, плинтус на
+    // стыке и половицы, уходящие к зрителю.
+    const boards = [];
+    const boardStep = Math.max(28, Math.round(characterHeight * 0.16));
+    for (let y = floor + boardStep; y < height; y += boardStep) {
+      boards.push(`<rect x="0" y="${y}" width="${width}" height="${Math.max(2, Math.round(2 * scale))}" fill="#0f1c30" opacity="0.7"/>`);
+    }
+    const rugTop = floor + Math.round((height - floor) * 0.18);
+    const rugInset = Math.round(width * 0.12);
+    return `<rect x="0" y="0" width="${width}" height="${floor}" fill="#1d3252"/>
+      <rect x="0" y="0" width="${width}" height="${Math.max(0, rail)}" fill="#22395c"/>
+      <rect x="0" y="${rail}" width="${width}" height="${Math.max(3, Math.round(5 * scale))}" fill="#2b4a75"/>
+      <rect x="0" y="${floor - skirting}" width="${width}" height="${skirting}" fill="#2b4a75"/>
+      <rect x="0" y="${floor}" width="${width}" height="${height - floor}" fill="#16243c"/>
+      ${boards.join("")}
+      <path d="M${rugInset},${height} L${Math.round(width * 0.3)},${rugTop} H${Math.round(width * 0.7)} L${width - rugInset},${height} Z" fill="#1b3d5e" opacity="0.55"/>
+      ${windowFrame({ x: Math.round(resolved === "desk" ? width * 0.5 + characterHeight * 0.5 : width * 0.5 - characterHeight * 0.31), y: Math.round(floor - characterHeight * 1.02), w: Math.round(characterHeight * 0.62), h: Math.round(characterHeight * 0.56), scale, seed })}
+      ${posterFrame({ x: Math.round(width * 0.06), y: Math.round(floor - characterHeight * 0.98), w: Math.round(characterHeight * 0.3), h: Math.round(characterHeight * 0.4) })}
+      ${shelf({ x: Math.round(width * 0.84), y: Math.round(floor - characterHeight * 0.72), w: Math.round(characterHeight * 0.46), scale, seed })}
+      ${plant({ x: Math.round(width * 0.04 + characterHeight * 0.1), baseY: floor, scale })}`;
   }
   // `void` намеренно прозрачен: под ним остаётся фирменный звёздный фон шелла,
   // и мультсцена не выпадает из общего оформления ролика.
@@ -407,34 +439,50 @@ export function renderSetting({ setting = "void", width, height, groundY, seed =
 export function renderForeground({ setting = "void", width, height, groundY, characterHeight = 0 } = {}) {
   const resolved = normalizeSetting(setting);
   const floor = Math.round(groundY);
+  const scale = Math.max(0.6, characterHeight / 520);
   if (resolved === "desk") {
     // Столешница на высоте пояса — иначе это не стол, а плинтус под ногами.
     // Персонажи закрыты по бёдра, ровно как человек, стоящий за столом.
-    const topY = Math.round(floor - characterHeight * 0.42);
-    const thickness = Math.max(8, Math.round(height * 0.016));
-    const laptopWidth = Math.max(60, Math.round(characterHeight * 0.34));
-    const laptopHeight = Math.round(laptopWidth * 0.66);
-    const laptopX = Math.round(width * 0.54);
-    const mugX = Math.round(width * 0.3);
-    const mugSize = Math.max(14, Math.round(characterHeight * 0.075));
+    const topY = Math.round(floor - characterHeight * 0.45);
+    const thickness = Math.max(10, Math.round(22 * scale));
+    const legWidth = Math.max(10, Math.round(26 * scale));
+    const legInset = Math.round(width * 0.08);
+    const laptopWidth = Math.max(90, Math.round(characterHeight * 0.56));
+    const laptopBase = Math.max(6, Math.round(10 * scale));
+    const screenHeight = Math.round(laptopWidth * 0.58);
+    const laptopX = Math.round(width * 0.5 - characterHeight * 0.28);
+    const mugSize = Math.max(16, Math.round(characterHeight * 0.09));
+    const mugX = Math.round(width * 0.5 + characterHeight * 0.36);
+    const paperW = Math.round(characterHeight * 0.24);
+    const paperX = Math.round(width * 0.5 - characterHeight * 0.62);
     return `<g class="toon-prop">
-        <path d="M${laptopX},${topY} l${Math.round(laptopWidth * 0.12)},${-laptopHeight} h${Math.round(laptopWidth * 0.76)} l${Math.round(laptopWidth * 0.12)},${laptopHeight} z" fill="#16243c"/>
-        <path d="M${laptopX + Math.round(laptopWidth * 0.19)},${topY - Math.round(laptopHeight * 0.12)} l${Math.round(laptopWidth * 0.08)},${-Math.round(laptopHeight * 0.74)} h${Math.round(laptopWidth * 0.6)} l${Math.round(laptopWidth * 0.08)},${Math.round(laptopHeight * 0.74)} z" fill="#2dd4bf" opacity="0.34"/>
+        <rect x="${laptopX}" y="${topY - screenHeight}" width="${laptopWidth}" height="${screenHeight}" rx="${Math.round(6 * scale)}" fill="#16243c"/>
+        <rect x="${laptopX + Math.round(laptopWidth * 0.06)}" y="${topY - screenHeight + Math.round(screenHeight * 0.1)}" width="${Math.round(laptopWidth * 0.88)}" height="${Math.round(screenHeight * 0.74)}" rx="${Math.round(3 * scale)}" fill="#2dd4bf" opacity="0.42"/>
+        <rect x="${laptopX - Math.round(laptopWidth * 0.09)}" y="${topY - laptopBase}" width="${Math.round(laptopWidth * 1.18)}" height="${laptopBase}" rx="${Math.round(laptopBase / 2)}" fill="#22364f"/>
+      </g>
+      <g class="toon-prop">
+        <rect x="${paperX}" y="${topY - Math.round(paperW * 0.12)}" width="${paperW}" height="${Math.round(paperW * 0.12)}" rx="2" fill="#dce6f7" opacity="0.85"/>
+        <rect x="${paperX + Math.round(paperW * 0.06)}" y="${topY - Math.round(paperW * 0.2)}" width="${paperW}" height="${Math.round(paperW * 0.1)}" rx="2" fill="#c7d5ee" opacity="0.7"/>
       </g>
       <g class="toon-prop">
         <rect x="${mugX}" y="${topY - mugSize}" width="${mugSize}" height="${mugSize}" rx="${Math.round(mugSize * 0.22)}" fill="#f5b944"/>
         <path d="M${mugX + mugSize},${topY - Math.round(mugSize * 0.72)} q${Math.round(mugSize * 0.42)},${Math.round(mugSize * 0.24)} 0,${Math.round(mugSize * 0.48)}" fill="none" stroke="#f5b944" stroke-width="${Math.max(3, Math.round(mugSize * 0.14))}"/>
       </g>
-      <rect x="${Math.round(width * -0.03)}" y="${topY}" width="${Math.round(width * 1.06)}" height="${thickness}" rx="${Math.round(thickness / 2)}" fill="#2b4260"/>
-      <rect x="${Math.round(width * -0.03)}" y="${topY + thickness}" width="${Math.round(width * 1.06)}" height="${height - topY - thickness}" fill="#1a2b42"/>`;
+      <rect x="${legInset}" y="${topY + thickness}" width="${legWidth}" height="${height - topY - thickness}" fill="#1a2b42"/>
+      <rect x="${width - legInset - legWidth}" y="${topY + thickness}" width="${legWidth}" height="${height - topY - thickness}" fill="#1a2b42"/>
+      <rect x="${Math.round(width * -0.03)}" y="${topY}" width="${Math.round(width * 1.06)}" height="${thickness}" rx="${Math.round(thickness / 2)}" fill="#33507a"/>
+      <rect x="${Math.round(width * -0.03)}" y="${topY + thickness}" width="${Math.round(width * 1.06)}" height="${Math.max(3, Math.round(6 * scale))}" fill="#1f3352"/>`;
   }
   if (resolved === "street") {
-    const poleX = Math.round(width * 0.07);
-    const poleWidth = Math.max(8, Math.round(width * 0.009));
-    const lampY = Math.round(floor - characterHeight * 1.25);
+    const poleX = Math.round(width * 0.09);
+    const poleWidth = Math.max(10, Math.round(15 * scale));
+    // Лампа не выше верхней трети кадра: столб, уходящий за границу, читается
+    // как случайная палка, а не как фонарь.
+    const lampY = Math.round(Math.max(height * 0.36, floor - characterHeight * 1.35));
     return `<rect x="${poleX}" y="${lampY}" width="${poleWidth}" height="${height - lampY}" fill="#1b2c44"/>
       <rect x="${poleX - Math.round(poleWidth * 2.2)}" y="${lampY}" width="${Math.round(poleWidth * 5.4)}" height="${Math.round(poleWidth * 2.2)}" rx="${poleWidth}" fill="#263c5c"/>
-      <ellipse cx="${poleX + Math.round(poleWidth / 2)}" cy="${lampY + Math.round(poleWidth * 2.6)}" rx="${Math.round(poleWidth * 3.4)}" ry="${Math.round(poleWidth * 2.2)}" fill="#f5b944" opacity="0.55"/>`;
+      <ellipse cx="${poleX + Math.round(poleWidth / 2)}" cy="${lampY + Math.round(poleWidth * 2.6)}" rx="${Math.round(poleWidth * 3.4)}" ry="${Math.round(poleWidth * 2.4)}" fill="#f5b944" opacity="0.6"/>
+      <ellipse cx="${poleX + Math.round(poleWidth / 2)}" cy="${lampY + Math.round(poleWidth * 3)}" rx="${Math.round(poleWidth * 9)}" ry="${Math.round(poleWidth * 7)}" fill="#f5b944" opacity="0.1"/>`;
   }
   return "";
 }
@@ -442,46 +490,56 @@ export function renderForeground({ setting = "void", width, height, groundY, cha
 // Полка с корешками книг: дешёвая, но сразу говорит «здесь живут люди».
 function shelf({ x, y, w, scale, seed }) {
   const random = seededRandom(seed + 41);
-  const bookHeight = Math.round(26 * scale);
+  const bookHeight = Math.round(38 * scale);
   const books = [];
   let cursor = x + Math.round(8 * scale);
   while (cursor < x + w - Math.round(10 * scale)) {
-    const bookWidth = Math.round((7 + random() * 9) * scale);
+    const bookWidth = Math.round((9 + random() * 11) * scale);
     const height = Math.round(bookHeight * (0.7 + random() * 0.3));
     const color = SHELF_COLORS[Math.floor(random() * SHELF_COLORS.length) % SHELF_COLORS.length];
     books.push(`<rect x="${cursor}" y="${y - height}" width="${bookWidth}" height="${height}" rx="2" fill="${color}" opacity="0.8"/>`);
     cursor += bookWidth + Math.round(3 * scale);
   }
-  return `${books.join("")}<rect x="${x}" y="${y}" width="${w}" height="${Math.round(7 * scale)}" rx="3" fill="#24406a"/>`;
+  return `${books.join("")}<rect x="${x}" y="${y}" width="${w}" height="${Math.round(9 * scale)}" rx="3" fill="#2b4a75"/>`;
 }
 
-function dashedRoad({ width, floor, height }) {
+// Разметка уходит к горизонту: штрихи короче и чаще у дальнего края, иначе
+// дорога читается как плоская полоса под ногами.
+function dashedRoad({ width, from, to, scale }) {
   const dashes = [];
-  const y = Math.round(floor + (height - floor) * 0.52);
-  for (let x = 20; x < width; x += 140) {
-    dashes.push(`<rect x="${x}" y="${y}" width="72" height="7" rx="3" fill="#2a3c5c"/>`);
+  const rows = 4;
+  for (let row = 0; row < rows; row += 1) {
+    const t = (row + 1) / (rows + 1);
+    const y = Math.round(from + (to - from) * t * t);
+    const dashWidth = Math.round((26 + 90 * t) * scale);
+    const gap = Math.round(dashWidth * 1.6);
+    for (let x = Math.round(-dashWidth * t * 4); x < width; x += dashWidth + gap) {
+      dashes.push(`<rect x="${x}" y="${y}" width="${dashWidth}" height="${Math.max(2, Math.round(6 * scale * t))}" rx="3" fill="#2a3c5c" opacity="${(0.35 + t * 0.5).toFixed(2)}"/>`);
+    }
   }
   return dashes.join("");
 }
 
-function windowFrame({ x, y, w, h, seed }) {
+function windowFrame({ x, y, w, h, scale, seed }) {
   const random = seededRandom(seed + 17);
   const stars = [];
-  for (let index = 0; index < 8; index += 1) {
+  for (let index = 0; index < 10; index += 1) {
     stars.push(
-      `<circle cx="${x + Math.round(random() * w)}" cy="${y + Math.round(random() * h)}" r="2" fill="#cfe3ff" opacity="0.7"/>`
+      `<circle cx="${x + Math.round(random() * w)}" cy="${y + Math.round(random() * h)}" r="${Math.max(2, Math.round(2.5 * scale))}" fill="#cfe3ff" opacity="0.7"/>`
     );
   }
-  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="#0a1830"/>
+  const stroke = Math.max(4, Math.round(7 * scale));
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.round(10 * scale)}" fill="#0a1830"/>
     ${stars.join("")}
-    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="none" stroke="#24395c" stroke-width="6"/>
-    <line x1="${x + Math.round(w / 2)}" y1="${y}" x2="${x + Math.round(w / 2)}" y2="${y + h}" stroke="#24395c" stroke-width="5"/>`;
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.round(10 * scale)}" fill="none" stroke="#2b4a75" stroke-width="${stroke}"/>
+    <line x1="${x + Math.round(w / 2)}" y1="${y}" x2="${x + Math.round(w / 2)}" y2="${y + h}" stroke="#2b4a75" stroke-width="${Math.max(3, stroke - 2)}"/>
+    <line x1="${x}" y1="${y + Math.round(h / 2)}" x2="${x + w}" y2="${y + Math.round(h / 2)}" stroke="#2b4a75" stroke-width="${Math.max(3, stroke - 2)}"/>`;
 }
 
 function posterFrame({ x, y, w, h }) {
-  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="#132444" stroke="#26406a" stroke-width="4"/>
-    <circle cx="${x + Math.round(w / 2)}" cy="${y + Math.round(h * 0.36)}" r="${Math.round(Math.min(w, h) * 0.18)}" fill="#2dd4bf" opacity="0.7"/>
-    <rect x="${x + Math.round(w * 0.18)}" y="${y + Math.round(h * 0.62)}" width="${Math.round(w * 0.64)}" height="8" rx="4" fill="#7c5cff" opacity="0.7"/>`;
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="#132444" stroke="#2b4a75" stroke-width="4"/>
+    <circle cx="${x + Math.round(w / 2)}" cy="${y + Math.round(h * 0.36)}" r="${Math.round(Math.min(w, h) * 0.2)}" fill="#2dd4bf" opacity="0.7"/>
+    <rect x="${x + Math.round(w * 0.18)}" y="${y + Math.round(h * 0.64)}" width="${Math.round(w * 0.64)}" height="${Math.max(6, Math.round(h * 0.05))}" rx="4" fill="#7c5cff" opacity="0.7"/>`;
 }
 
 function plant({ x, baseY, scale }) {
@@ -490,7 +548,7 @@ function plant({ x, baseY, scale }) {
   // как стрелка, а не как кашпо.
   return `<g class="toon-plant">
     <path d="M${x - 26 * s},${baseY - 34 * s} L${x + 26 * s},${baseY - 34 * s} L${x + 19 * s},${baseY} L${x - 19 * s},${baseY} Z" fill="#24406a"/>
-    <path d="M${x},${baseY - 34 * s} q-8,-46 -34,-64 q30,4 34,44 q6,-42 34,-52 q-22,26 -26,72 z" fill="#1f8f6d"/>
+    <path d="M${x},${baseY - 34 * s} q${-8 * s},${-46 * s} ${-34 * s},${-64 * s} q${30 * s},${4 * s} ${34 * s},${44 * s} q${6 * s},${-42 * s} ${34 * s},${-52 * s} q${-22 * s},${26 * s} ${-26 * s},${72 * s} z" fill="#1f8f6d"/>
   </g>`;
 }
 

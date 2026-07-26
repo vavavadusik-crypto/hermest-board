@@ -1069,7 +1069,7 @@ function buildCartoonShot(ctx) {
     stageFlex: "flex-direction:column;align-items:stretch;justify-content:flex-start;",
     stage: `<div class="toon">
       <svg class="toon-set" width="${frameWidth}" height="${frameHeight}" viewBox="0 0 ${frameWidth} ${frameHeight}" xmlns="http://www.w3.org/2000/svg">
-        ${renderSetting({ setting: cartoon.setting, width: frameWidth, height: frameHeight, groundY, seed: ctx.sceneIndex + 3 })}
+        ${renderSetting({ setting: cartoon.setting, width: frameWidth, height: frameHeight, groundY, characterHeight: charHeight, seed: ctx.sceneIndex + 3 })}
       </svg>
       <div class="toon-veil"></div>
       ${cartoon.caption ? `<div class="toon-card">${escapeHtml(cartoon.caption)}</div>` : ""}
