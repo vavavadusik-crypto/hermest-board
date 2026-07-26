@@ -1888,7 +1888,8 @@ import {
         tiktok: "TikTok",
         youtube_video: "YouTube видео",
         youtube_shorts: "YouTube Shorts",
-        instagram_reels: "Instagram Reels"
+        instagram_reels: "Instagram Reels",
+        instagram_feed: "Instagram лента 1:1"
       }[platform] || platform;
     }
 
@@ -3530,7 +3531,8 @@ import {
           tiktok: "TikTok Content Posting API or approved OAuth publishing flow",
           youtube_video: "YouTube Data API upload permission",
           youtube_shorts: "YouTube Data API upload permission with Shorts-ready vertical asset",
-          instagram_reels: "Meta Graph API Instagram Content Publishing permission"
+          instagram_reels: "Meta Graph API Instagram Content Publishing permission",
+          instagram_feed: "Meta Graph API Instagram Content Publishing permission"
         }
       };
     }
@@ -3539,17 +3541,27 @@ import {
       const commonTags = collectHashtags();
       const shortText = summarizeForDescription(script, 420);
       const isShort = platform === "tiktok" || platform === "youtube_shorts" || platform === "instagram_reels";
+      const isSquare = platform === "instagram_feed";
+      // Квадрат — не короткий вертикальный и не длинный горизонтальный: у ленты
+      // свой набор требований, и сваливать её в одну из двух прежних веток
+      // значит выдать площадке заведомо неверный список ассетов.
+      const format = isSquare
+        ? "square_1_1_feed"
+        : isShort ? "vertical_9_16_short" : "horizontal_16_9_long";
+      const assetRequirements = isSquare
+        ? ["video_1_1_mp4", "captions", "cover_frame", "description"]
+        : isShort
+          ? ["video_9_16_webm_or_mp4", "captions", "cover_frame", "localized_caption"]
+          : ["video_16_9_webm_or_mp4", "cover_frame", "description", "chapters", "subtitles"];
       return {
         platform,
         label: platformLabel(platform),
-        format: isShort ? "vertical_9_16_short" : "horizontal_16_9_long",
+        format,
         title: platform === "youtube_video" ? `${title}: оболочка над ИИ-агентами` : "Hermest: ИИ-агенты под контролем",
         description: `${shortText}\n\n${commonTags.join(" ")}`,
         hashtags: commonTags,
         publishMode: "draft_or_publish_after_connector_linked",
-        assetRequirements: isShort
-          ? ["video_9_16_webm_or_mp4", "captions", "cover_frame", "localized_caption"]
-          : ["video_16_9_webm_or_mp4", "thumbnail", "description", "chapters", "subtitles"]
+        assetRequirements
       };
     }
 

@@ -36,6 +36,25 @@ const RECIPES = Object.freeze([
     readinessBlockers: ["semantic_edit_not_implemented"]
   }),
   recipe({
+    id: "instagram-1x1-1080p",
+    platformId: "instagram_feed",
+    label: "Instagram feed 1:1",
+    width: 1080,
+    height: 1080,
+    adaptationMode: "aspect_only_r1",
+    segmentationStrategy: "aspect_only_r1",
+    // Осознанно консервативно: лимит ленты не проверялся против действующей
+    // политики площадки, поэтому рецепт несёт об этом явный blocker. Слишком
+    // короткий предел даст честную ошибку валидации, слишком длинный — отказ
+    // на загрузке, когда коннектор появится.
+    maxDurationSeconds: 900,
+    policyObservedAt: "2026-07-26",
+    // Интерфейс площадки в ленте лежит вне самого кадра, поэтому защитные зоны
+    // скромнее, чем у 9:16; низ шире остальных сторон — под выжигаемый субтитр.
+    safeZones: { top: 72, right: 72, bottom: 120, left: 72 },
+    readinessBlockers: ["semantic_edit_not_implemented", "platform_policy_unverified"]
+  }),
+  recipe({
     id: "reels-9x16-1080p",
     platformId: "instagram_reels",
     label: "Instagram Reels 9:16",
@@ -69,12 +88,13 @@ function recipe({
   segmentationStrategy,
   maxDurationSeconds,
   safeZones,
-  readinessBlockers
+  readinessBlockers,
+  policyObservedAt = "2026-07-13"
 }) {
   return Object.freeze({
     schemaVersion: 1,
     version: "1.0.0",
-    policyObservedAt: "2026-07-13",
+    policyObservedAt,
     id,
     platformId,
     label,

@@ -192,7 +192,8 @@ async function main() {
 
   const written = [
     ...await renderVariant({ recipeId: "youtube_video", suffix: "16x9", outDir: options.out, frameTimeMs: options.at }),
-    ...await renderVariant({ recipeId: "youtube_shorts", suffix: "9x16", outDir: options.out, frameTimeMs: options.at })
+    ...await renderVariant({ recipeId: "youtube_shorts", suffix: "9x16", outDir: options.out, frameTimeMs: options.at }),
+    ...await renderVariant({ recipeId: "instagram_feed", suffix: "1x1", outDir: options.out, frameTimeMs: options.at })
   ];
   process.stdout.write(`\n${written.length} frames written to ${options.out}\n`);
 }

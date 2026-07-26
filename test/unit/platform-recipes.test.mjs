@@ -45,6 +45,29 @@ test("recipe callers receive copies and cannot mutate the catalog", () => {
   assert.equal(second.width, 1920);
   assert.deepEqual(
     listPlatformRecipes().map(recipe => recipe.platformId),
-    ["youtube_video", "youtube_shorts", "tiktok", "instagram_reels"]
+    ["youtube_video", "youtube_shorts", "tiktok", "instagram_feed", "instagram_reels"]
   );
+});
+
+test("the square feed recipe covers 1:1 without disturbing the two existing shapes", () => {
+  const square = getPlatformRecipe("instagram_feed");
+
+  assert.equal(square.id, "instagram-1x1-1080p");
+  assert.deepEqual([square.width, square.height], [1080, 1080]);
+  assert.equal(square.videoCodec, "libx264");
+  assert.equal(square.audioCodec, "aac");
+  assert.equal(square.loudnessTargetLufs, -16);
+  assert.equal(square.subtitleLayout.mode, "burn_and_sidecar");
+
+  // Предел длительности не сверялся с действующей политикой площадки, и рецепт
+  // обязан говорить об этом вслух, а не выдавать догадку за факт.
+  assert.ok(square.readinessBlockers.includes("platform_policy_unverified"));
+  assert.equal(square.policyObservedAt, "2026-07-26");
+  assert.ok(square.maxDurationSeconds > 0);
+
+  // Дата наблюдения политики теперь своя у каждого рецепта, но у старых она
+  // остаётся прежней — иначе мы задним числом «подтвердили» чужие лимиты.
+  for (const platformId of ["youtube_video", "youtube_shorts", "tiktok", "instagram_reels"]) {
+    assert.equal(getPlatformRecipe(platformId).policyObservedAt, "2026-07-13");
+  }
 });

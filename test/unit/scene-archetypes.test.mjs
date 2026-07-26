@@ -14,9 +14,12 @@ import { buildSceneMarkup } from "../../src/media/scene-markup.js";
 const HORIZONTAL = getPlatformRecipe("youtube_video");
 const VERTICAL = getPlatformRecipe("youtube_shorts");
 
+const SQUARE = getPlatformRecipe("instagram_feed");
+
 const FORMATS = Object.freeze([
   { name: "16:9", recipe: HORIZONTAL },
-  { name: "9:16", recipe: VERTICAL }
+  { name: "9:16", recipe: VERTICAL },
+  { name: "1:1", recipe: SQUARE }
 ]);
 
 const BRIEF = Object.freeze({ topic: "Как Hermest Board собирает ролик", language: "ru" });

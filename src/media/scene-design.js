@@ -103,6 +103,13 @@ function nonNegativeInset(value) {
 // друг над другом, поэтому шеллу нужна не только высота полосы.
 const PROGRESS_DOT_HEIGHT = 10;
 
+// Макетам важна не «вертикальность», а сколько есть горизонта: у квадрата
+// ширина на 44% меньше, чем у 16:9 той же высоты, поэтому боковые композиции
+// (заголовок слева, фигура справа) в него не влезают так же, как в 9:16.
+// Порог оставляет 16:9 (1.78) широким, а 9:16 (0.5625) и 1:1 — узкими, то есть
+// поведение уже существующих форматов не меняется ни на пиксель.
+const NARROW_ASPECT_THRESHOLD = 1.3;
+
 /**
  * Геометрия кадра. Отступы сцены — максимум из исторического процента и
  * safe zone рецепта: без рецепта раскладка ровно текущая, с рецептом 9:16
@@ -126,6 +133,8 @@ export function resolveSceneLayout({ width, height, safeZones } = {}) {
     left: nonNegativeInset(safeZones?.left)
   };
   const isVertical = safeHeight > safeWidth;
+  const aspectRatio = safeWidth / safeHeight;
+  const isNarrow = aspectRatio < NARROW_ASPECT_THRESHOLD;
   const unit = Math.max(1, Math.round(Math.min(safeWidth, safeHeight) / 100));
   // Без рецепта safe.bottom нет — тогда строка всё равно не должна лежать на
   // самой кромке, отсюда нижний порог в 5% высоты.
@@ -153,6 +162,8 @@ export function resolveSceneLayout({ width, height, safeZones } = {}) {
     width: safeWidth,
     height: safeHeight,
     isVertical,
+    isNarrow,
+    aspectRatio,
     unit,
     safe,
     captionHeight,

@@ -75,6 +75,22 @@ const PLATFORMS = Object.freeze([
       maxSize: 104857600, // 100 MB
       privacyModes: ["public", "private"]
     }
+  },
+  {
+    platform: "instagram_feed",
+    available: false,
+    mode: "unavailable",
+    requiresAuth: true,
+    statusReason: getInstagramStatusReason(),
+    capabilities: {
+      // Значения не сверялись с действующей политикой площадки — рецепт несёт
+      // об этом blocker `platform_policy_unverified`, и здесь та же оговорка.
+      maxDuration: 900,
+      aspectRatios: ["1:1"],
+      formats: ["mp4"],
+      maxSize: 104857600, // 100 MB
+      privacyModes: ["public", "private"]
+    }
   }
 ]);
 

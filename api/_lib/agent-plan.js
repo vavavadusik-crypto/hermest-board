@@ -97,7 +97,7 @@ function publishConnectorExecutionStatus(route) {
 
 function providerForPlatform(platform) {
   if (platform === "youtube_video" || platform === "youtube_shorts") return "youtube";
-  if (platform === "instagram_reels") return "instagram";
+  if (platform === "instagram_reels" || platform === "instagram_feed") return "instagram";
   if (platform === "tiktok") return "tiktok";
   return "";
 }

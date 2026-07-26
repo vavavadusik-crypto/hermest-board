@@ -166,8 +166,8 @@ function buildClassic(ctx) {
   // сколько позволяет её же ширина вместе с рамкой панели.
   const panelPadRatio = 0.05;
   const panelGrowth = 1 + panelPadRatio * 2;
-  const availableWidth = layout.isVertical ? layout.stageWidth : layout.stageWidth * 0.5;
-  const availableHeight = layout.isVertical ? layout.stageHeight * 0.55 : layout.stageHeight;
+  const availableWidth = layout.isNarrow ? layout.stageWidth : layout.stageWidth * 0.5;
+  const availableHeight = layout.isNarrow ? layout.stageHeight * 0.55 : layout.stageHeight;
   const diagramSize = Math.max(
     140,
     Math.floor(Math.min(availableHeight / panelGrowth, availableWidth / (DIAGRAM_ASPECT * panelGrowth)))
@@ -179,13 +179,13 @@ function buildClassic(ctx) {
     size: diagramSize
   });
   return {
-    stageFlex: layout.isVertical
+    stageFlex: layout.isNarrow
       ? "flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:48px;"
       : "flex-direction:row;align-items:center;justify-content:space-between;gap:64px;",
     stage: `${headlineBlock({ topic, title: content.title, lead: content.lead })}
     <div class="diagram-panel"><div class="dg-drift">${diagram}</div></div>`,
     css: `
-  .headline { max-width: ${layout.isVertical ? "100%" : "46%"}; }
+  .headline { max-width: ${layout.isNarrow ? "100%" : "46%"}; }
   .diagram-panel {
     background: ${THEME.panel}; border: 1px solid ${THEME.panelBorder}; border-radius: 18px;
     padding: ${Math.round(diagramSize * panelPadRatio)}px;
@@ -216,12 +216,12 @@ function buildStatement(ctx) {
   const titleHtml = words.length
     ? words.map((word, index) => `<span class="st-w" style="--i:${index}">${escapeHtml(word)}</span>`).join(" ")
     : escapeHtml(content.title);
-  const ruleWidth = s(layout.isVertical ? 34 : 26);
+  const ruleWidth = s(layout.isNarrow ? 34 : 26);
   const auraSize = Math.round(Math.min(layout.width, layout.height) * 0.9);
   const cta = content.data.cta ? `<div class="st-cta">${escapeHtml(content.data.cta)}</div>` : "";
   const closing = role === "closing";
   return {
-    stageFlex: `flex-direction:column;align-items:${layout.isVertical || closing ? "center" : "flex-start"};justify-content:center;text-align:${layout.isVertical || closing ? "center" : "left"};gap:0;`,
+    stageFlex: `flex-direction:column;align-items:${layout.isNarrow || closing ? "center" : "flex-start"};justify-content:center;text-align:${layout.isNarrow || closing ? "center" : "left"};gap:0;`,
     stage: `<div class="st-aura"></div>
     <div class="a-statement">
       <div class="kicker">${escapeHtml(topic)}</div>
@@ -234,17 +234,17 @@ function buildStatement(ctx) {
     css: `
   .st-aura {
     position: absolute; width: ${auraSize}px; height: ${auraSize}px; border-radius: 50%;
-    left: ${layout.isVertical || closing ? "50%" : "22%"}; top: 50%;
+    left: ${layout.isNarrow || closing ? "50%" : "22%"}; top: 50%;
     transform: translate(-50%, -50%);
     background: radial-gradient(circle, rgba(45, 212, 191, 0.16), rgba(124, 92, 255, 0.06) 55%, rgba(5, 11, 22, 0) 72%);
     filter: blur(${s(3)}px);
     animation: amb-breathe 13s ease-in-out 0s infinite;
   }
-  .a-statement { position: relative; max-width: ${layout.isVertical || closing ? "100%" : "82%"}; animation: amb-float 15s ease-in-out 0s infinite; }
+  .a-statement { position: relative; max-width: ${layout.isNarrow || closing ? "100%" : "82%"}; animation: amb-float 15s ease-in-out 0s infinite; }
   .a-statement h1 { font-size: ${Math.round(ctx.heroFontSize * 1.06)}px; }
   .st-w { display: inline-block; animation: rise-in 0.62s cubic-bezier(0.22, 0.9, 0.3, 1) calc(0.28s + var(--i) * 0.085s) backwards; }
   .st-rule {
-    height: ${s(0.7)}px; width: ${ruleWidth}px; margin: ${s(2)}px ${layout.isVertical || closing ? "auto" : "0"} ${s(2.6)}px;
+    height: ${s(0.7)}px; width: ${ruleWidth}px; margin: ${s(2)}px ${layout.isNarrow || closing ? "auto" : "0"} ${s(2.6)}px;
     border-radius: ${s(0.4)}px;
     background: linear-gradient(90deg, ${THEME.accent}, ${THEME.accentAlt});
     animation: rule-draw 0.85s cubic-bezier(0.22, 0.9, 0.3, 1) 0.62s backwards;
@@ -273,23 +273,40 @@ function buildStatement(ctx) {
 function buildDeviceMockup(ctx) {
   const { layout, content, topic, sceneIndex, s } = ctx;
   const device = content.data.device ?? {};
-  const kind = device.kind === "phone" || (layout.isVertical && device.kind !== "laptop") ? "phone" : "laptop";
+  const kind = device.kind === "phone" || (layout.isNarrow && device.kind !== "laptop") ? "phone" : "laptop";
   const uiTitle = device.title || clampText(content.title, 28);
   const rows = (device.lines?.length ? device.lines : content.bullets).slice(0, 4);
   // Подставка ноутбука шире экрана в 1.14 раза, поэтому предел ставится по ней:
   // при stageWidth * 0.94 подставка вылезала за safe zone в 9:16 (952px против
   // 888px сцены).
   const laptopBaseRatio = 1.14;
+  const laptopScreenRatio = 0.61;
+  // В узком кадре текст и устройство стоят друг над другом, поэтому ноутбук
+  // ограничен не только шириной сцены, но и её высотой: в 9:16 высоты хватает
+  // с запасом и предел не срабатывает, а в квадрате без него связка
+  // «заголовок + экран» перерастала сцену и налезала на шапку.
+  const laptopHeightBudget = layout.stageHeight * (layout.isNarrow ? 0.5 : 0.8);
+  // Телефон высокий: его высота — 1.9 ширины, а над ним ещё стоит заголовок.
+  // Без предела по высоте он занимал 87% сцены в квадрате и 85% в 9:16 — в обоих
+  // случаях связка «заголовок + устройство» перерастала сцену и наезжала на
+  // шапку. Вертикальному кадру достаётся больший бюджет: там сцена длиннее.
+  const phoneScreenRatio = 1.9;
+  const phoneHeightBudget = layout.stageHeight * (layout.isVertical ? 0.62 : 0.55);
   const screenWidth = kind === "phone"
-    ? Math.round(Math.min(layout.stageWidth * (layout.isVertical ? 0.62 : 0.3), layout.stageHeight * 0.46))
+    ? Math.round(Math.min(
+      layout.stageWidth * (layout.isNarrow ? 0.62 : 0.3),
+      layout.stageHeight * 0.46,
+      phoneHeightBudget / phoneScreenRatio
+    ))
     : Math.min(
-      Math.round(layout.isVertical ? layout.stageWidth * 0.94 : layout.stageWidth * 0.52),
-      Math.floor(layout.stageWidth / laptopBaseRatio)
+      Math.round(layout.isNarrow ? layout.stageWidth * 0.94 : layout.stageWidth * 0.52),
+      Math.floor(layout.stageWidth / laptopBaseRatio),
+      Math.floor(laptopHeightBudget / laptopScreenRatio)
     );
   const screenHeight = kind === "phone"
-    ? Math.round(screenWidth * 1.9)
-    : Math.round(screenWidth * 0.61);
-  const copyFirst = layout.isVertical || sceneIndex % 2 === 0;
+    ? Math.round(screenWidth * phoneScreenRatio)
+    : Math.round(screenWidth * laptopScreenRatio);
+  const copyFirst = layout.isNarrow || sceneIndex % 2 === 0;
   const rowsHtml = rows
     .map((row, index) => `<div class="dv-row" style="--i:${index}"><span class="dv-dot" style="background:${accentColor(index)}"></span><span class="dv-text">${escapeHtml(row)}</span></div>`)
     .join("");
@@ -315,12 +332,12 @@ function buildDeviceMockup(ctx) {
     </div>`;
   const copy = headlineBlock({ topic, title: content.title, lead: content.leadBesideList, className: "headline dv-copy" });
   return {
-    stageFlex: layout.isVertical
+    stageFlex: layout.isNarrow
       ? "flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:0;"
       : `flex-direction:row;align-items:center;justify-content:space-between;gap:${s(5)}px;`,
     stage: copyFirst ? `${copy}\n    ${deviceHtml}` : `${deviceHtml}\n    ${copy}`,
     css: `
-  .dv-copy { max-width: ${layout.isVertical ? "100%" : "42%"}; margin-bottom: ${layout.isVertical ? `${s(3.4)}px` : "0"}; }
+  .dv-copy { max-width: ${layout.isNarrow ? "100%" : "42%"}; margin-bottom: ${layout.isNarrow ? `${s(3.4)}px` : "0"}; }
   .dv-stage { perspective: ${s(160)}px; }
   .dv-tilt { animation: dv-in 0.9s cubic-bezier(0.22, 0.9, 0.3, 1) 0.55s backwards; }
   .dv-frame { position: relative; animation: amb-float 10s ease-in-out 0s infinite; }
@@ -404,7 +421,7 @@ function buildBoardColumns(ctx) {
   const lanes = (explicit?.length
     ? explicit
     : content.bullets.slice(0, 3).map((title, index) => ({ title, cards: [], index }))
-  ).slice(0, layout.isVertical ? 3 : 4);
+  ).slice(0, layout.isNarrow ? 3 : 4);
   const lanesHtml = lanes.map((lane, laneIndex) => {
     const cardCount = lane.cards?.length ? lane.cards.length : 3 - (laneIndex % 2);
     const cards = [];
@@ -432,12 +449,12 @@ function buildBoardColumns(ctx) {
      в верхней трети кадра, а под ними стояла пустота на пол-экрана. */
   .bc-board {
     display: flex; flex: 1; min-height: 0;
-    flex-direction: ${layout.isVertical ? "column" : "row"}; gap: ${s(1.8)}px;
+    flex-direction: ${layout.isNarrow ? "column" : "row"}; gap: ${s(1.8)}px;
     animation: panel-in 0.7s cubic-bezier(0.22, 0.9, 0.3, 1) 0.5s backwards;
   }
   .bc-lane {
-    flex: 1; min-height: 0; display: flex; flex-direction: ${layout.isVertical ? "row" : "column"};
-    align-items: ${layout.isVertical ? "center" : "stretch"};
+    flex: 1; min-height: 0; display: flex; flex-direction: ${layout.isNarrow ? "row" : "column"};
+    align-items: ${layout.isNarrow ? "center" : "stretch"};
     gap: ${s(1.2)}px; border-radius: ${s(1.4)}px; padding: ${s(1.4)}px;
     ${panelSurface()}
     animation: rise-in 0.55s cubic-bezier(0.22, 0.9, 0.3, 1) calc(0.62s + var(--i) * 0.14s) backwards;
@@ -445,13 +462,13 @@ function buildBoardColumns(ctx) {
   .bc-head {
     display: flex; align-items: center; gap: ${s(0.8)}px;
     color: ${THEME.text}; font-size: ${s(1.7)}px; font-weight: 700;
-    ${layout.isVertical ? `width: 30%; flex: none;` : ""}
+    ${layout.isNarrow ? `width: 30%; flex: none;` : ""}
   }
   .bc-chip { width: ${s(0.9)}px; height: ${s(0.9)}px; border-radius: ${s(0.3)}px; flex: none; }
   /* Карточки остаются нормального размера и лежат сверху колонки: растянутые
      на всю высоту, они превращались в пустые прямоугольники. */
   .bc-cards {
-    display: flex; flex-direction: ${layout.isVertical ? "row" : "column"};
+    display: flex; flex-direction: ${layout.isNarrow ? "row" : "column"};
     gap: ${s(1)}px; flex: 1; min-height: 0; justify-content: flex-start;
   }
   .bc-card {
@@ -470,7 +487,7 @@ function buildBoardColumns(ctx) {
   }
   @keyframes bc-travel {
     0%, 12% { transform: translate3d(0, 0, 0); }
-    38%, 62% { transform: translate3d(${layout.isVertical ? `0, ${s(6)}px` : `${s(11)}px, 0`}, 0); }
+    38%, 62% { transform: translate3d(${layout.isNarrow ? `0, ${s(6)}px` : `${s(11)}px, 0`}, 0); }
     88%, 100% { transform: translate3d(0, 0, 0); }
   }`
   };
@@ -484,8 +501,12 @@ function buildFormatTrio(ctx) {
   const { layout, content, topic, s } = ctx;
   const labels = content.data.formats?.length ? content.data.formats.slice(0, 3) : ["16:9", "9:16", "1:1"];
   const ratios = [[16, 9], [9, 16], [1, 1]];
-  const base = layout.isVertical
-    ? Math.round(layout.stageWidth * 0.42)
+  // Три кадра переносятся на вторую строку, когда не влезают в ширину, поэтому
+  // высота сцены — такое же ограничение, как ширина: в 9:16 предел по ширине
+  // строже и ничего не меняется, а в квадрате без предела по высоте вторая
+  // строка выпадала за нижнюю кромку.
+  const base = layout.isNarrow
+    ? Math.round(Math.min(layout.stageWidth * 0.42, layout.stageHeight * 0.36))
     : Math.round(Math.min(layout.stageWidth * 0.26, layout.stageHeight * 0.42));
   const framesHtml = labels.map((label, index) => {
     const [rw, rh] = ratios[index % ratios.length];
@@ -510,7 +531,7 @@ function buildFormatTrio(ctx) {
   .ft-copy { max-width: 100%; margin-bottom: ${s(3)}px; }
   .ft-copy h1 { font-size: ${Math.round(ctx.heroFontSize * 0.86)}px; }
   .ft-row {
-    display: flex; flex-wrap: ${layout.isVertical ? "wrap" : "nowrap"};
+    display: flex; flex-wrap: ${layout.isNarrow ? "wrap" : "nowrap"};
     align-items: flex-end; justify-content: center; gap: ${s(2.6)}px;
   }
   .ft-item {
@@ -554,15 +575,15 @@ function buildChecklist(ctx) {
         <span class="cl-text">${escapeHtml(item)}</span>
       </li>`).join("");
   return {
-    stageFlex: layout.isVertical
+    stageFlex: layout.isNarrow
       ? "flex-direction:column;align-items:stretch;justify-content:center;gap:0;"
       : `flex-direction:row;align-items:stretch;justify-content:space-between;gap:${s(5)}px;`,
-    stage: `${headlineBlock({ topic, title: content.title, lead: layout.isVertical ? "" : content.leadBesideList, className: "headline cl-copy" })}
+    stage: `${headlineBlock({ topic, title: content.title, lead: layout.isNarrow ? "" : content.leadBesideList, className: "headline cl-copy" })}
     <ul class="cl-list">${rowsHtml}<li class="cl-sweep"></li></ul>`,
     css: `
   .cl-copy {
-    max-width: ${layout.isVertical ? "100%" : "40%"}; margin-bottom: ${layout.isVertical ? `${s(3)}px` : "0"};
-    ${layout.isVertical ? "" : "display: flex; flex-direction: column; justify-content: center;"}
+    max-width: ${layout.isNarrow ? "100%" : "40%"}; margin-bottom: ${layout.isNarrow ? `${s(3)}px` : "0"};
+    ${layout.isNarrow ? "" : "display: flex; flex-direction: column; justify-content: center;"}
   }
   .cl-list {
     position: relative; overflow: hidden; list-style: none; margin: 0; padding: ${s(1.8)}px;
@@ -625,13 +646,13 @@ function buildComparison(ctx) {
       ${side(pair.right, 1, "after")}
     </div>`,
     css: `
-  .cp-copy { max-width: 100%; margin-bottom: ${s(2.8)}px; flex: none; text-align: ${layout.isVertical ? "center" : "left"}; }
+  .cp-copy { max-width: 100%; margin-bottom: ${s(2.8)}px; flex: none; text-align: ${layout.isNarrow ? "center" : "left"}; }
   .cp-copy h1 { font-size: ${Math.round(ctx.heroFontSize * 0.86)}px; }
   /* Стороны берут всю высоту сцены: двумя низкими плашками во всю ширину это
      читалось как список из двух пунктов, а не как сравнение. */
   .cp-split {
     display: flex; flex: 1; min-height: 0;
-    flex-direction: ${layout.isVertical ? "column" : "row"};
+    flex-direction: ${layout.isNarrow ? "column" : "row"};
     align-items: stretch; gap: ${s(2)}px;
   }
   .cp-side {
@@ -666,16 +687,16 @@ function buildComparison(ctx) {
     animation: rise-in 0.42s ease-out calc(1s + var(--i) * 0.14s) backwards;
   }
   .cp-divider {
-    ${layout.isVertical
+    ${layout.isNarrow
     ? `height: ${s(0.3)}px; width: 100%;`
     : `width: ${s(0.3)}px; align-self: stretch;`}
     border-radius: ${s(0.2)}px;
-    background: linear-gradient(${layout.isVertical ? "90deg" : "180deg"}, rgba(45, 212, 191, 0), ${THEME.accent}, rgba(124, 92, 255, 0));
+    background: linear-gradient(${layout.isNarrow ? "90deg" : "180deg"}, rgba(45, 212, 191, 0), ${THEME.accent}, rgba(124, 92, 255, 0));
     animation: cp-divider 0.8s ease-out 0.9s backwards, amb-pulse 7s ease-in-out 1.8s infinite;
   }
-  @keyframes cp-in-before { from { opacity: 0; transform: translate3d(${layout.isVertical ? `0, -${s(3)}px` : `-${s(4)}px, 0`}, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
-  @keyframes cp-in-after { from { opacity: 0; transform: translate3d(${layout.isVertical ? `0, ${s(3)}px` : `${s(4)}px, 0`}, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
-  @keyframes cp-divider { from { opacity: 0; transform: scale${layout.isVertical ? "X" : "Y"}(0.2); } to { opacity: 1; transform: none; } }
+  @keyframes cp-in-before { from { opacity: 0; transform: translate3d(${layout.isNarrow ? `0, -${s(3)}px` : `-${s(4)}px, 0`}, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+  @keyframes cp-in-after { from { opacity: 0; transform: translate3d(${layout.isNarrow ? `0, ${s(3)}px` : `${s(4)}px, 0`}, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+  @keyframes cp-divider { from { opacity: 0; transform: scale${layout.isNarrow ? "X" : "Y"}(0.2); } to { opacity: 1; transform: none; } }
   @keyframes cp-glow {
     0%, 100% { box-shadow: 0 24px 60px rgba(1, 6, 14, 0.6), 0 0 0 rgba(45, 212, 191, 0); }
     50% { box-shadow: 0 24px 60px rgba(1, 6, 14, 0.6), 0 0 ${s(4)}px rgba(45, 212, 191, 0.3); }
@@ -716,7 +737,13 @@ function buildStatHighlight(ctx) {
     ? { raw: explicit.value, unit: explicit.unit, value: Number(explicit.value), integer: /^\d+$/u.test(explicit.value) }
     : content.numbers[0] ?? { raw: content.title, unit: "", value: 0, integer: false };
   const caption = explicit?.caption || content.lead || content.bullets[0] || "";
-  const ringSize = Math.round(Math.min(layout.stageWidth, layout.stageHeight) * (layout.isVertical ? 0.72 : 0.62));
+  // Под кольцом стоят надпись, заголовок и подпись, поэтому в узком кадре
+  // размер считается от обоих измерений сразу: в 9:16 строже ширина и число не
+  // меняется, а в квадрате кольцо прежнего размера выдавливало текст на ряд
+  // точек прогресса.
+  const ringSize = Math.round(layout.isNarrow
+    ? Math.min(layout.stageWidth * 0.72, layout.stageHeight * 0.55)
+    : Math.min(layout.stageWidth, layout.stageHeight) * 0.62);
   const circumference = (Math.PI * 2 * 52).toFixed(1);
   const counter = counterMarkup({ number, className: "sh-value", id: "shnum" });
   return {
@@ -801,13 +828,13 @@ function buildMetricGrid(ctx) {
         ${label ? `<div class="mg-label">${escapeHtml(clampText(label, 46))}</div>` : ""}
       </div>`;
   }).join("");
-  const columns = layout.isVertical ? Math.min(numbers.length, 2) : Math.min(numbers.length, 4);
+  const columns = layout.isNarrow ? Math.min(numbers.length, 2) : Math.min(numbers.length, 4);
   return {
     stageFlex: "flex-direction:column;align-items:stretch;justify-content:center;gap:0;",
     stage: `${headlineBlock({ topic, title: content.title, lead: "", className: "headline mg-copy" })}
     <div class="mg-grid">${tiles}</div>`,
     css: `
-  .mg-copy { max-width: 100%; margin-bottom: ${s(3)}px; flex: none; text-align: ${layout.isVertical ? "center" : "left"}; }
+  .mg-copy { max-width: 100%; margin-bottom: ${s(3)}px; flex: none; text-align: ${layout.isNarrow ? "center" : "left"}; }
   .mg-copy h1 { font-size: ${Math.round(ctx.heroFontSize * 0.84)}px; }
   .mg-grid {
     display: grid; flex: 1; min-height: 0;
@@ -823,7 +850,7 @@ function buildMetricGrid(ctx) {
   .mg-figure { display: flex; align-items: baseline; gap: ${s(0.6)}px; color: ${THEME.text}; }
   /* Плитка теперь во всю высоту сцены, поэтому и число крупнее: прежний кегль
      терялся посреди пустой карточки. */
-  .mg-value { font-size: ${s(layout.isVertical ? 8 : 9)}px; font-weight: 700; line-height: 1; letter-spacing: -2px; }
+  .mg-value { font-size: ${s(layout.isNarrow ? 8 : 9)}px; font-weight: 700; line-height: 1; letter-spacing: -2px; }
   .mg-unit { font-size: ${s(3)}px; font-weight: 700; color: ${THEME.accent}; }
   .mg-label { color: ${THEME.textMuted}; font-size: ${s(1.8)}px; line-height: 1.3; }
   .sr-value { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }${counters.map(counter => counter.css).join("")}`
@@ -838,7 +865,7 @@ function buildFlowSteps(ctx) {
   const { layout, content, topic, s } = ctx;
   const steps = (content.steps.length ? content.steps : content.bullets).slice(0, MAX_CHIPS);
   const cycleSeconds = (Math.max(steps.length, 1) * 1.6).toFixed(1);
-  const arrow = layout.isVertical
+  const arrow = layout.isNarrow
     ? `<svg class="fs-arrow" viewBox="0 0 24 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><line class="fs-line" x1="12" y1="2" x2="12" y2="28" stroke="#24405f" stroke-width="2.4" stroke-dasharray="26"/><polygon class="fs-tip" points="12,38 5,26 19,26" fill="#24405f"/></svg>`
     : `<svg class="fs-arrow" viewBox="0 0 40 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><line class="fs-line" x1="2" y1="12" x2="28" y2="12" stroke="#24405f" stroke-width="2.4" stroke-dasharray="26"/><polygon class="fs-tip" points="38,12 26,5 26,19" fill="#24405f"/></svg>`;
   const chips = steps.map((step, index) => `<div class="fs-step" style="--i:${index};--c:${accentColor(index)}">
@@ -851,15 +878,15 @@ function buildFlowSteps(ctx) {
     stage: `${headlineBlock({ topic, title: content.title, lead: "", className: "headline fs-copy" })}
     <div class="fs-flow">${flowHtml}</div>`,
     css: `
-  .fs-copy { max-width: 100%; margin-bottom: ${s(3)}px; flex: none; text-align: ${layout.isVertical ? "center" : "left"}; }
+  .fs-copy { max-width: 100%; margin-bottom: ${s(3)}px; flex: none; text-align: ${layout.isNarrow ? "center" : "left"}; }
   .fs-copy h1 { font-size: ${Math.round(ctx.heroFontSize * 0.84)}px; }
   /* Шаги тянутся по высоте, но не во всю сцену: ряд из пяти колонок высотой в
      кадр читался бы уже не как поток, а как таблица. */
   .fs-flow {
     display: flex; flex: 1; min-height: 0;
-    max-height: ${Math.round(layout.stageHeight * (layout.isVertical ? 1 : 0.6))}px;
+    max-height: ${Math.round(layout.stageHeight * (layout.isNarrow ? 1 : 0.6))}px;
     align-self: center; width: 100%;
-    flex-direction: ${layout.isVertical ? "column" : "row"};
+    flex-direction: ${layout.isNarrow ? "column" : "row"};
     align-items: stretch; justify-content: center; gap: ${s(1.2)}px;
   }
   .fs-step {
@@ -877,7 +904,7 @@ function buildFlowSteps(ctx) {
   }
   .fs-text { color: ${THEME.text}; font-size: ${s(1.6)}px; line-height: 1.28; }
   .fs-arrow {
-    flex: none; ${layout.isVertical ? `width: ${s(2.4)}px; height: ${s(3.4)}px; align-self: center;` : `width: ${s(3.4)}px; height: ${s(2.4)}px;`}
+    flex: none; ${layout.isNarrow ? `width: ${s(2.4)}px; height: ${s(3.4)}px; align-self: center;` : `width: ${s(3.4)}px; height: ${s(2.4)}px;`}
   }
   .fs-line { animation: fs-draw 0.4s ease-out 1.15s backwards; }
   .fs-tip { animation: rise-in 0.3s ease-out 1.45s backwards; }
@@ -913,7 +940,7 @@ function buildQuote(ctx) {
   .qt-wrap {
     position: relative; display: flex; flex-direction: column;
     align-items: center; justify-content: center;
-    max-width: ${layout.isVertical ? "100%" : "88%"};
+    max-width: ${layout.isNarrow ? "100%" : "88%"};
     animation: amb-float 14s ease-in-out 0s infinite;
   }
   .qt-glyph {

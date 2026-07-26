@@ -5,7 +5,13 @@ const MAX_ARTIFACTS = 32;
 const MAX_ARTIFACT_BYTES = 20 * 1024 * 1024 * 1024;
 const SAFE_RIGHTS = new Set(["allowed", "owned", "generated"]);
 const RIGHTS_STATUSES = new Set(["unknown", "allowed", "restricted", "owned", "generated"]);
-const PLATFORM_IDS = new Set(["youtube_video", "youtube_shorts", "instagram_reels", "tiktok"]);
+const PLATFORM_IDS = new Set([
+  "youtube_video",
+  "youtube_shorts",
+  "instagram_reels",
+  "instagram_feed",
+  "tiktok"
+]);
 const EVIDENCE_STATUSES = new Set(["metadata_only", "server_verified"]);
 const SHA256 = /^[a-f0-9]{64}$/;
 

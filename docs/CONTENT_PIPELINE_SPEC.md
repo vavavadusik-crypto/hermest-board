@@ -45,7 +45,7 @@ publishing → published | delivered_to_inbox | unknown | failed
     "language": "ru",
     "tone": "documentary",
     "masterDurationSeconds": 1200,
-    "platforms": ["youtube_video", "youtube_shorts", "tiktok", "instagram_reels"]
+    "platforms": ["youtube_video", "youtube_shorts", "tiktok", "instagram_reels", "instagram_feed"]
   },
   "cards": [],
   "links": [],

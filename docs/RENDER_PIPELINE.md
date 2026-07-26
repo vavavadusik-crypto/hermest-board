@@ -61,6 +61,21 @@ loudness measure + ffprobe  →  cover frame (<recipeId>.cover.png)
 buildRenderManifest(...)  →  verified artifacts
 ```
 
+## Frame shapes (`src/domain/platform-recipes.js`)
+
+Three shapes ship: 16:9 master (1920×1080), 9:16 vertical (1080×1920) and the
+1:1 feed square (1080×1080). Scene layouts do not branch on "is the frame
+vertical" but on **how much horizontal room there is** (`layout.isNarrow`,
+aspect below 1.3): a square is as cramped sideways as a vertical, so it gets the
+stacked composition rather than the side-by-side one. 16:9 (1.78) stays wide and
+its markup is unchanged, byte for byte.
+
+Height is the square's real constraint: it has the height of 16:9 with the
+stacking of 9:16, so figures are bounded by the stage height as well as its
+width — the device mockup, the format trio and the counter ring each carry an
+explicit height budget. Without them the headline was pushed into the header and
+the last caption line landed on the progress dots.
+
 ## Cover frame (`resolveCoverFrameSeconds`, `src/domain/cover-frame.js`)
 
 The cover is cut from the **finished master**, never composed separately: a
