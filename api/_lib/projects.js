@@ -4,6 +4,10 @@ import { normalizeCardImageUrl } from "../../src/card-image.js";
 const MAX_CARDS = 250;
 const MAX_TEXT = 50000;
 const MAX_IMAGE = 900000;
+// Подсказка композеру кадра: имя архетипа и его данные. Хранилище проверяет
+// только форму и объём — словарь архетипов живёт в слое отрисовки.
+const MAX_SCENE_TYPE = 40;
+const MAX_SCENE_DATA_CHARS = 4000;
 const DEFAULT_WORKSPACE_ID = "workspace_local";
 const DEFAULT_OWNER_USER_ID = "local-dev";
 
@@ -102,6 +106,7 @@ function projectStats(project) {
 function normalizeCards(cards) {
   if (!Array.isArray(cards)) return [];
   return cards.slice(0, MAX_CARDS).map(card => ({
+    ...sceneComposition(card),
     id: safeId(card.id) || createId("card"),
     x: number(card.x, 0),
     y: number(card.y, 0),
@@ -116,6 +121,27 @@ function normalizeCards(cards) {
     tags: Array.isArray(card.tags) ? card.tags.slice(0, 32).map(tag => text(tag, 80)).filter(Boolean) : [],
     image: normalizeCardImageUrl(text(card.image, MAX_IMAGE))
   }));
+}
+
+/**
+ * Необязательная композиция кадра. Ключи появляются только когда карточка их
+ * несёт, поэтому документы прежних проектов остаются прежними байт в байт.
+ */
+function sceneComposition(card) {
+  const composition = {};
+  const sceneType = text(card.sceneType, MAX_SCENE_TYPE).trim().toLowerCase().replaceAll("_", "-");
+  if (/^[a-z][a-z0-9-]{1,39}$/.test(sceneType)) composition.sceneType = sceneType;
+  const sceneData = object(card.sceneData, null);
+  if (sceneData) {
+    let serialized = "";
+    try {
+      serialized = JSON.stringify(sceneData);
+    } catch {
+      return composition;
+    }
+    if (serialized.length <= MAX_SCENE_DATA_CHARS) composition.sceneData = JSON.parse(serialized);
+  }
+  return composition;
 }
 
 function normalizeLinks(links) {
