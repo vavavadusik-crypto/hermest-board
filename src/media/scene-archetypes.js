@@ -571,6 +571,11 @@ function counterMarkup({ number, className, id }) {
   // CSS-счётчик набегает по виртуальному времени, поэтому кадр остаётся
   // детерминированным. Нецелые значения счётчиком не набежать — тогда цифра
   // просто появляется целиком.
+  //
+  // fill-mode обязан быть both, а не backwards: после конца анимации custom
+  // property возвращается к initial-value, то есть к нулю. С backwards кадр,
+  // снятый позже 2.1 с, показывал «0» вместо значения — на сцене это выглядело
+  // как «ноль секунд сборки» и «ноль форматов на выходе».
   if (!number.integer) {
     return { html: `<span class="${className}">${escapeHtml(number.raw)}</span>`, css: "" };
   }
@@ -579,7 +584,7 @@ function counterMarkup({ number, className, id }) {
     css: `
   @property --${id} { syntax: "<integer>"; initial-value: 0; inherits: false; }
   @keyframes run-${id} { from { --${id}: 0; } to { --${id}: ${number.value}; } }
-  .${id} { counter-reset: ${id} var(--${id}); animation: run-${id} 1.5s cubic-bezier(0.16, 0.84, 0.24, 1) 0.6s backwards; }
+  .${id} { counter-reset: ${id} var(--${id}); animation: run-${id} 1.5s cubic-bezier(0.16, 0.84, 0.24, 1) 0.6s both; }
   .${id}::after { content: counter(${id}); }`
   };
 }
