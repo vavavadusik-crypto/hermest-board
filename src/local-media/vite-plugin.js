@@ -2,6 +2,7 @@ import { createReadStream } from "node:fs";
 import { stat, rm } from "node:fs/promises";
 import path from "node:path";
 
+import { DURATION_PLAN_LIMITS } from "../domain/duration-plan.js";
 import { renderProject } from "../media/render-project.js";
 import { describeBridgeAvailability } from "../media/text-model.js";
 import { createDraftJobManager } from "./draft-job-manager.js";
@@ -12,6 +13,8 @@ import { createProviderKeyStore } from "./provider-keys.js";
 
 const DEFAULT_MAX_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_DRAFT_TOPIC_CHARS = 2000;
+const MIN_TARGET_DURATION_SECONDS = DURATION_PLAN_LIMITS.minTargetSeconds;
+const MAX_TARGET_DURATION_SECONDS = DURATION_PLAN_LIMITS.maxTargetSeconds;
 const MUTATION_HEADER = "x-hermest-local-media";
 const API_PREFIX = "/api/local-media";
 
@@ -202,6 +205,7 @@ async function routeRequest(request, response, context, next) {
       topic: body.topic,
       language: body.language,
       sceneCount: body.sceneCount,
+      targetDurationSeconds: body.targetDurationSeconds,
       voice: body.voice,
       narrationProvider: body.narrationProvider,
       research: body.research !== false,
@@ -380,6 +384,14 @@ function validateDraftBody(body) {
   if (body.sceneCount !== undefined && body.sceneCount !== null) {
     if (typeof body.sceneCount !== "number" || !Number.isFinite(body.sceneCount)) {
       throw new HttpError(400, "draft_scene_count_invalid");
+    }
+  }
+  if (body.targetDurationSeconds !== undefined && body.targetDurationSeconds !== null) {
+    if (typeof body.targetDurationSeconds !== "number"
+      || !Number.isFinite(body.targetDurationSeconds)
+      || body.targetDurationSeconds < MIN_TARGET_DURATION_SECONDS
+      || body.targetDurationSeconds > MAX_TARGET_DURATION_SECONDS) {
+      throw new HttpError(400, "draft_target_duration_invalid");
     }
   }
   if (body.research !== undefined && body.research !== null && typeof body.research !== "boolean") {

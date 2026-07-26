@@ -142,3 +142,45 @@ test("drafted cards keep verified sourceRefs and the board carries sources", asy
   const withCitations = board.cards.filter(card => card.sourceRefs.length > 0).length;
   assert.ok(withCitations >= 2, "topic must yield cards with working citations");
 });
+
+test("director prompt carries an explicit character budget for the target duration", () => {
+  const withTarget = buildDirectorPrompt({
+    topic: "Подписки на ИИ",
+    sceneCount: 6,
+    targetDurationSeconds: 60
+  });
+  assert.match(withTarget, /Ролик должен звучать 1:00\./);
+  assert.match(withTarget, /непробельных символов/);
+
+  const withoutTarget = buildDirectorPrompt({ topic: "Подписки на ИИ", sceneCount: 6 });
+  assert.equal(/должен звучать/.test(withoutTarget), false);
+  assert.equal(/непробельных символов/.test(withoutTarget), false);
+});
+
+test("director records the target duration in the brief and rejects hostile values", async () => {
+  const model = mockModel([JSON.stringify(validDraft)]);
+  const board = await draftBoardFromTopic({
+    topic: "Квантовые компьютеры простыми словами",
+    sceneCount: 3,
+    targetDurationSeconds: 155,
+    textModel: model
+  });
+  assert.equal(board.brief.targetDurationSeconds, 155);
+
+  const withoutTarget = await draftBoardFromTopic({
+    topic: "Квантовые компьютеры простыми словами",
+    sceneCount: 3,
+    textModel: mockModel([JSON.stringify(validDraft)])
+  });
+  assert.equal("targetDurationSeconds" in withoutTarget.brief, false);
+
+  await assert.rejects(
+    draftBoardFromTopic({
+      topic: "Квантовые компьютеры простыми словами",
+      sceneCount: 3,
+      targetDurationSeconds: 5,
+      textModel: mockModel([JSON.stringify(validDraft)])
+    }),
+    RangeError
+  );
+});

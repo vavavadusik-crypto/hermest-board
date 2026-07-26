@@ -327,6 +327,41 @@ test("render manifest rejects malformed Piper narration argv", () => {
   );
 });
 
+test("render manifest accepts an optional Piper speech rate inside the domain corridor", () => {
+  const manifest = build({
+    commands: [
+      { ...validPiperCommand, argv: [...validPiperCommand.argv, "--length_scale", "0.880"] },
+      validRenderCommand
+    ]
+  });
+  const ttsCommand = manifest.commands.find(command => command.tool === "piper");
+  assert.deepEqual(ttsCommand.argv.slice(-2), ["--length_scale", "0.880"]);
+});
+
+test("render manifest rejects a Piper speech rate outside the domain corridor", () => {
+  for (const scale of ["0.500", "1.500", "нет"]) {
+    assert.throws(
+      () => build({
+        commands: [
+          { ...validPiperCommand, argv: [...validPiperCommand.argv, "--length_scale", scale] },
+          validRenderCommand
+        ]
+      }),
+      TypeError,
+      scale
+    );
+  }
+  assert.throws(
+    () => build({
+      commands: [
+        { ...validPiperCommand, argv: [...validPiperCommand.argv, "--speed", "0.880"] },
+        validRenderCommand
+      ]
+    }),
+    TypeError
+  );
+});
+
 test("render manifest includes footage with assetType", () => {
   const manifest = build({
     footage: [

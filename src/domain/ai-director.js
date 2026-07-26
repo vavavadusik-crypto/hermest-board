@@ -3,6 +3,11 @@
 // complete()). Domain-слой: никакого HTTP здесь, только контракт и валидация.
 
 import { buildStoryboard } from "./content-pipeline.js";
+import {
+  describeDurationBudget,
+  formatDurationLabel,
+  normalizeTargetDurationSeconds
+} from "./duration-plan.js";
 
 const MAX_TOPIC_CHARS = 300;
 const MAX_TITLE_CHARS = 160;
@@ -15,7 +20,15 @@ const GRID_STEP_X = 420;
 const GRID_STEP_Y = 260;
 const GRID_COLUMNS = 3;
 
-export function buildDirectorPrompt({ topic, language = "ru", sceneCount = 5, audience, tone, sources = [] }) {
+export function buildDirectorPrompt({
+  topic,
+  language = "ru",
+  sceneCount = 5,
+  audience,
+  tone,
+  sources = [],
+  targetDurationSeconds = null
+}) {
   const sourceLines = sources.map(source => {
     const year = source.year ? `, ${source.year}` : "";
     const snippet = source.snippet ? ` — ${source.snippet}` : "";
@@ -31,11 +44,23 @@ export function buildDirectorPrompt({ topic, language = "ru", sceneCount = 5, au
   const cardShape = sourceLines.length
     ? `{"title": "название видео", "cards": [{"title": "заголовок сцены", "text": "закадровый текст", "sourceRefs": ["src-..."]}]}`
     : `{"title": "название видео", "cards": [{"title": "заголовок сцены", "text": "закадровый текст"}]}`;
+  // Длительность ролика предсказуема по непробельным символам, поэтому бюджет
+  // текста уходит модели явной цифрой — иначе она пишет «сколько напишется».
+  const budget = targetDurationSeconds
+    ? describeDurationBudget({ targetDurationSeconds, sceneCount })
+    : null;
+  const durationBlock = budget
+    ? [
+      `Ролик должен звучать ${formatDurationLabel(targetDurationSeconds)}.`,
+      `На это нужно примерно ${budget.recommendedCharacters} непробельных символов закадрового текста суммарно, то есть около ${Math.round(budget.recommendedCharacters / sceneCount)} символов на сцену. Держись этого объёма.`
+    ]
+    : [];
   return [
     `Ты — режиссёр коротких обучающих видео. Тема: «${topic}».`,
     `Составь план видео из ровно ${sceneCount} сцен на языке "${language}".`,
     audience ? `Аудитория: ${audience}.` : "",
     tone ? `Тон: ${tone}.` : "",
+    ...durationBlock,
     "Каждая сцена — карточка с коротким заголовком и 1–2 предложениями закадрового текста.",
     "Первая карточка — цепляющий вход в тему, последняя — вывод или призыв.",
     ...researchBlock,
@@ -63,6 +88,7 @@ export async function draftBoardFromTopic({
   audience,
   tone,
   sceneCount = 5,
+  targetDurationSeconds = null,
   voice = "",
   narrationProvider = "",
   textModel,
@@ -76,6 +102,7 @@ export async function draftBoardFromTopic({
     throw new TypeError("draftBoardFromTopic requires a text model with complete()");
   }
   const scenes = Math.min(Math.max(Number(sceneCount) || 5, MIN_SCENES), MAX_SCENES);
+  const targetDuration = normalizeTargetDurationSeconds(targetDurationSeconds);
   const researchSources = normalizeResearchSources(sources);
   const basePrompt = buildDirectorPrompt({
     topic: cleanTopic,
@@ -83,7 +110,8 @@ export async function draftBoardFromTopic({
     sceneCount: scenes,
     audience,
     tone,
-    sources: researchSources
+    sources: researchSources,
+    targetDurationSeconds: targetDuration
   });
 
   let lastFailure = "";
@@ -110,6 +138,7 @@ export async function draftBoardFromTopic({
         voice,
         narrationProvider,
         sceneCount: scenes,
+        targetDurationSeconds: targetDuration,
         sources: researchSources
       });
     } catch (error) {
@@ -119,7 +148,17 @@ export async function draftBoardFromTopic({
   throw new RangeError(`AI Director draft failed after ${maxAttempts} attempts: ${lastFailure}`);
 }
 
-function assembleBoard(payload, { topic, language, audience, tone, voice, narrationProvider, sceneCount, sources = [] }) {
+function assembleBoard(payload, {
+  topic,
+  language,
+  audience,
+  tone,
+  voice,
+  narrationProvider,
+  sceneCount,
+  targetDurationSeconds = null,
+  sources = []
+}) {
   const allowedSourceIds = new Set(sources.map(source => source.id));
   const cardsInput = Array.isArray(payload.cards) ? payload.cards : [];
   const cards = [];
@@ -153,6 +192,7 @@ function assembleBoard(payload, { topic, language, audience, tone, voice, narrat
       language,
       ...(audience ? { audience } : {}),
       ...(tone ? { tone } : {}),
+      ...(targetDurationSeconds ? { targetDurationSeconds } : {}),
       voice,
       narrationProvider
     },

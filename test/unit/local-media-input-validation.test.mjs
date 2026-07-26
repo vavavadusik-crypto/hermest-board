@@ -102,6 +102,39 @@ test("draft route rejects malformed optional fields with specific codes", async 
   assert.equal(submitted.length, 0);
 });
 
+test("draft route validates the target duration at the HTTP boundary", async t => {
+  const submitted = [];
+  const origin = await startHandler(t, {
+    manager: createLocalMediaJobManager({ executeRender: async () => ({}) }),
+    draftManager: trackingDraftManager(submitted)
+  });
+  const topic = "Валидная тема";
+
+  for (const targetDurationSeconds of ["60", 14, 3601, 0, -60, true, { seconds: 60 }, [60]]) {
+    await expectRejected(
+      await postJson(origin, "draft", { topic, targetDurationSeconds }),
+      "draft_target_duration_invalid"
+    );
+  }
+  // JSON не умеет Infinity как литерал, зато 1e999 парсится именно в него.
+  const infinite = await fetch(`${origin}/api/local-media/draft`, {
+    method: "POST",
+    headers: { origin, "content-type": "application/json", "x-hermest-local-media": "1" },
+    body: `{"topic":"${topic}","targetDurationSeconds":1e999}`
+  });
+  await expectRejected(infinite, "draft_target_duration_invalid");
+  assert.equal(submitted.length, 0, "invalid durations must never reach the manager");
+
+  const accepted = await postJson(origin, "draft", { topic, targetDurationSeconds: 155 });
+  assert.equal(accepted.status, 202);
+  assert.equal(submitted.length, 1);
+  assert.equal(submitted[0].targetDurationSeconds, 155);
+
+  // Прежнее поведение без цели длительности: поле просто отсутствует.
+  await postJson(origin, "draft", { topic });
+  assert.equal(submitted[1].targetDurationSeconds, undefined);
+});
+
 test("draft route rejects malformed endpoints and never echoes the api key", async t => {
   const submitted = [];
   const origin = await startHandler(t, {

@@ -5,6 +5,7 @@
     "topic": "Как не переплачивать за подписки на ИИ-сервисы",
     "audience": "широкая аудитория",
     "language": "ru",
+    "targetDurationSeconds": 60,
     "narrationProvider": "elevenlabs",
     "voice": "JBFqnCBsd6RMkjVDRZzb",
     "tone": "спокойный практичный",
