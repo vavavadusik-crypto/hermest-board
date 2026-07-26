@@ -1024,10 +1024,20 @@ function buildCartoonShot(ctx) {
   const cardHeight = cartoon.caption ? Math.round(cardFontSize * 1.5) + scaled(layout, 2.4) : 0;
   const bubbleBottom = frameHeight - groundY + charHeight + gap;
   const bubbleMaxHeight = Math.max(scaled(layout, 8), available - charHeight - gap * 2 - cardHeight);
-  const bubbleWidth = Math.round(frameWidth * (layout.isNarrow ? 0.88 : 0.54));
+  // Декорация кроет весь кадр, но реплика — нет: в вертикали интерфейс площадки
+  // съедает края, и облачко, прижатое к краю кадра, читается уже под кнопками.
+  // Поэтому границы облачка — safe zone, а не отступ «на глаз».
+  const bubbleLimitLeft = layout.padLeft;
+  const bubbleLimitRight = frameWidth - layout.padRight;
+  const bubbleWidth = Math.min(
+    Math.round(frameWidth * (layout.isNarrow ? 0.88 : 0.54)),
+    bubbleLimitRight - bubbleLimitLeft
+  );
   const speakerX = Math.round(frameWidth * positions[speakerIndex % positions.length]);
-  const edge = scaled(layout, 3);
-  const bubbleLeft = Math.min(Math.max(speakerX - Math.round(bubbleWidth / 2), edge), frameWidth - bubbleWidth - edge);
+  const bubbleLeft = Math.min(
+    Math.max(speakerX - Math.round(bubbleWidth / 2), bubbleLimitLeft),
+    bubbleLimitRight - bubbleWidth
+  );
   const tailLeft = Math.min(Math.max(speakerX - bubbleLeft, scaled(layout, 3)), bubbleWidth - scaled(layout, 3));
   const speakerName = cartoon.cast[speakerIndex]?.name ?? "";
   const bubblePadding = scaled(layout, 1.9);

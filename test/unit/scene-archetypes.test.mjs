@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { getPlatformRecipe } from "../../src/domain/platform-recipes.js";
-import { SCENE_ARCHETYPES, deriveSceneContent, planSceneArchetypes, pickSceneArchetype } from "../../src/media/scene-content.js";
+import { FULL_BLEED_ARCHETYPES, SCENE_ARCHETYPES, deriveSceneContent, planSceneArchetypes, pickSceneArchetype } from "../../src/media/scene-content.js";
 import { resolveSceneLayout } from "../../src/media/scene-design.js";
 import { buildSceneMarkup } from "../../src/media/scene-markup.js";
 
@@ -73,8 +73,8 @@ const ROLE_CASES = Object.freeze([
 ]);
 
 test("archetype coverage matches the plan", () => {
-  assert.equal(SCENE_ARCHETYPES.length, 11);
-  assert.equal(ROLE_CASES.length, 12);
+  assert.equal(SCENE_ARCHETYPES.length, 12);
+  assert.equal(ROLE_CASES.length, 13);
 });
 
 // --- детерминизм ------------------------------------------------------------
@@ -126,7 +126,7 @@ const HOSTILE_BRIEF = Object.freeze({ topic: `</style><script>steal()</script>`,
 const ALLOWED_TAGS = new Set([
   "html", "head", "meta", "style", "body", "script",
   "div", "span", "h1", "p", "ul", "li", "figure", "figcaption", "blockquote",
-  "svg", "g", "circle", "line", "text", "path", "polygon"
+  "svg", "g", "circle", "ellipse", "rect", "line", "text", "path", "polygon"
 ]);
 
 function styleBlock(markup) {
@@ -269,11 +269,17 @@ for (const { archetype, role, label } of ROLE_CASES) {
     assert.ok(layout.padBottom >= VERTICAL.safeZones.bottom);
 
     const css = markup.slice(markup.indexOf("<style>"), markup.indexOf("</style>"));
+    // Full-bleed архетип рисует декорацию на весь кадр, поэтому его потолок —
+    // кадр, а не сцена. Для всех остальных потолок прежний: вылезти за safe zone
+    // нельзя, иначе платформа обрежет содержимое.
+    const fullBleed = FULL_BLEED_ARCHETYPES.includes(archetype);
+    const widthLimit = fullBleed ? VERTICAL.width : layout.stageWidth;
+    const heightLimit = fullBleed ? VERTICAL.height : layout.stageHeight;
     for (const size of [...declaredPixelSizes(css), ...declaredMarkupSizes(markup)]) {
-      const limit = size.axis === "width" ? layout.stageWidth : layout.stageHeight;
+      const limit = size.axis === "width" ? widthLimit : heightLimit;
       assert.ok(
         size.value <= limit,
-        `${label}: ${size.selector} ${size.axis}=${size.value}px не влезает в сцену ${limit}px`
+        `${label}: ${size.selector} ${size.axis}=${size.value}px не влезает в ${fullBleed ? "кадр" : "сцену"} ${limit}px`
       );
     }
 
@@ -281,6 +287,54 @@ for (const { archetype, role, label } of ROLE_CASES) {
     // главная ось колонкой.
     assert.match(markup, /\.stage \{[^}]*flex-direction:column/su);
   });
+}
+
+// Разрешение рисовать во весь кадр (FULL_BLEED_ARCHETYPES) касается только
+// декорации. Читаемое — реплика и карточка локации — обязано остаться внутри
+// safe zone: за её пределами платформа накладывает свой интерфейс и режет кадр.
+function declaredBox(css, selector) {
+  const match = css.match(new RegExp(`\\.${selector}\\b[^{]*\\{([^}]*)\\}`, "u"));
+  if (!match) return null;
+  const body = match[1];
+  const px = name => {
+    const found = body.match(new RegExp(`(?:^|;|\\s)${name}\\s*:\\s*(-?\\d+)px`, "u"));
+    return found ? Number(found[1]) : null;
+  };
+  return { left: px("left"), top: px("top"), bottom: px("bottom"), width: px("width"), height: px("max-height") ?? px("height") };
+}
+
+for (const archetype of FULL_BLEED_ARCHETYPES) {
+  for (const { name, recipe } of FORMATS) {
+    test(`full-bleed archetype ${archetype} keeps its readable parts inside the safe zone (${name})`, () => {
+      const markup = markupFor({ archetype, recipe, role: "body" });
+      const css = styleBlock(markup);
+      const boxes = ["toon-bubble", "toon-card"].map(selector => [selector, declaredBox(css, selector)]);
+      assert.ok(boxes.some(([, box]) => box), "ни одного читаемого блока в разметке");
+
+      for (const [selector, box] of boxes) {
+        if (!box) continue;
+        if (box.left !== null) {
+          assert.ok(box.left >= recipe.safeZones.left, `${selector}: левый край ${box.left} < safe ${recipe.safeZones.left}`);
+          if (box.width !== null) {
+            const right = box.left + box.width;
+            const limit = recipe.width - recipe.safeZones.right;
+            assert.ok(right <= limit, `${selector}: правый край ${right} > ${limit}`);
+          }
+        }
+        if (box.top !== null) {
+          assert.ok(box.top >= recipe.safeZones.top, `${selector}: верх ${box.top} < safe ${recipe.safeZones.top}`);
+        }
+        if (box.bottom !== null) {
+          assert.ok(box.bottom >= recipe.safeZones.bottom, `${selector}: низ ${box.bottom} < safe ${recipe.safeZones.bottom}`);
+          if (box.height !== null) {
+            const top = box.bottom + box.height;
+            const limit = recipe.height - recipe.safeZones.top;
+            assert.ok(top <= limit, `${selector}: верх ${top} > ${limit}`);
+          }
+        }
+      }
+    });
+  }
 }
 
 test("the same archetype lays out differently in 16:9 and 9:16", () => {
