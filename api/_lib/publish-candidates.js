@@ -25,12 +25,18 @@ export function buildPublishCandidate(input = {}) {
   }
   const videoArtifact = artifacts.find(item => item.name === expectedVideoName);
   if (!videoArtifact || videoArtifact.type !== "video/mp4") fail("candidate_master_artifact_missing");
+  const expectedCoverName = `${recipe.id}.cover.png`;
+  const coverArtifact = artifacts.find(item => item.name === expectedCoverName);
   const rights = normalizeRights(input.rights);
   const evidence = normalizeEvidence(input.evidence);
   const projectSnapshotSha256 = hashCanonical(projectSnapshot);
   const approvalBlockers = [];
   if (!SAFE_RIGHTS.has(rights.status)) approvalBlockers.push("asset_rights_not_cleared");
   if (evidence.status !== "server_verified") approvalBlockers.push("artifact_verification_required");
+  // Обложка требуется каждой площадкой из publish-пака (thumbnail / cover_frame),
+  // поэтому кандидат без неё запечатывается, но одобрен быть не может: тихий
+  // пропуск превратил бы недостающий ассет в проблему момента публикации.
+  if (!coverArtifact || coverArtifact.type !== "image/png") approvalBlockers.push("cover_frame_artifact_missing");
 
   const sealedPayload = {
     schema: SCHEMA,

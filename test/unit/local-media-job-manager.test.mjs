@@ -103,7 +103,8 @@ test("completed verified render is passed through a server-only candidate persis
         blockers: [],
         warnings: [],
         artifacts: [
-          { name: "youtube-16x9-1080p.mp4", type: "video/mp4", bytes: 9000, sha256: "a".repeat(64) }
+          { name: "youtube-16x9-1080p.mp4", type: "video/mp4", bytes: 9000, sha256: "a".repeat(64) },
+          { name: "youtube-16x9-1080p.cover.png", type: "image/png", bytes: 400, sha256: "c".repeat(64) }
         ]
       }
     })
@@ -131,6 +132,7 @@ test("completed verified render is passed through a server-only candidate persis
   assert.equal(captured.projectId, "project_saved_1");
   assert.equal(captured.verifiedRender.manifestSha256, "b".repeat(64));
   assert.deepEqual(captured.verifiedRender.artifacts.map(item => item.name), [
+    "youtube-16x9-1080p.cover.png",
     "youtube-16x9-1080p.manifest.json",
     "youtube-16x9-1080p.mp4"
   ]);
@@ -141,11 +143,15 @@ test("completed verified render is passed through a server-only candidate persis
 test("candidate persistence re-verifies artifact hashes against files on disk", async () => {
   const outputDir = await mkdtemp(path.join(os.tmpdir(), "hermest-candidate-hash-"));
   const videoName = "youtube-16x9-1080p.mp4";
+  const coverName = "youtube-16x9-1080p.cover.png";
   const manifestName = "youtube-16x9-1080p.manifest.json";
   const videoPath = path.join(outputDir, videoName);
+  const coverPath = path.join(outputDir, coverName);
   const manifestPath = path.join(outputDir, manifestName);
   const manifestHashPath = `${manifestPath}.sha256`;
+  const coverBytes = "cover";
   await writeFile(videoPath, "video", { mode: 0o600 });
+  await writeFile(coverPath, coverBytes, { mode: 0o600 });
   await writeFile(manifestPath, "{}\n", { mode: 0o600 });
   await writeFile(manifestHashPath, `${"b".repeat(64)}  ${manifestName}\n`, { mode: 0o600 });
   let persistenceCalls = 0;
@@ -179,7 +185,13 @@ test("candidate persistence re-verifies artifact hashes against files on disk", 
           blockers: [],
           warnings: [],
           artifacts: [
-            { name: videoName, type: "video/mp4", bytes: 5, sha256: "a".repeat(64) }
+            { name: videoName, type: "video/mp4", bytes: 5, sha256: "a".repeat(64) },
+            {
+              name: coverName,
+              type: "image/png",
+              bytes: coverBytes.length,
+              sha256: createHash("sha256").update(coverBytes).digest("hex")
+            }
           ]
         }
       })
@@ -203,18 +215,23 @@ test("candidate persistence re-verifies artifact hashes against files on disk", 
 test("candidate persistence rejects a symlinked artifact path and fails closed", async () => {
   const outputDir = await mkdtemp(path.join(os.tmpdir(), "hermest-candidate-symlink-"));
   const videoName = "youtube-16x9-1080p.mp4";
+  const coverName = "youtube-16x9-1080p.cover.png";
   const manifestName = "youtube-16x9-1080p.manifest.json";
   const realVideo = path.join(outputDir, "real-video.bin");
   const videoLink = path.join(outputDir, videoName);
+  const coverPath = path.join(outputDir, coverName);
   const manifestPath = path.join(outputDir, manifestName);
   const manifestHashPath = `${manifestPath}.sha256`;
   const videoBytes = "video";
+  const coverBytes = "cover";
   const manifestBytes = "{}\n";
   await writeFile(realVideo, videoBytes, { mode: 0o600 });
   await symlink(realVideo, videoLink);
+  await writeFile(coverPath, coverBytes, { mode: 0o600 });
   await writeFile(manifestPath, manifestBytes, { mode: 0o600 });
   await writeFile(manifestHashPath, `hash  ${manifestName}\n`, { mode: 0o600 });
   const videoSha = createHash("sha256").update(videoBytes).digest("hex");
+  const coverSha = createHash("sha256").update(coverBytes).digest("hex");
   const manifestSha = createHash("sha256").update(manifestBytes).digest("hex");
   let persistenceCalls = 0;
 
@@ -234,7 +251,10 @@ test("candidate persistence rejects a symlinked artifact path and fails closed",
           qc: { passed: true },
           blockers: [],
           warnings: [],
-          artifacts: [{ name: videoName, type: "video/mp4", bytes: videoBytes.length, sha256: videoSha }]
+          artifacts: [
+            { name: videoName, type: "video/mp4", bytes: videoBytes.length, sha256: videoSha },
+            { name: coverName, type: "image/png", bytes: coverBytes.length, sha256: coverSha }
+          ]
         }
       })
     });
@@ -252,6 +272,89 @@ test("candidate persistence rejects a symlinked artifact path and fails closed",
   } finally {
     await rm(outputDir, { recursive: true, force: true });
   }
+});
+
+test("a render without a cover frame never reaches candidate persistence", async () => {
+  let persistenceCalls = 0;
+  const manager = createLocalMediaJobManager({
+    verifyArtifactEvidence: async () => {},
+    persistVerifiedCandidate: async () => {
+      persistenceCalls += 1;
+      return { id: "cand_no_cover", digest: "d".repeat(64), version: 1, status: "sealed", approvable: true, approvalBlockers: [] };
+    },
+    executeRender: async () => ({
+      outputDir: "/tmp/private-cover-missing",
+      manifestPath: "/tmp/private-cover-missing/youtube-16x9-1080p.manifest.json",
+      manifestHashPath: "/tmp/private-cover-missing/youtube-16x9-1080p.manifest.json.sha256",
+      manifestArtifact: {
+        name: "youtube-16x9-1080p.manifest.json",
+        type: "application/json",
+        bytes: 2000,
+        sha256: "b".repeat(64)
+      },
+      manifest: {
+        recipe: { id: "youtube-16x9-1080p" },
+        qc: { passed: true },
+        blockers: [],
+        warnings: [],
+        artifacts: [
+          { name: "youtube-16x9-1080p.mp4", type: "video/mp4", bytes: 9000, sha256: "a".repeat(64) }
+        ]
+      }
+    })
+  });
+  const job = manager.submit({
+    projectId: "project_saved_1",
+    project: { title: "Cover missing", cards: [{ id: "scene", text: "Renderable scene" }] },
+    platform: "youtube_video"
+  });
+  const completed = await manager.waitFor(job.id);
+
+  assert.equal(completed.status, "completed");
+  assert.equal(persistenceCalls, 0);
+  assert.equal(completed.candidate.status, "blocked");
+  assert.ok(completed.candidate.blockers.includes("publish_candidate_persistence_failed"));
+});
+
+test("a cover frame declared with the wrong media type is rejected as evidence", async () => {
+  let persistenceCalls = 0;
+  const manager = createLocalMediaJobManager({
+    verifyArtifactEvidence: async () => {},
+    persistVerifiedCandidate: async () => {
+      persistenceCalls += 1;
+      return { id: "cand_wrong_cover", digest: "d".repeat(64), version: 1, status: "sealed", approvable: true, approvalBlockers: [] };
+    },
+    executeRender: async () => ({
+      outputDir: "/tmp/private-cover-type",
+      manifestPath: "/tmp/private-cover-type/youtube-16x9-1080p.manifest.json",
+      manifestHashPath: "/tmp/private-cover-type/youtube-16x9-1080p.manifest.json.sha256",
+      manifestArtifact: {
+        name: "youtube-16x9-1080p.manifest.json",
+        type: "application/json",
+        bytes: 2000,
+        sha256: "b".repeat(64)
+      },
+      manifest: {
+        recipe: { id: "youtube-16x9-1080p" },
+        qc: { passed: true },
+        blockers: [],
+        warnings: [],
+        artifacts: [
+          { name: "youtube-16x9-1080p.mp4", type: "video/mp4", bytes: 9000, sha256: "a".repeat(64) },
+          { name: "youtube-16x9-1080p.cover.png", type: "text/plain", bytes: 400, sha256: "c".repeat(64) }
+        ]
+      }
+    })
+  });
+  const job = manager.submit({
+    projectId: "project_saved_1",
+    project: { title: "Cover type", cards: [{ id: "scene", text: "Renderable scene" }] },
+    platform: "youtube_video"
+  });
+  const completed = await manager.waitFor(job.id);
+
+  assert.equal(persistenceCalls, 0);
+  assert.equal(completed.candidate.status, "blocked");
 });
 
 test("candidate persistence failure leaves completed media blocked instead of fabricating approval", async () => {
@@ -276,7 +379,8 @@ test("candidate persistence failure leaves completed media blocked instead of fa
         blockers: [],
         warnings: [],
         artifacts: [
-          { name: "youtube-16x9-1080p.mp4", type: "video/mp4", bytes: 9000, sha256: "a".repeat(64) }
+          { name: "youtube-16x9-1080p.mp4", type: "video/mp4", bytes: 9000, sha256: "a".repeat(64) },
+          { name: "youtube-16x9-1080p.cover.png", type: "image/png", bytes: 400, sha256: "c".repeat(64) }
         ]
       }
     })
@@ -540,7 +644,8 @@ test("cancel during candidate persistence never resurrects the job as completed"
         blockers: [],
         warnings: [],
         artifacts: [
-          { name: "youtube-16x9-1080p.mp4", type: "video/mp4", bytes: 9000, sha256: "a".repeat(64) }
+          { name: "youtube-16x9-1080p.mp4", type: "video/mp4", bytes: 9000, sha256: "a".repeat(64) },
+          { name: "youtube-16x9-1080p.cover.png", type: "image/png", bytes: 400, sha256: "c".repeat(64) }
         ]
       }
     })

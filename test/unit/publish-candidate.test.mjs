@@ -11,6 +11,7 @@ const SECRET = "candidate-secret-sentinel-73f2";
 const SHA_A = "a".repeat(64);
 const SHA_B = "b".repeat(64);
 const SHA_C = "c".repeat(64);
+const SHA_D = "d".repeat(64);
 
 function input(overrides = {}) {
   return {
@@ -46,7 +47,8 @@ function input(overrides = {}) {
     platforms: ["youtube_video"],
     artifacts: [
       { name: "youtube-16x9-1080p.manifest.json", type: "application/json", bytes: 2048, sha256: SHA_B, path: "/tmp/private/youtube-16x9-1080p.manifest.json", token: SECRET },
-      { name: "youtube-16x9-1080p.mp4", type: "video/mp4", bytes: 9000, sha256: SHA_A }
+      { name: "youtube-16x9-1080p.mp4", type: "video/mp4", bytes: 9000, sha256: SHA_A },
+      { name: "youtube-16x9-1080p.cover.png", type: "image/png", bytes: 41000, sha256: SHA_D }
     ],
     manifestSha256: SHA_B,
     rights: { status: "allowed", assetIds: ["asset_b", "asset_a"] },
@@ -69,7 +71,11 @@ test("sealed candidate digest is canonical, deterministic and excludes paths, se
   assert.equal(first.project.snapshotSha256, second.project.snapshotSha256);
   assert.equal(first.status, "sealed");
   assert.equal(first.approvable, true);
-  assert.deepEqual(first.artifacts.map(item => item.name), ["youtube-16x9-1080p.manifest.json", "youtube-16x9-1080p.mp4"]);
+  assert.deepEqual(first.artifacts.map(item => item.name), [
+    "youtube-16x9-1080p.cover.png",
+    "youtube-16x9-1080p.manifest.json",
+    "youtube-16x9-1080p.mp4"
+  ]);
   assert.deepEqual(first.rights.assetIds, ["asset_a", "asset_b"]);
   const serialized = JSON.stringify(first);
   assert.equal(serialized.includes(SECRET), false);

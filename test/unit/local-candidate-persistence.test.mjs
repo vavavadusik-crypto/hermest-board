@@ -5,6 +5,7 @@ import { createLocalVerifiedCandidatePersister } from "../../src/local-media/can
 
 const SHA_A = "a".repeat(64);
 const SHA_B = "b".repeat(64);
+const SHA_C = "c".repeat(64);
 
 function projectRecord() {
   return {
@@ -47,7 +48,8 @@ function verifiedRender() {
     platforms: ["youtube_video"],
     artifacts: [
       { name: "youtube-16x9-1080p.mp4", type: "video/mp4", bytes: 9000, sha256: SHA_A },
-      { name: "youtube-16x9-1080p.manifest.json", type: "application/json", bytes: 2000, sha256: SHA_B }
+      { name: "youtube-16x9-1080p.manifest.json", type: "application/json", bytes: 2000, sha256: SHA_B },
+      { name: "youtube-16x9-1080p.cover.png", type: "image/png", bytes: 400, sha256: SHA_C }
     ],
     manifestSha256: SHA_B,
     verifier: "local-media-worker-r1",

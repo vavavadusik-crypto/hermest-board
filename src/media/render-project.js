@@ -24,12 +24,15 @@ import {
   planTargetDuration
 } from "../domain/duration-plan.js";
 import { getPlatformRecipe } from "../domain/platform-recipes.js";
+import { resolveCoverFrameSeconds } from "../domain/cover-frame.js";
 import {
   buildComposedVideoRenderArgs,
+  buildCoverFrameArgs,
   buildNarrationCanonicalizeArgs,
   buildVideoRenderArgs,
   assertSafeGeneratedPath
 } from "./ffmpeg-args.js";
+import { readPngHeader } from "./png-header.js";
 import { composeSceneFrames, describeSceneComposerAvailability } from "./scene-frames.js";
 import { createPexelsBrollAdapter, describeBrollAvailability } from "./broll-source.js";
 import { createDefaultImageSourceCascade, hasKeyedImageProvider } from "./image-source.js";
@@ -452,6 +455,33 @@ export async function renderProject({
     await chmod(videoPartial, PRIVATE_FILE_MODE);
     await rename(videoPartial, videoFile);
 
+    // Обложка снимается с уже проверенного мастера, а не собирается отдельно:
+    // превью обязано быть кадром именно того ролика, чьи хеши уходят в манифест.
+    const coverName = `${recipe.id}.cover.png`;
+    const coverFile = path.join(runDir, coverName);
+    const coverPartial = path.join(runDir, `${recipe.id}.cover.partial.png`);
+    const coverFrameSeconds = resolveCoverFrameSeconds(storyboard, {
+      durationSeconds: videoProbe.durationSeconds
+    });
+    const coverCommand = {
+      id: "cover-frame",
+      tool: "ffmpeg",
+      argv: buildCoverFrameArgs({
+        inputFile: videoFile,
+        outputFile: coverPartial,
+        atSeconds: coverFrameSeconds,
+        width: recipe.width,
+        height: recipe.height
+      })
+    };
+    const coverProbe = await extractCoverFrame({
+      command: coverCommand,
+      partialFile: coverPartial,
+      coverFile,
+      recipe,
+      signal
+    });
+
     const artifacts = await Promise.all([
       describeArtifact(storyboardFile, {
         name: "storyboard.json",
@@ -472,10 +502,21 @@ export async function renderProject({
         name: videoName,
         type: "video/mp4",
         probe: videoProbe
+      }),
+      describeArtifact(coverFile, {
+        name: coverName,
+        type: "image/png",
+        probe: { ...coverProbe, atSeconds: coverFrameSeconds }
       })
     ]);
 
-    const commands = [...narrationCommands, ...sceneFrameCommands, renderCommand, loudnessCommand];
+    const commands = [
+      ...narrationCommands,
+      ...sceneFrameCommands,
+      renderCommand,
+      loudnessCommand,
+      coverCommand
+    ];
     const manifestTools = {
       ffmpeg: await mediaToolVersion("ffmpeg", { signal }),
       ffprobe: await mediaToolVersion("ffprobe", { signal }),
@@ -501,6 +542,7 @@ export async function renderProject({
           ...(musicTrack ? ["music_bed_ducking"] : []),
           "video_streams_codecs_dimensions_duration",
           "audio_loudness_measured",
+          "cover_frame_extracted",
           "artifact_hashes"
         ],
         loudness
@@ -549,6 +591,8 @@ export async function renderProject({
       manifestHashPath,
       manifestArtifact,
       videoFile,
+      coverFile,
+      coverFrameSeconds,
       subtitleFile,
       narrationAudioFile,
       storyboardFile,
@@ -558,6 +602,23 @@ export async function renderProject({
   } finally {
     if (!completed) await rm(runDir, { recursive: true, force: true });
   }
+}
+
+// Обложка проходит тот же путь, что и остальные артефакты: сначала `.partial`,
+// затем проверка и атомарный rename — незавершённый кадр не может остаться в
+// каталоге под именем готового артефакта. Проверяем PNG по заголовку, а не
+// через probeMediaFile: ffprobe не отдаёт длительность одиночного PNG.
+async function extractCoverFrame({ command, partialFile, coverFile, recipe, signal }) {
+  await runMediaTool(command.tool, command.argv, { timeoutMs: 120000, signal });
+  const header = readPngHeader(await readFile(partialFile));
+  if (header.width !== Number(recipe.width) || header.height !== Number(recipe.height)) {
+    throw new TypeError(
+      `Cover frame dimensions ${header.width}x${header.height} do not match recipe`
+    );
+  }
+  await chmod(partialFile, PRIVATE_FILE_MODE);
+  await rename(partialFile, coverFile);
+  return header;
 }
 
 // Сломанный или отсутствующий reporter не имеет права уронить рендер:

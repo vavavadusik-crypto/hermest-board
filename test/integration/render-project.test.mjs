@@ -8,6 +8,7 @@ import test from "node:test";
 import { promisify } from "node:util";
 
 import { buildComposedVideoRenderArgs } from "../../src/media/ffmpeg-args.js";
+import { readPngHeader } from "../../src/media/png-header.js";
 import { runMediaTool } from "../../src/media/process-runner.js";
 import { renderProject } from "../../src/media/render-project.js";
 
@@ -95,6 +96,18 @@ for (const expected of [
     assert.ok(audio.bytes > 0);
     assert.ok(subtitles.bytes > 0);
     assert.ok(storyboard.bytes > 0);
+
+    // Обложка проверяется по самому файлу, а не по записи в манифесте: заявить
+    // PNG нужного размера легко, доказать — только байтами с диска.
+    const cover = diskManifest.artifacts.find(artifact => artifact.type === "image/png");
+    assert.ok(cover, "рендер обязан выдать обложку");
+    assert.equal(cover.name, `${expected.recipeId}.cover.png`);
+    assert.ok(cover.bytes > 0);
+    const coverHeader = readPngHeader(await readFile(path.join(result.outputDir, cover.name)));
+    assert.equal(coverHeader.width, expected.width);
+    assert.equal(coverHeader.height, expected.height);
+    assert.ok(cover.probe.atSeconds > 0);
+    assert.ok(cover.probe.atSeconds < video.probe.durationSeconds);
 
     const relativeRun = path.relative(outputRoot, result.outputDir);
     assert.notEqual(relativeRun, "");
