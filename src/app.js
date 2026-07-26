@@ -107,6 +107,7 @@ import {
     const wizardTopicInput = document.getElementById("wizardTopic");
     const wizardSceneCountInput = document.getElementById("wizardSceneCount");
     const wizardResearchInput = document.getElementById("wizardResearch");
+    const wizardCartoonInput = document.getElementById("wizardCartoon");
     const wizardDraftButton = document.getElementById("wizardDraft");
     const wizardCancelButton = document.getElementById("wizardCancel");
     const wizardModelSelect = document.getElementById("wizardModel");
@@ -1415,6 +1416,7 @@ import {
             ...(sceneCount === null ? {} : { sceneCount }),
             targetDurationSeconds,
             research: wizardResearchInput.checked,
+            cartoon: wizardCartoonInput?.checked === true,
             model,
             endpoint,
             language: state.brief?.language || "ru",

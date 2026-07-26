@@ -204,6 +204,9 @@ async function routeRequest(request, response, context, next) {
     const job = draftManager.submit({
       topic: body.topic,
       language: body.language,
+      // Мультрежим — булев флаг и ничего больше: сценарий целиком строит домен,
+      // из запроса не приходит ни труппа, ни реплики.
+      cartoon: body.cartoon === true,
       sceneCount: body.sceneCount,
       targetDurationSeconds: body.targetDurationSeconds,
       voice: body.voice,

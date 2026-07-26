@@ -17,6 +17,7 @@ const DEFAULT_SCENES = 6;
 export async function draftBoardService({
   topic,
   language = "ru",
+  cartoon = false,
   sceneCount,
   targetDurationSeconds,
   voice = "",
@@ -68,6 +69,7 @@ export async function draftBoardService({
   const board = await draftBoardFromTopic({
     topic: cleanTopic,
     language,
+    cartoon: cartoon === true,
     sceneCount: scenes,
     targetDurationSeconds: targetDuration,
     voice,

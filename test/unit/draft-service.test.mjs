@@ -314,3 +314,42 @@ test("without a target duration the draft keeps the previous default scene count
   assert.match(textModel.calls[0], /ровно 6 сцен/u);
   assert.equal("targetDurationSeconds" in result.board.brief, false);
 });
+
+const SCREENPLAY_JSON = JSON.stringify({
+  title: "T",
+  cast: [{ id: "char-1", name: "Марк" }],
+  cards: [
+    { title: "a", cartoon: { setting: "desk", speaker: "char-1", line: "Первая реплика" } },
+    { title: "b", cartoon: { setting: "room", speaker: "char-1", line: "Вторая реплика" } }
+  ]
+});
+
+test("the cartoon flag reaches the director and comes back as cartoon cards", async () => {
+  const model = { calls: [], async complete({ prompt }) { model.calls.push(prompt); return SCREENPLAY_JSON; } };
+  const result = await draftBoardService({
+    topic: "жизнь вайб-кодера",
+    cartoon: true,
+    sceneCount: 2,
+    research: false,
+    textModel: model,
+    availabilityCheck: executableBridge()
+  });
+  assert.match(model.calls[0], /труппу/u, "режиссёр получил не сценарный промпт");
+  for (const card of result.board.cards) {
+    assert.equal(card.sceneType, "cartoon");
+    assert.ok(card.sceneData.cartoon.cast.length);
+  }
+});
+
+test("without the flag the draft stays a narrated board", async () => {
+  const model = mockTextModel();
+  const result = await draftBoardService({
+    topic: "подписки на ИИ",
+    sceneCount: 2,
+    research: false,
+    textModel: model,
+    availabilityCheck: executableBridge()
+  });
+  assert.ok(!model.calls[0].includes("труппу"));
+  assert.equal(result.board.cards[0].sceneType, undefined);
+});
