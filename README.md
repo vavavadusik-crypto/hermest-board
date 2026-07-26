@@ -102,7 +102,7 @@ npm run check        # validate · unit · smoke:api · media (2 real MP4s) · b
 | Resume in-flight jobs after reload | ✅ VERIFIED | Active draft/render IDs persisted in `localStorage`, reconnect on boot |
 | Analytics block (duration/LUFS/size/scenes/voice/format/artifacts/SHA-256, copy summary) | ✅ VERIFIED | Shown on completed renders, hidden without analytics, mobile 375px |
 | Workspace storage (SQLite node:sqlite, clients/projects/campaigns/content/assets/jobs/notes) | ✅ VERIFIED | Durable across restarts, JSON import/export intact |
-| CI Gate (580+ unit + 6 media real FFmpeg + publish + workspace + build + npm audit + smoke, all exit 0) | ✅ VERIFIED | GitHub Actions on every push/PR, public repo = unlimited minutes |
+| CI Gate (798 unit + 6 media real FFmpeg + publish + workspace + build + npm audit + smoke, all exit 0) | ✅ VERIFIED | GitHub Actions on every push/PR, public repo = unlimited minutes |
 | Docker image (static SPA) | ✅ VERIFIED | `Dockerfile` — frontend only, NO worker (nginx static); [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) |
 | Self-host image (full, real MP4 render) | ✅ VERIFIED | `Dockerfile.selfhost` + compose — ffmpeg/chromium/piper worker, all features; CI build proof |
 | Semantic shorts (meaning-based scene selection, not just time crop) | ⏳ PLANNED | Vertical render by aspect ratio exists; semantic remixing next slice |
