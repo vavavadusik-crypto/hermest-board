@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -19,6 +19,12 @@ const LAUNCH_TIMEOUT_MS = 30000;
 const PORT_POLL_INTERVAL_MS = 25;
 const COMMAND_TIMEOUT_MS = 60000;
 const NAVIGATION_TIMEOUT_MS = 60000;
+// Скриншот ждёт не ответа протокола, а свежего кадра от компоновщика, поэтому у
+// него свой — короткий — бюджет и своя диагностика: минута молчания на каждую
+// сцену недопустима, а голый таймаут ничего не объясняет.
+const CAPTURE_TIMEOUT_MS = 20000;
+const LIVENESS_PROBE_TIMEOUT_MS = 3000;
+const TIMEOUT_CODE = "CHROME_CDP_TIMEOUT";
 const KILL_GRACE_MS = 2000;
 const GRACEFUL_CLOSE_MS = 3000;
 const MAX_STDERR_CHARS = 8192;
@@ -69,6 +75,7 @@ export async function openSceneBrowser({
   webSocketImpl = globalThis.WebSocket,
   launchTimeoutMs = LAUNCH_TIMEOUT_MS,
   commandTimeoutMs = COMMAND_TIMEOUT_MS,
+  captureTimeoutMs = CAPTURE_TIMEOUT_MS,
   gracefulCloseMs = GRACEFUL_CLOSE_MS,
   workerCount = resolveCaptureWorkerCount()
 } = {}) {
@@ -81,6 +88,12 @@ export async function openSceneBrowser({
   const expectedHeight = windowDimension(height, "height");
   const workers = positiveWorkerCount(workerCount);
 
+  // Chrome удаляет DevToolsActivePort только при штатном выходе. После падения
+  // или kill -9 файл остаётся, и следующий запуск на том же профиле читает
+  // мёртвый порт — рукопожатие валится без единой строки в stderr. Чистим сами:
+  // профиль всегда наш, сгенерированный.
+  await rm(path.join(assertSafeGeneratedPath(profileDir), DEVTOOLS_PORT_FILE), { force: true });
+
   const child = spawnImpl("chrome", argv);
   const browser = new SceneBrowser({
     child,
@@ -88,6 +101,7 @@ export async function openSceneBrowser({
     profileDir: assertSafeGeneratedPath(profileDir),
     webSocketImpl,
     commandTimeoutMs,
+    captureTimeoutMs,
     gracefulCloseMs,
     signal
   });
@@ -107,6 +121,7 @@ class SceneBrowser {
   #profileDir;
   #webSocketImpl;
   #commandTimeoutMs;
+  #captureTimeoutMs;
   #gracefulCloseMs;
   #signal;
   #abortHandler = null;
@@ -122,12 +137,13 @@ class SceneBrowser {
   #closed = false;
   #failure = null;
 
-  constructor({ child, argv, profileDir, webSocketImpl, commandTimeoutMs, gracefulCloseMs, signal }) {
+  constructor({ child, argv, profileDir, webSocketImpl, commandTimeoutMs, captureTimeoutMs, gracefulCloseMs, signal }) {
     this.#child = child;
     this.#argv = argv;
     this.#profileDir = profileDir;
     this.#webSocketImpl = webSocketImpl;
     this.#commandTimeoutMs = commandTimeoutMs;
+    this.#captureTimeoutMs = captureTimeoutMs ?? commandTimeoutMs;
     this.#gracefulCloseMs = gracefulCloseMs;
     this.#signal = signal;
 
@@ -170,6 +186,14 @@ class SceneBrowser {
    * Готовит пул вкладок-исполнителей. Вкладка из аргумента about:blank идёт
    * первой, остальные создаются через Target.createTarget; размер кадра каждой
    * задаётся явно, поэтому окно ОС на результат не влияет.
+   *
+   * Каждая дополнительная вкладка получает СВОЁ окно (newWindow). Внутри одного
+   * окна кадры коммитит только активная вкладка: Target.createTarget делает
+   * активной новую, а компоновщик прежней замолкает — и Page.captureScreenshot,
+   * который ждёт свежий кадр, висит до таймаута. Замерено: пул из четырёх
+   * вкладок в одном окне переживает один-два снимка и намертво встаёт на
+   * третьем, пул из четырёх окон снимает все кадры за ~300 мс каждый.
+   * Пиксели при этом не меняются: PNG побайтово те же, что у одной вкладки.
    */
   async attachWorkers({ expectedWidth, expectedHeight, workerCount }) {
     const { targetInfos } = await this.send("Target.getTargets");
@@ -177,7 +201,12 @@ class SceneBrowser {
     if (!page?.targetId) throw new Error("chrome did not expose a page target for scene capture");
     const targetIds = [page.targetId];
     for (let index = 1; index < workerCount; index += 1) {
-      const created = await this.send("Target.createTarget", { url: "about:blank" });
+      const created = await this.send("Target.createTarget", {
+        url: "about:blank",
+        newWindow: true,
+        width: expectedWidth,
+        height: expectedHeight
+      });
       if (typeof created?.targetId !== "string" || created.targetId.length === 0) {
         throw new Error("chrome refused to create a scene capture tab");
       }
@@ -189,8 +218,11 @@ class SceneBrowser {
         throw new Error("chrome refused to attach a CDP session to the scene page");
       }
       const sessionId = attached.sessionId;
-      this.#workers.push({ sessionId, busy: false });
+      this.#workers.push({ sessionId, targetId, busy: false, dead: "" });
       await this.send("Page.enable", {}, sessionId);
+      // Inspector нужен ради targetCrashed: без него упавшая вкладка молчит, и
+      // единственным симптомом остаётся таймаут скриншота.
+      await this.send("Inspector.enable", {}, sessionId);
       // --window-size задаёт окно ОС, а не вьюпорт: в headless=new вьюпорт ниже
       // на высоту служебной полосы, а созданные вкладки его вовсе не наследуют.
       // Однокадровый --screenshot снимал окно целиком, поэтому размер кадра
@@ -234,6 +266,7 @@ class SceneBrowser {
     if (!this.#sceneFile) throw new Error("No scene is open for capture");
     const worker = this.#workers[workerIndex];
     if (!worker) throw new RangeError(`Unknown scene capture worker ${workerIndex}`);
+    if (worker.dead) throw new Error(`Scene capture worker ${workerIndex} is unusable: ${worker.dead}`);
     // Одна вкладка — один кадр за раз: параллельные навигации в одном таргете
     // перепутали бы ожидание load между кадрами.
     if (worker.busy) throw new Error(`Scene capture worker ${workerIndex} is already capturing a frame`);
@@ -260,18 +293,57 @@ class SceneBrowser {
     await this.#evaluate(worker.sessionId, "document.fonts.ready.then(() => document.fonts.status)", {
       awaitPromise: true
     });
-    const { data } = await this.send(
-      "Page.captureScreenshot",
-      { format: "png", captureBeyondViewport: false },
-      worker.sessionId
-    );
+    const { data } = await this.#captureScreenshotOn(worker, safeFrameTimeMs);
     if (typeof data !== "string" || data.length === 0) {
       throw new Error("chrome returned an empty scene screenshot");
     }
     return Buffer.from(data, "base64");
   }
 
-  send(method, params = {}, sessionId) {
+  /**
+   * Скриншот с внятным диагнозом. Компоновщик не отдаёт кадр по двум причинам:
+   * вкладка мертва или вкладка жива, но не композитится. Молчаливый таймаут не
+   * различает их, поэтому на истечении бюджета вкладку опрашивают отдельно и
+   * ответ кладут в текст ошибки.
+   */
+  async #captureScreenshotOn(worker, frameTimeMs) {
+    try {
+      return await this.send(
+        "Page.captureScreenshot",
+        { format: "png", captureBeyondViewport: false },
+        worker.sessionId,
+        this.#captureTimeoutMs
+      );
+    } catch (error) {
+      if (error?.code !== TIMEOUT_CODE) throw error;
+      const scene = path.basename(this.#sceneFile);
+      throw new Error(
+        `chrome committed no frame for ${scene} at t=${frameTimeMs}ms within ${this.#captureTimeoutMs}ms: `
+        + `${await this.#describeWorker(worker)}`
+      );
+    }
+  }
+
+  async #describeWorker(worker) {
+    if (worker.dead) return worker.dead;
+    try {
+      const state = await this.#evaluate(
+        worker.sessionId,
+        "[document.visibilityState, document.readyState]",
+        { timeoutMs: LIVENESS_PROBE_TIMEOUT_MS }
+      );
+      const visibility = String(state?.[0] ?? "unknown");
+      const readiness = String(state?.[1] ?? "unknown");
+      const hint = visibility === "visible"
+        ? "renderer is alive, so the compositor is stalled rather than the tab"
+        : "the tab is not the active one in its window, so nothing is composited";
+      return `tab still answers (document ${readiness}, visibility ${visibility}) — ${hint}`;
+    } catch (probeError) {
+      return `tab stopped answering (${probeError.message})`;
+    }
+  }
+
+  send(method, params = {}, sessionId, timeoutMs = this.#commandTimeoutMs) {
     if (this.#failure) return Promise.reject(this.#failure);
     if (this.#closed) return Promise.reject(new Error("chrome CDP session is closed"));
     const id = this.#nextMessageId;
@@ -281,10 +353,11 @@ class SceneBrowser {
       const entry = {
         resolve,
         reject,
+        sessionId,
         timer: setTimeout(() => {
           this.#pending.delete(id);
-          reject(new Error(`chrome CDP command ${method} timed out after ${this.#commandTimeoutMs}ms`));
-        }, this.#commandTimeoutMs)
+          reject(timeoutError(`chrome CDP command ${method} timed out after ${timeoutMs}ms`));
+        }, timeoutMs)
       };
       this.#pending.set(id, entry);
       try {
@@ -333,11 +406,12 @@ class SceneBrowser {
     await this.#exitPromise;
   }
 
-  async #evaluate(sessionId, expression, { awaitPromise = false } = {}) {
+  async #evaluate(sessionId, expression, { awaitPromise = false, timeoutMs } = {}) {
     const result = await this.send(
       "Runtime.evaluate",
       { expression, returnByValue: true, awaitPromise },
-      sessionId
+      sessionId,
+      timeoutMs ?? this.#commandTimeoutMs
     );
     if (result?.exceptionDetails) {
       const text = result.exceptionDetails.exception?.description
@@ -428,6 +502,17 @@ class SceneBrowser {
       return;
     }
     if (typeof message.method !== "string") return;
+    if (message.method === "Inspector.targetCrashed") {
+      this.#killWorker(message.sessionId, "the renderer crashed (Inspector.targetCrashed)");
+      return;
+    }
+    if (message.method === "Target.detachedFromTarget") {
+      this.#killWorker(
+        message.params?.sessionId,
+        `chrome detached the tab (${message.params?.reason || "no reason given"})`
+      );
+      return;
+    }
     for (const waiter of this.#eventWaiters) {
       if (waiter.method !== message.method) continue;
       if (waiter.sessionId && message.sessionId !== waiter.sessionId) continue;
@@ -450,6 +535,31 @@ class SceneBrowser {
       }, timeoutMs);
       this.#eventWaiters.add(waiter);
     });
+  }
+
+  /**
+   * Вкладка умерла — всё, что её ждало, обязано упасть немедленно и с причиной.
+   * Браузер при этом остаётся жив: остальные вкладки продолжают снимать кадры,
+   * а вызывающий получает ошибку вместо тишины до таймаута.
+   */
+  #killWorker(sessionId, reason) {
+    if (typeof sessionId !== "string" || sessionId.length === 0) return;
+    const worker = this.#workers.find(entry => entry.sessionId === sessionId);
+    if (!worker || worker.dead) return;
+    worker.dead = reason;
+    const error = new Error(`chrome lost a scene capture tab: ${reason}`);
+    for (const [id, entry] of this.#pending) {
+      if (entry.sessionId !== sessionId) continue;
+      clearTimeout(entry.timer);
+      this.#pending.delete(id);
+      entry.reject(error);
+    }
+    for (const waiter of this.#eventWaiters) {
+      if (waiter.sessionId !== sessionId) continue;
+      clearTimeout(waiter.timer);
+      this.#eventWaiters.delete(waiter);
+      waiter.reject(error);
+    }
   }
 
   #fail(error) {
@@ -490,6 +600,14 @@ async function readPortFileLines(portFile) {
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Таймаут команды помечается кодом: вызывающий отличает «протокол молчит» от
+// «протокол ответил ошибкой» и добавляет к первому свой диагноз.
+function timeoutError(message) {
+  const error = new Error(message);
+  error.code = TIMEOUT_CODE;
+  return error;
 }
 
 // Таймер обязан гаситься: иначе висящий setTimeout держит event loop открытым

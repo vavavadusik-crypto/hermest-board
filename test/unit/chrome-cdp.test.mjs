@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -158,6 +159,154 @@ test("scene browser builds a tab pool and routes frames to the requested worker"
   }
 });
 
+test("every extra capture tab gets its own window so its compositor keeps committing frames", async () => {
+  const profileDir = await mkdtemp(path.join(os.tmpdir(), "cdp-window-"));
+  try {
+    const harness = createHarness({ profileDir, width: 1920, height: 1080 });
+    const browser = await openSceneBrowser({
+      profileDir,
+      width: 1920,
+      height: 1080,
+      workerCount: 4,
+      spawnImpl: harness.spawnImpl,
+      webSocketImpl: harness.webSocketImpl
+    });
+    try {
+      // Внутри одного окна кадры коммитит только активная вкладка: созданная
+      // последней глушит все предыдущие, и скриншот с них висит до таймаута.
+      assert.deepEqual(
+        harness.socket.sent.filter(m => m.method === "Target.createTarget").map(m => m.params),
+        Array.from({ length: 3 }, () => ({
+          url: "about:blank",
+          newWindow: true,
+          width: 1920,
+          height: 1080
+        }))
+      );
+    } finally {
+      await browser.close();
+    }
+  } finally {
+    await rm(profileDir, { recursive: true, force: true });
+  }
+});
+
+test("a stale DevToolsActivePort from a killed run is removed before chrome starts", async () => {
+  const profileDir = await mkdtemp(path.join(os.tmpdir(), "cdp-staleport-"));
+  try {
+    // Chrome удаляет файл только при штатном выходе; после kill -9 остаётся
+    // мёртвый порт, и следующий запуск стучится в никуда.
+    await writeFile(path.join(profileDir, "DevToolsActivePort"), "1\n/devtools/browser/dead\n", "utf8");
+    const harness = createHarness({ profileDir, width: 1920, height: 1080 });
+    const browser = await openSceneBrowser({
+      profileDir,
+      width: 1920,
+      height: 1080,
+      workerCount: 1,
+      spawnImpl: harness.spawnImpl,
+      webSocketImpl: harness.webSocketImpl
+    });
+    try {
+      assert.equal(harness.portFileExistedAtSpawn, false, "the stale port file must be gone before the spawn");
+      assert.match(harness.socket.url, /^ws:\/\/127\.0\.0\.1:45551\/devtools\/browser\//);
+    } finally {
+      await browser.close();
+    }
+  } finally {
+    await rm(profileDir, { recursive: true, force: true });
+  }
+});
+
+test("a screenshot that never arrives fails with a diagnosis instead of a bare timeout", async () => {
+  const profileDir = await mkdtemp(path.join(os.tmpdir(), "cdp-noframe-"));
+  try {
+    const harness = createHarness({
+      profileDir,
+      width: 1920,
+      height: 1080,
+      stallScreenshot: true,
+      visibilityState: "hidden"
+    });
+    const browser = await openSceneBrowser({
+      profileDir,
+      width: 1920,
+      height: 1080,
+      workerCount: 1,
+      captureTimeoutMs: 60,
+      spawnImpl: harness.spawnImpl,
+      webSocketImpl: harness.webSocketImpl
+    });
+    try {
+      await browser.openScene({ htmlFile: "/tmp/run/scene-007.html" });
+      await assert.rejects(
+        browser.captureFrame(1234),
+        /chrome committed no frame for scene-007\.html at t=1234ms within 60ms: tab still answers \(document complete, visibility hidden\) — the tab is not the active one in its window/
+      );
+    } finally {
+      await browser.close();
+    }
+  } finally {
+    await rm(profileDir, { recursive: true, force: true });
+  }
+});
+
+test("a screenshot timeout on an unresponsive tab says the tab stopped answering", async () => {
+  const profileDir = await mkdtemp(path.join(os.tmpdir(), "cdp-mute-"));
+  try {
+    const harness = createHarness({
+      profileDir,
+      width: 1920,
+      height: 1080,
+      stallScreenshot: true,
+      stallProbe: true
+    });
+    const browser = await openSceneBrowser({
+      profileDir,
+      width: 1920,
+      height: 1080,
+      workerCount: 1,
+      captureTimeoutMs: 40,
+      spawnImpl: harness.spawnImpl,
+      webSocketImpl: harness.webSocketImpl
+    });
+    try {
+      await browser.openScene({ htmlFile: "/tmp/run/scene-008.html" });
+      await assert.rejects(browser.captureFrame(0), /tab stopped answering \(chrome CDP command Runtime\.evaluate timed out/);
+    } finally {
+      await browser.close();
+    }
+  } finally {
+    await rm(profileDir, { recursive: true, force: true });
+  }
+});
+
+test("a crashed capture tab fails the frame at once and stays unusable", async () => {
+  const profileDir = await mkdtemp(path.join(os.tmpdir(), "cdp-tabcrash-"));
+  try {
+    const harness = createHarness({ profileDir, width: 1920, height: 1080, crashOnScreenshot: true });
+    const browser = await openSceneBrowser({
+      profileDir,
+      width: 1920,
+      height: 1080,
+      workerCount: 1,
+      // Минута ожидания недопустима: падение обязано прийти по событию, а не по
+      // истечении бюджета — тест поймает регрессию именно этим большим числом.
+      captureTimeoutMs: 600000,
+      spawnImpl: harness.spawnImpl,
+      webSocketImpl: harness.webSocketImpl
+    });
+    try {
+      await browser.openScene({ htmlFile: "/tmp/run/scene-009.html" });
+      await assert.rejects(browser.captureFrame(0), /chrome lost a scene capture tab: the renderer crashed/);
+      await assert.rejects(browser.captureFrame(33), /worker 0 is unusable: the renderer crashed/);
+    } finally {
+      await browser.close();
+    }
+  } finally {
+    await rm(profileDir, { recursive: true, force: true });
+  }
+});
+
 test("scene browser refuses to capture before a scene is opened", async () => {
   const profileDir = await mkdtemp(path.join(os.tmpdir(), "cdp-noscene-"));
   try {
@@ -233,14 +382,19 @@ test("scene browser rejects an unusable DevTools endpoint", async () => {
   const profileDir = await mkdtemp(path.join(os.tmpdir(), "cdp-badport-"));
   try {
     const child = createFakeChild();
-    await writeFile(path.join(profileDir, "DevToolsActivePort"), "0\n/devtools/browser/../../etc\n", "utf8");
+    // Файл обязан появиться ПОСЛЕ спавна: всё, что лежало в профиле до запуска,
+    // сносится как мусор от предыдущего убитого прогона.
+    const spawnImpl = () => {
+      writeFile(path.join(profileDir, "DevToolsActivePort"), "0\n/devtools/browser/../../etc\n", "utf8");
+      return child;
+    };
     await assert.rejects(
       openSceneBrowser({
         profileDir,
         width: 1920,
         height: 1080,
         launchTimeoutMs: 500,
-        spawnImpl: () => child,
+        spawnImpl,
         webSocketImpl: class NeverUsed {}
       }),
       /unusable DevTools endpoint/
@@ -401,12 +555,17 @@ function createHarness({
   failFonts = false,
   navigationError = "",
   ignoreBrowserClose = false,
+  stallScreenshot = false,
+  crashOnScreenshot = false,
+  stallProbe = false,
+  visibilityState = "hidden",
   port = 45551
 }) {
   const child = createFakeChild();
-  const harness = { child, spawned: [], socket: null };
+  const harness = { child, spawned: [], socket: null, portFileExistedAtSpawn: null };
   harness.spawnImpl = (tool, argv) => {
     harness.spawned.push({ tool, argv });
+    harness.portFileExistedAtSpawn = existsSync(path.join(profileDir, "DevToolsActivePort"));
     writeFile(path.join(profileDir, "DevToolsActivePort"), `${port}\n${BROWSER_TARGET_PATH}\n`, "utf8");
     return child;
   };
@@ -446,6 +605,10 @@ function createHarness({
         reportedViewport,
         failFonts,
         navigationError,
+        stallScreenshot,
+        crashOnScreenshot,
+        stallProbe,
+        visibilityState,
         nextTargetId: () => {
           this.nextTargetId += 1;
           return `T${this.nextTargetId}`;
@@ -464,7 +627,18 @@ function createHarness({
   return harness;
 }
 
-function replyTo(message, { width, height, reportedViewport, failFonts, navigationError, nextTargetId }) {
+function replyTo(message, {
+  width,
+  height,
+  reportedViewport,
+  failFonts,
+  navigationError,
+  stallScreenshot,
+  crashOnScreenshot,
+  stallProbe,
+  visibilityState,
+  nextTargetId
+}) {
   const { id, method, params, sessionId } = message;
   const ok = result => [{ id, result }];
   if (method === "Target.getTargets") {
@@ -474,6 +648,7 @@ function replyTo(message, { width, height, reportedViewport, failFonts, navigati
   if (method === "Target.attachToTarget") return ok({ sessionId: `S-${params.targetId}` });
   if (
     method === "Page.enable"
+    || method === "Inspector.enable"
     || method === "Emulation.setDeviceMetricsOverride"
     || method === "Emulation.setDefaultBackgroundColorOverride"
   ) {
@@ -486,10 +661,19 @@ function replyTo(message, { width, height, reportedViewport, failFonts, navigati
       { method: "Page.loadEventFired", sessionId, params: { timestamp: 1 } }
     ];
   }
-  if (method === "Page.captureScreenshot") return ok({ data: PNG_BASE64 });
+  if (method === "Page.captureScreenshot") {
+    // Компоновщик, который не отдаёт кадр: ответа на команду нет вовсе — ровно
+    // так это и выглядит со стороны клиента на зависшей вкладке.
+    if (crashOnScreenshot) return [{ method: "Inspector.targetCrashed", sessionId, params: {} }];
+    if (stallScreenshot) return [];
+    return ok({ data: PNG_BASE64 });
+  }
   if (method === "Runtime.evaluate") {
     if (params.expression === "[innerWidth, innerHeight]") {
       return ok({ result: { value: reportedViewport ?? [width, height] } });
+    }
+    if (params.expression === "[document.visibilityState, document.readyState]") {
+      return stallProbe ? [] : ok({ result: { value: [visibilityState, "complete"] } });
     }
     if (failFonts) {
       return ok({

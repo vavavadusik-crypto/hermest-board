@@ -5,14 +5,16 @@ import path from "node:path";
 
 import { openSceneBrowser } from "./chrome-cdp.js";
 import { assertSafeGeneratedPath } from "./ffmpeg-args.js";
+import { planSceneArchetypes } from "./scene-content.js";
 import { buildSceneMarkup } from "./scene-markup.js";
 
 const PRIVATE_FILE_MODE = 0o600;
 const MAX_SCENES = 64;
-// Окно build-in анимации сцены: дальше секвенция замирает на финальном кадре,
-// а хвост сцены тянет ffmpeg (tpad clone + camera push-in).
-const SCENE_BUILD_SECONDS = 2.8;
-const MAX_BUILD_FRAMES = 240;
+// Сцена снимается целиком. Раньше снимались первые 2.8 с, а хвост клонировался
+// (`tpad`) — внутреннее движение умирало на середине сцены, и ambient-слои
+// архетипов не имели смысла. Кап держит цену: 900 кадров — это 30 с при 30fps,
+// дальше секвенция снова замирает на последнем снятом кадре.
+const MAX_BUILD_FRAMES = 900;
 
 export async function describeSceneComposerAvailability({ env = process.env, accessImpl = access } = {}) {
   const binaryPath = resolveChromeBinaryPathFromEnv(env);
@@ -81,6 +83,9 @@ export async function composeSceneFrames({
   const frameLimit = resolveBuildFrameLimit(env, buildFrameLimit);
   const profileDir = path.join(safeRunDir, "chrome-profile");
   const sceneTitles = scenes.map(scene => String(scene.title || ""));
+  // Архетипы выбираются по всей раскадровке сразу: только так соседние сцены
+  // гарантированно не повторяют композицию друг друга.
+  const archetypePlan = planSceneArchetypes(scenes);
   const frames = [];
 
   const browser = await browserFactory({ profileDir, width, height, signal });
@@ -101,13 +106,16 @@ export async function composeSceneFrames({
         width,
         height,
         seed,
+        safeZones: recipe?.safeZones,
+        archetype: archetypePlan[sceneIndex]?.archetype,
+        role: archetypePlan[sceneIndex]?.role,
         mode: hasMovingBackground ? "overlay" : "opaque"
       });
       await writeFile(markupFile, markup, { encoding: "utf8", flag: "wx", mode: PRIVATE_FILE_MODE });
 
       const sceneSeconds = Number(scene.durationMs) / 1000;
       let frameCount = Math.min(
-        Math.round(SCENE_BUILD_SECONDS * fps),
+        MAX_BUILD_FRAMES,
         Math.max(Math.round(sceneSeconds * fps), 1)
       );
       if (frameLimit) frameCount = Math.min(frameCount, frameLimit);

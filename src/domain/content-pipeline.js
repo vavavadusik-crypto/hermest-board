@@ -4,6 +4,11 @@ const MIN_RECONCILED_SCENE_DURATION_MS = 250;
 const DEFAULT_SCENE_PADDING_MS = 400;
 const MAX_CARDS = 200;
 const MAX_CARD_TEXT_CHARS = 20000;
+// Структурная подсказка карточки для композера кадра. Домен проверяет только
+// форму и размер: какие имена архетипов существуют, знает слой отрисовки, и
+// незнакомое имя там же тихо откатывается на эвристику.
+const MAX_SCENE_DATA_CHARS = 4000;
+const SCENE_TYPE_PATTERN = /^[a-z][a-z0-9-]{1,39}$/u;
 const MAX_TOTAL_NARRATION_CHARS = 100000;
 const MAX_STORYBOARD_DURATION_MS = 2 * 60 * 60 * 1000;
 const SUPPORTED_BOARD_SCHEMA_VERSIONS = new Set([1, 4]);
@@ -37,6 +42,10 @@ export function buildStoryboard(board, options = {}) {
       order: sortedIndex + 1,
       title: card.title,
       narration,
+      // Необязательные поля: карточка без них даёт ровно ту же сцену, что и до
+      // появления архетипов.
+      ...(card.sceneType ? { sceneType: card.sceneType } : {}),
+      ...(card.sceneData ? { sceneData: card.sceneData } : {}),
       durationMs: estimateDurationMs(narration, wordsPerMinute, minSceneDurationMs),
       visual: {
         assetRef: cleanText(card.assetRef) || null,
@@ -109,9 +118,38 @@ function normalizeCard(card, index) {
     id: safeId(card.id, index),
     title: title || `Сцена ${index + 1}`,
     text,
+    // Нормализованные значения затирают сырые из спреда: в сцену не должно
+    // попасть ничего, что не прошло проверку формы и размера.
+    sceneType: normalizeSceneType(card.sceneType),
+    sceneData: normalizeSceneData(card.sceneData),
     x: finiteNumber(card.x),
     y: finiteNumber(card.y)
   };
+}
+
+function normalizeSceneType(value) {
+  if (typeof value !== "string") return "";
+  const type = value.trim().toLowerCase().replaceAll("_", "-");
+  return SCENE_TYPE_PATTERN.test(type) ? type : "";
+}
+
+/**
+ * Структура кадра, заданная автором карточки. Домен не знает её словаря, но
+ * обязан ограничить объём: раскадровка уходит в хранилище и в манифест.
+ */
+function normalizeSceneData(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  let serialized;
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    throw new TypeError("Card sceneData must be serialisable JSON");
+  }
+  if (typeof serialized !== "string") return null;
+  if (serialized.length > MAX_SCENE_DATA_CHARS) {
+    throw new RangeError(`Card sceneData limit is ${MAX_SCENE_DATA_CHARS} characters`);
+  }
+  return JSON.parse(serialized);
 }
 
 function compareCards(left, right) {
