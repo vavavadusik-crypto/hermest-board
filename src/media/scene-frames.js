@@ -12,9 +12,9 @@ const PRIVATE_FILE_MODE = 0o600;
 const MAX_SCENES = 64;
 // Сцена снимается целиком. Раньше снимались первые 2.8 с, а хвост клонировался
 // (`tpad`) — внутреннее движение умирало на середине сцены, и ambient-слои
-// архетипов не имели смысла. Кап держит цену: 900 кадров — это 30 с при 30fps,
+// архетипов не имели смысла. Кап держит цену: 1800 кадров — это 30 с при 60fps,
 // дальше секвенция снова замирает на последнем снятом кадре.
-const MAX_BUILD_FRAMES = 900;
+const MAX_BUILD_FRAMES = 1800;
 
 export async function describeSceneComposerAvailability({ env = process.env, accessImpl = access } = {}) {
   const binaryPath = resolveChromeBinaryPathFromEnv(env);

@@ -403,7 +403,7 @@ test("manifest rejects composed render drift", () => {
   }]), /schema mismatch/);
 });
 
-test("animated frame sequences flow through tpad hold and camera push-in", () => {
+test("animated frame sequences flow through tpad hold, and ffmpeg no longer moves the camera", () => {
   const args = buildArgs({
     sceneFrames: [
       {
@@ -426,8 +426,10 @@ test("animated frame sequences flow through tpad hold and camera push-in", () =>
   assert.ok(args.includes("/tmp/run/scene-001-f%04d.png"));
   assert.ok(args.includes("-start_number"));
   const filterComplex = args[args.indexOf("-filter_complex") + 1];
-  // plain-сцена: hold последнего кадра + мягкий push-in камеры
-  assert.match(filterComplex, /\[0:v\]fps=30,tpad=stop_mode=clone:stop_duration=1\.400,trim=duration=4\.200,zoompan=z='1\+0\.040\*on\/125':x='\(iw-iw\/zoom\)\/2':y='\(ih-ih\/zoom\)\/2':d=1:s=1920x1080:fps=30,setsar=1,format=yuv420p\[v0\]/);
+  // plain-сцена: hold последнего кадра и всё. Камера теперь рисуется в
+  // браузере в исходном разрешении, а zoompan здесь только мылил мелкий текст.
+  assert.match(filterComplex, /\[0:v\]fps=30,tpad=stop_mode=clone:stop_duration=1\.400,trim=duration=4\.200,setsar=1,format=yuv420p\[v0\]/);
+  assert.ok(!filterComplex.includes("zoompan"), "камера не должна возвращаться в ffmpeg для секвенций");
   // b-roll сцена: оверлейная секвенция с hold, фон как раньше
   assert.match(filterComplex, /\[2:v\]fps=30,tpad=stop_mode=clone:stop_duration=2\.300,trim=duration=5\.100,setsar=1\[f1\]/);
   assert.match(filterComplex, /\[b1\]\[f1\]overlay=0:0,format=yuv420p\[v1\]/);

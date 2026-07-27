@@ -100,7 +100,9 @@ function recipe({
     label,
     width,
     height,
-    fps: 30,
+    // 60 кадров — не украшение. Медленный наезд камеры и параллакс фона на 30
+    // кадрах идут ступенями, и именно это читается как «мёртвая» анимация.
+    fps: 60,
     pixelFormat: "yuv420p",
     videoCodec: "libx264",
     audioCodec: "aac",

@@ -6,6 +6,8 @@ import {
   buildFliteAudioArgs,
   buildNarrationCanonicalizeArgs,
   buildVideoRenderArgs,
+  audioEncoderArgs,
+  videoEncoderArgs,
   VOICE_POLISH_FILTER
 } from "../../src/media/ffmpeg-args.js";
 
@@ -219,4 +221,36 @@ test("ffmpeg args reject filter injection and unsupported voices", () => {
     }),
     /Unsupported flite voice/
   );
+});
+
+// Профиль выдачи — это обещание продукта, а не деталь реализации. Он записан
+// здесь дословно, чтобы «оптимизация» кодека не проехала мимо ревью молча.
+test("the delivery profile is pinned: 1080p60, capped CRF 18, bt709, AAC 192k", () => {
+  assert.deepEqual(
+    videoEncoderArgs({ videoCodec: "libx264", pixelFormat: "yuv420p", fps: 60 }),
+    [
+      "-c:v", "libx264",
+      "-preset", "medium",
+      "-crf", "18",
+      "-maxrate", "16M",
+      "-bufsize", "32M",
+      "-pix_fmt", "yuv420p",
+      "-colorspace", "bt709",
+      "-color_primaries", "bt709",
+      "-color_trc", "bt709",
+      "-r", "60",
+      "-g", "120"
+    ]
+  );
+  assert.deepEqual(
+    audioEncoderArgs({ audioCodec: "aac", sampleRate: 48000, audioChannels: 2 }),
+    ["-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2"]
+  );
+});
+
+test("every platform recipe delivers 60 frames per second", async () => {
+  const { listPlatformRecipes } = await import("../../src/domain/platform-recipes.js");
+  for (const recipe of listPlatformRecipes()) {
+    assert.equal(recipe.fps, 60, `рецепт ${recipe.id} отдаёт ${recipe.fps} кадров`);
+  }
 });

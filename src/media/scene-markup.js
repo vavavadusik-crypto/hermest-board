@@ -3,6 +3,7 @@
 // (scene-archetypes.js) — шелл только выбирает архетип и вклеивает его куски.
 
 import { renderSceneArchetype } from "./scene-archetypes.js";
+import { buildCameraCss } from "./scene-motion.js";
 import { deriveSceneContent, isSceneArchetype, pickSceneArchetype } from "./scene-content.js";
 import {
   THEME,
@@ -114,6 +115,15 @@ export function buildSceneMarkup({
     ? Math.round(safeHeight / (layout.isVertical ? 22 : 16))
     : Math.round(safeHeight / (layout.isVertical ? 16 : 11));
 
+  // Камера складывается поверх архетипа: слои сцены и фона идут с разной
+  // скоростью всю сцену, а не только в окне въезда.
+  const cameraCss = buildCameraCss({
+    sceneIndex: index,
+    role: resolvedRole,
+    durationMs: scene.durationMs,
+    seed: numericSeed
+  });
+
   const built = renderSceneArchetype({
     archetype: resolvedArchetype,
     role: resolvedRole,
@@ -204,7 +214,7 @@ export function buildSceneMarkup({
   /* Слои фона дрейфуют в разные стороны — параллакс живёт всю сцену, а не
      только окно build-in. */
   .bd-stars { animation: amb-sway 22s ease-in-out 0s infinite; }
-  .bd-grid { animation: amb-sway 30s ease-in-out -8s infinite reverse; }${ambientCss(layout)}${built.css}${animated ? "" : "\n  * { animation: none !important; }"}
+  .bd-grid { animation: amb-sway 30s ease-in-out -8s infinite reverse; }${ambientCss(layout)}${built.css}${cameraCss}${animated ? "" : "\n  * { animation: none !important; }"}
 </style>
 </head>
 <body>
@@ -212,8 +222,10 @@ ${isOverlay ? '  <div class="headline-scrim"></div>' : `  <svg class="backdrop" 
     <g class="bd-stars">${starField({ seed: numericSeed + index, width: safeWidth, height: safeHeight })}</g>
     <g class="bd-grid">${gridFloor({ width: safeWidth, height: safeHeight })}</g>
   </svg>
-  <div class="glow-a"></div>
-  <div class="glow-b"></div>`}
+  <div class="parallax-near">
+    <div class="glow-a"></div>
+    <div class="glow-b"></div>
+  </div>`}
   <div class="chrome-bar">
     <div class="brand">
       <div class="brand-mark">H</div>

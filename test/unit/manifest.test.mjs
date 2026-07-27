@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { VOICE_POLISH_FILTER } from "../../src/media/ffmpeg-args.js";
+import { VOICE_POLISH_FILTER, audioEncoderArgs, videoEncoderArgs } from "../../src/media/ffmpeg-args.js";
 import {
   buildRenderManifest,
   hashJson
@@ -50,9 +50,8 @@ const validRenderCommand = {
     "-i", "/tmp/private-run/narration.wav",
     "-map", "0:v:0", "-map", "1:a:0",
     "-vf", "subtitles=filename=/tmp/private-run/narration.srt:force_style='FontName=DejaVu Sans,Alignment=2,MarginV=80'",
-    "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
-    "-pix_fmt", "yuv420p", "-r", "30", "-c:a", "aac",
-    "-b:a", "192k", "-ar", "48000", "-ac", "2",
+    ...videoEncoderArgs({ videoCodec: "libx264", pixelFormat: "yuv420p", fps: 60 }),
+    ...audioEncoderArgs({ audioCodec: "aac", sampleRate: "48000", audioChannels: "2" }),
     "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-shortest",
     "-movflags", "+faststart", "/tmp/private-run/youtube.partial.mp4"
   ]

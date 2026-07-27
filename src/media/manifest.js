@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 
-import { VOICE_POLISH_FILTER } from "./ffmpeg-args.js";
+import { VOICE_POLISH_FILTER, audioEncoderArgs, videoEncoderArgs } from "./ffmpeg-args.js";
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const TOOL_TEXT_KEYS = ["ffmpeg", "ffprobe", "renderer", "sceneComposer", "chrome"];
@@ -367,6 +367,30 @@ function validateNarrationCanonicalizeArgv(argv) {
   cursor.finish();
 }
 
+// Профиль кодирования проверяется по тому же построителю, которым он и собран,
+// поэтому манифест не может разъехаться с реальной командой. Частота кадров —
+// не произвольное число из argv, а один из объявленных режимов выдачи.
+const ALLOWED_OUTPUT_FPS = Object.freeze(["60", "30"]);
+
+function expectEncoderProfile(cursor, { audioChannels }) {
+  const fps = ALLOWED_OUTPUT_FPS.find(candidate => matchesEncoderProfile(cursor, candidate, audioChannels));
+  if (!fps) throw new TypeError("invalid encoder profile");
+  cursor.expect(...encoderProfileArgs(fps, audioChannels));
+}
+
+function matchesEncoderProfile(cursor, fps, audioChannels) {
+  const expected = encoderProfileArgs(fps, audioChannels);
+  const start = cursor.position();
+  return expected.every((value, index) => cursor.at(start + index) === value);
+}
+
+function encoderProfileArgs(fps, audioChannels) {
+  return [
+    ...videoEncoderArgs({ videoCodec: "libx264", pixelFormat: "yuv420p", fps: Number(fps) }),
+    ...audioEncoderArgs({ audioCodec: "aac", sampleRate: "48000", audioChannels })
+  ];
+}
+
 function validateRenderArgv(argv) {
   const cursor = argvCursor(argv);
   cursor.expect("-hide_banner", "-loglevel", "error", "-n", "-f", "lavfi", "-i");
@@ -384,11 +408,8 @@ function validateRenderArgv(argv) {
   ) {
     throw new TypeError("invalid video filter");
   }
-  cursor.expect(
-    "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
-    "-pix_fmt", "yuv420p", "-r", "30", "-c:a", "aac",
-    "-b:a", "192k", "-ar", "48000", "-ac", "2", "-af"
-  );
+  expectEncoderProfile(cursor, { audioChannels: "2" });
+  cursor.expect("-af");
   if (!/^loudnorm=I=-?\d+(?:\.\d+)?:TP=-1\.5:LRA=11$/.test(cursor.take())) {
     throw new TypeError("invalid audio filter");
   }
@@ -476,11 +497,7 @@ function validateComposedRenderArgv(argv) {
   } else if (!/^\d{1,2}:a:0$/.test(audioMap)) {
     throw new TypeError("invalid audio map");
   }
-  cursor.expect(
-    "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
-    "-pix_fmt", "yuv420p", "-r", "30", "-c:a", "aac",
-    "-b:a", "192k", "-ar", "48000", "-ac", "2"
-  );
+  expectEncoderProfile(cursor, { audioChannels: "2" });
   if (!hasMusic) {
     cursor.expect("-af");
     if (!/^loudnorm=I=-?\d+(?:\.\d+)?:TP=-1\.5:LRA=11$/.test(cursor.take())) {
@@ -537,11 +554,9 @@ const FILTER_SEGMENT_PATTERNS = Object.freeze([
     ":d=1:s=\\d+x\\d+:fps=\\d+," +
     "eq=brightness=-?\\d+(?:\\.\\d+)?:saturation=\\d+(?:\\.\\d+)?,setsar=1\\[b\\d+\\]$"
   ),
-  new RegExp(
-    "^\\[\\d+:v\\]fps=\\d+,tpad=stop_mode=clone:stop_duration=\\d+(?:\\.\\d{1,3})?,trim=duration=\\d+(?:\\.\\d{1,3})?," +
-    "zoompan=z='1\\+0\\.040\\*on\\/\\d+':x='\\(iw-iw\\/zoom\\)\\/2':y='\\(ih-ih\\/zoom\\)\\/2':d=1:s=\\d+x\\d+:fps=\\d+," +
-    "setsar=1,format=yuv420p\\[v\\d+\\]$"
-  ),
+  // Секвенция сцены: удержание последнего кадра и всё. Камера переехала в
+  // разметку, поэтому zoompan здесь больше не разрешён.
+  /^\[\d+:v\]fps=\d+,tpad=stop_mode=clone:stop_duration=\d+(?:\.\d{1,3})?,trim=duration=\d+(?:\.\d{1,3})?,setsar=1,format=yuv420p\[v\d+\]$/,
   /^\[\d+:v\]fps=\d+,tpad=stop_mode=clone:stop_duration=\d+(?:\.\d{1,3})?,trim=duration=\d+(?:\.\d{1,3})?,setsar=1\[f\d+\]$/
 ]);
 const SCENE_SEGMENT_PATTERN_INDICES = Object.freeze([0, 1, 2, 3, 6, 7, 8]);
@@ -602,6 +617,11 @@ function argvCursor(argv) {
     },
     position() {
       return index;
+    },
+    // Заглянуть вперёд, не сдвигая курсор: нужно, чтобы выбрать один из
+    // объявленных профилей выдачи до того, как проверять его целиком.
+    at(offset) {
+      return argv[offset];
     }
   };
 }

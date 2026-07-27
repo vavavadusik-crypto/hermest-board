@@ -4,6 +4,48 @@ import { subtitleForceStyle } from "./subtitle-band.js";
 
 const FLITE_VOICES = new Set(["slt", "awb", "kal", "kal16", "rms"]);
 const VIDEO_CODECS = new Set(["libx264"]);
+
+// Профиль выдачи. Раньше здесь стояли veryfast/crf 21, и на градиентах и мелком
+// тексте поток проседал до величин, на которых интерфейс превращается в кашу.
+// crf 18 с потолком битрейта держит качество там, где кадр сложный, и не платит
+// за простой кадр. Метаданные цвета проставлены явно: без них плеер угадывает
+// и картинка едет по тону.
+//
+// Это единственное место, где живёт профиль: манифест проверяет argv по этому
+// же списку, поэтому разъехаться они не могут.
+const VIDEO_QUALITY_ARGS = Object.freeze([
+  "-preset", "medium",
+  "-crf", "18",
+  "-maxrate", "16M",
+  "-bufsize", "32M"
+]);
+const COLOR_METADATA_ARGS = Object.freeze([
+  "-colorspace", "bt709",
+  "-color_primaries", "bt709",
+  "-color_trc", "bt709"
+]);
+const AUDIO_BITRATE = "192k";
+
+export function videoEncoderArgs({ videoCodec, pixelFormat, fps }) {
+  return [
+    "-c:v", videoCodec,
+    ...VIDEO_QUALITY_ARGS,
+    "-pix_fmt", pixelFormat,
+    ...COLOR_METADATA_ARGS,
+    "-r", String(fps),
+    // Ключевой кадр раз в две секунды: перемотка попадает туда, куда просили.
+    "-g", String(fps * 2)
+  ];
+}
+
+export function audioEncoderArgs({ audioCodec, sampleRate, audioChannels }) {
+  return [
+    "-c:a", audioCodec,
+    "-b:a", AUDIO_BITRATE,
+    "-ar", String(sampleRate),
+    "-ac", String(audioChannels)
+  ];
+}
 const AUDIO_CODECS = new Set(["aac"]);
 const MUSIC_BED_DEFAULT_GAIN_DB = -13;
 
@@ -162,15 +204,8 @@ export function buildVideoRenderArgs({
     "-i", safeAudioFile,
     "-map", "0:v:0", "-map", "1:a:0",
     "-vf", videoFilter,
-    "-c:v", recipe.videoCodec,
-    "-preset", "veryfast",
-    "-crf", "21",
-    "-pix_fmt", recipe.pixelFormat,
-    "-r", String(fps),
-    "-c:a", recipe.audioCodec,
-    "-b:a", "192k",
-    "-ar", String(sampleRate),
-    "-ac", String(audioChannels),
+    ...videoEncoderArgs({ videoCodec: recipe.videoCodec, pixelFormat: recipe.pixelFormat, fps }),
+    ...audioEncoderArgs({ audioCodec: recipe.audioCodec, sampleRate, audioChannels }),
     "-af", `loudnorm=I=${loudnessTarget}:TP=-1.5:LRA=11`,
     "-shortest",
     "-movflags", "+faststart",
@@ -180,7 +215,6 @@ export function buildVideoRenderArgs({
 
 const KEN_BURNS_ZOOM_SPAN = "0.080";
 const KEN_BURNS_MAX_ZOOM = "1.080";
-const CAMERA_PUSH_IN_SPAN = "0.040";
 
 export function assertSafeSequencePattern(value) {
   const candidate = typeof value === "string" ? value : "";
@@ -356,9 +390,10 @@ export function buildComposedVideoRenderArgs({
         durationArg,
         fps
       });
-      const lastFrame = Math.max(Math.round(frameDuration * fps) - 1, 1);
+      // Камера живёт в разметке сцены и рисуется в исходном разрешении.
+      // Прежний zoompan наезжал на уже готовый кадр и мылил мелкий текст.
       filterSegments.push(
-        `[${inputIndex}:v]${holdChain},zoompan=z='1+${CAMERA_PUSH_IN_SPAN}*on/${lastFrame}':x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2':d=1:s=${width}x${height}:fps=${fps},setsar=1,format=yuv420p[v${index}]`
+        `[${inputIndex}:v]${holdChain},setsar=1,format=yuv420p[v${index}]`
       );
       inputIndex += 1;
     } else {
@@ -409,15 +444,8 @@ export function buildComposedVideoRenderArgs({
     "-filter_complex", filterComplex,
     "-map", "[vout]",
     "-map", audioMap,
-    "-c:v", recipe.videoCodec,
-    "-preset", "veryfast",
-    "-crf", "21",
-    "-pix_fmt", recipe.pixelFormat,
-    "-r", String(fps),
-    "-c:a", recipe.audioCodec,
-    "-b:a", "192k",
-    "-ar", String(sampleRate),
-    "-ac", String(audioChannels),
+    ...videoEncoderArgs({ videoCodec: recipe.videoCodec, pixelFormat: recipe.pixelFormat, fps }),
+    ...audioEncoderArgs({ audioCodec: recipe.audioCodec, sampleRate, audioChannels }),
     ...(audioMap === "[aout]" ? [] : ["-af", `loudnorm=I=${loudnessTarget}:TP=-1.5:LRA=11`]),
     "-shortest",
     "-movflags", "+faststart",
