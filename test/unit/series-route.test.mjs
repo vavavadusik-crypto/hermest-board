@@ -35,6 +35,14 @@ async function startServer(t, { planSeries } = {}) {
   return `http://127.0.0.1:${server.address().port}`;
 }
 
+async function startServerWith(t, overrides) {
+  const manager = createLocalMediaJobManager({ executeRender: async () => ({}) });
+  const server = createServer(createLocalMediaRequestHandler({ manager, ...overrides }));
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  return `http://127.0.0.1:${server.address().port}`;
+}
+
 function postSeries(origin, body) {
   return fetch(`${origin}/api/local-media/series`, {
     method: "POST",
@@ -118,4 +126,56 @@ test("a zero or fractional episode number is refused", async t => {
     assert.equal(response.status, 400, `номер ${episodeNumber} прошёл`);
     assert.equal((await response.json()).error, "draft_episode_number_invalid");
   }
+});
+
+const BOARD = {
+  schemaVersion: 1,
+  title: "Подписки",
+  brief: { topic: "тема", language: "ru" },
+  cards: [
+    { id: "scene-01", x: 80, y: 80, title: "Проблема", text: "Счёт растёт." },
+    { id: "scene-02", x: 500, y: 80, title: "Решение", text: "Свести в список." }
+  ]
+};
+
+function postCommand(origin, body, headers = { "content-type": "application/json", "x-hermest-local-media": "1" }) {
+  return fetch(`${origin}/api/local-media/board-command`, { method: "POST", headers, body: JSON.stringify(body) });
+}
+
+test("a board edit request reaches the service and returns what changed", async t => {
+  const seen = [];
+  const origin = await startServerWith(t, {
+    runBoardCommand: async params => {
+      seen.push(params);
+      const { applyBoardOperations } = await import("../../src/domain/board-commands.js");
+      return applyBoardOperations({
+        board: params.board,
+        operations: [{ op: "remove_card", id: "scene-02" }],
+        summary: "Убрал вторую"
+      });
+    }
+  });
+  const response = await postCommand(origin, { board: BOARD, request: "убери вторую карточку" });
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.board.cards.length, 1);
+  assert.deepEqual(payload.applied, ["remove_card"]);
+  assert.equal(seen[0].request, "убери вторую карточку");
+});
+
+test("a board edit without a board or without a request is refused", async t => {
+  const origin = await startServerWith(t, { runBoardCommand: async () => assert.fail("сервис не должен вызываться") });
+  const noRequest = await postCommand(origin, { board: BOARD });
+  assert.equal(noRequest.status, 400);
+  assert.equal((await noRequest.json()).error, "board_command_required");
+
+  const noBoard = await postCommand(origin, { request: "убери вторую" });
+  assert.equal(noBoard.status, 400);
+  assert.equal((await noBoard.json()).error, "board_command_board_required");
+});
+
+test("a board edit without the local-media header is refused", async t => {
+  const origin = await startServerWith(t, { runBoardCommand: async () => assert.fail("сервис не должен вызываться") });
+  const response = await postCommand(origin, { board: BOARD, request: "убери вторую" }, { "content-type": "application/json" });
+  assert.ok(response.status >= 400, `ожидалась ошибка, получено ${response.status}`);
 });

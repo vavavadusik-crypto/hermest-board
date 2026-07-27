@@ -490,6 +490,11 @@
       background: rgba(3, 9, 18, .5);
     }
 
+    .board-chat { display: flex; gap: 8px; align-items: center; margin: 8px 0 0; }
+    .board-chat input { flex: 1 1 auto; min-width: 0; }
+    .board-chat button { flex: 0 0 auto; }
+    .board-chat-log { margin: 6px 0 0; font-size: 12px; color: var(--muted, #9fb0cc); }
+    .board-chat-log[data-kind="error"] { color: #ff8fa3; }
     .series-field { grid-column: 1 / -1; }
     .series-row { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
     /* `.field input[type=number]` шире по специфичности, поэтому селектор здесь
@@ -1250,6 +1255,14 @@
           <button id="wizardCancel" type="button" class="btn-danger" title="Отменить текущую сборку" aria-label="Отменить сборку черновика" hidden>Отменить</button>
         </div>
       </form>
+
+      <form class="board-chat" id="boardChat" aria-label="Правка доски словами">
+        <label class="visually-hidden" for="boardChatInput">Что поправить на доске</label>
+        <input id="boardChatInput" type="text" maxlength="500" autocomplete="off" enterkeyhint="send"
+               placeholder="Скажи, что поправить: «убери третью сцену», «тон ироничнее», «добавь пример после второй»">
+        <button id="boardChatSend" type="submit" class="btn-secondary">Поправить</button>
+      </form>
+      <p class="board-chat-log" id="boardChatLog" role="status" aria-live="polite" hidden></p>
 
       <p class="command-hint" id="durationHint" data-status="unset">Выбери длительность — система сама рассчитает число сцен и объём текста.</p>
       <p class="command-notice" id="durationNotice" role="status" aria-live="polite" hidden></p>

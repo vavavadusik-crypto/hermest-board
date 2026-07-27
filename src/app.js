@@ -113,6 +113,10 @@ import {
     const seriesPlanButton = document.getElementById("seriesPlan");
     const seriesStatus = document.getElementById("seriesStatus");
     const seriesList = document.getElementById("seriesList");
+    const boardChatForm = document.getElementById("boardChat");
+    const boardChatInput = document.getElementById("boardChatInput");
+    const boardChatSend = document.getElementById("boardChatSend");
+    const boardChatLog = document.getElementById("boardChatLog");
     const wizardDraftButton = document.getElementById("wizardDraft");
     const wizardCancelButton = document.getElementById("wizardCancel");
     const wizardModelSelect = document.getElementById("wizardModel");
@@ -1589,6 +1593,68 @@ import {
     seriesPlanButton?.addEventListener("click", () => void planSeason());
     seasonPlan = loadSeasonPlan();
     if (seasonPlan) renderSeasonPlan();
+
+    // Разговор с доской. Модель не переписывает доску целиком — она предлагает
+    // операции, домен их проверяет и применяет, а человеку показывается и то,
+    // что сделано, и то, что отклонено: молчаливо съеденный отказ хуже отказа.
+    function showBoardChat(text, kind = "info") {
+      boardChatLog.hidden = false;
+      boardChatLog.dataset.kind = kind;
+      boardChatLog.textContent = text;
+    }
+
+    async function sendBoardCommand() {
+      const request = boardChatInput.value.trim();
+      if (!request) {
+        showBoardChat("Скажи, что поправить: например «убери третью сцену».");
+        boardChatInput.focus();
+        return;
+      }
+      if (!state.cards.length) {
+        showBoardChat("Доска пуста — сначала собери ролик из темы.", "error");
+        return;
+      }
+      const byokPreset = selectedByokPreset();
+      let endpoint;
+      let model = wizardModelSelect.value || undefined;
+      if (byokPreset) {
+        const byokModel = wizardByokModel.value.trim();
+        const baseUrl = wizardByokBaseUrl.value.trim();
+        if (!baseUrl || !byokModel) {
+          showBoardChat("Укажи Base URL и модель для своего API.", "error");
+          return;
+        }
+        endpoint = { kind: "openai", baseUrl, apiKey: wizardByokKey.value, model: byokModel };
+        model = undefined;
+      }
+      boardChatSend.disabled = true;
+      showBoardChat("Правлю доску…");
+      try {
+        const result = await fetchJson("/api/local-media/board-command", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-hermest-local-media": "1" },
+          body: JSON.stringify({ board: buildProjectDocument(), request, model, endpoint })
+        });
+        applyProjectDocument(result.board);
+        render();
+        saveState("Доска поправлена по просьбе");
+        const rejected = Array.isArray(result.rejected) ? result.rejected : [];
+        showBoardChat([
+          result.summary || `Готово: ${state.cards.length} карточек.`,
+          rejected.length ? `Не сделано: ${rejected.map(item => item.reason).join("; ")}` : ""
+        ].filter(Boolean).join(" "), rejected.length ? "error" : "info");
+        boardChatInput.value = "";
+      } catch (error) {
+        showBoardChat(friendlyErrorMessage(error, "draft"), "error");
+      } finally {
+        boardChatSend.disabled = false;
+      }
+    }
+
+    boardChatForm?.addEventListener("submit", event => {
+      event.preventDefault();
+      void sendBoardCommand();
+    });
 
     function draftErrorText(error, byokPreset) {
       // Подсказка зависит от пути: BYOK (свой API) не использует мост — не сбивать пользователя с толку.

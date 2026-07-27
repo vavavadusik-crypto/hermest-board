@@ -7,6 +7,7 @@ import { renderProject } from "../media/render-project.js";
 import { describeBridgeAvailability } from "../media/text-model.js";
 import { createDraftJobManager } from "./draft-job-manager.js";
 import { draftBoardService } from "./draft-service.js";
+import { boardCommandService } from "./board-command-service.js";
 import { planSeriesService } from "./series-service.js";
 import { editionService, toPublicEdition } from "./edition-service.js";
 import { createLocalMediaJobManager } from "./job-manager.js";
@@ -64,7 +65,8 @@ export function createLocalMediaRequestHandler({
   providerKeys = createProviderKeyStore(),
   describeBridge = describeBridgeAvailability,
   runEdition = editionService,
-  planSeries = planSeriesService
+  planSeries = planSeriesService,
+  runBoardCommand = boardCommandService
 } = {}) {
   if (!manager || typeof manager.submit !== "function") {
     throw new TypeError("A local media job manager is required");
@@ -76,7 +78,7 @@ export function createLocalMediaRequestHandler({
     throw new RangeError(`maxBodyBytes must be within 64..${DEFAULT_MAX_BODY_BYTES}`);
   }
 
-  const context = { manager, draftManager, maxBodyBytes, providerKeys, describeBridge, runEdition, planSeries };
+  const context = { manager, draftManager, maxBodyBytes, providerKeys, describeBridge, runEdition, planSeries, runBoardCommand };
   return function localMediaHandler(request, response, next) {
     void routeRequest(request, response, context, next).catch(error => {
       // Fail-closed: любой сбой обработчика (включая сбой самой отправки
@@ -101,7 +103,7 @@ export function createLocalMediaRequestHandler({
 }
 
 async function routeRequest(request, response, context, next) {
-  const { manager, draftManager, maxBodyBytes, providerKeys, describeBridge, runEdition, planSeries } = context;
+  const { manager, draftManager, maxBodyBytes, providerKeys, describeBridge, runEdition, planSeries, runBoardCommand } = context;
   const host = String(request.headers.host || "");
   if (!isLoopbackHost(host) || !isAllowedOrigin(request.headers.origin, host)) {
     throw new HttpError(403, "local_media_origin_forbidden");
@@ -238,6 +240,22 @@ async function routeRequest(request, response, context, next) {
       episodeDurationSeconds: body.episodeDurationSeconds ?? null,
       audience: body.audience,
       tone: body.tone,
+      model: body.model,
+      endpoint: sanitizeDraftEndpoint(body.endpoint)
+    });
+    sendJson(response, 200, { ok: true, ...result });
+    return;
+  }
+
+  // Правка доски — короткий разговор, не рендер: одна реплика модели и ответ
+  // с тем, что применилось и что отклонено.
+  if (request.method === "POST" && pathname === `${API_PREFIX}/board-command`) {
+    requireMutationRequest(request);
+    const body = await readJsonBody(request, maxBodyBytes);
+    validateBoardCommandBody(body);
+    const result = await runBoardCommand({
+      board: body.board,
+      request: body.request,
       model: body.model,
       endpoint: sanitizeDraftEndpoint(body.endpoint)
     });
@@ -398,6 +416,20 @@ async function readJsonBody(request, maxBodyBytes) {
 // Граница доверия: любой ввод враждебен. Здесь проверяются только тип и
 // границы длины с явными кодами — семантику (URL, allowlist моделей, схему
 // board) по-прежнему валидируют менеджеры и адаптеры.
+function validateBoardCommandBody(body) {
+  const text = body.request;
+  if (text === undefined || text === null || (typeof text === "string" && !text.trim())) {
+    throw new HttpError(400, "board_command_required");
+  }
+  if (typeof text !== "string" || text.length > 500) {
+    throw new HttpError(400, "board_command_invalid");
+  }
+  if (!body.board || typeof body.board !== "object" || Array.isArray(body.board) || !Array.isArray(body.board.cards)) {
+    throw new HttpError(400, "board_command_board_required");
+  }
+  requireOptionalBoundedString(body.model, 64, "board_command_model_invalid");
+}
+
 function validateSeriesBody(body) {
   const topic = body.topic;
   if (topic === undefined || topic === null || (typeof topic === "string" && !topic.trim())) {
