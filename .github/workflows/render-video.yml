@@ -33,6 +33,10 @@ on:
         description: "Fail unless this share of scenes got moving stock footage (0..1)"
         required: false
         default: "0"
+      frame_limit:
+        description: "Cap captured frames per scene (empty = full motion; use a small number to test the graph without the volume)"
+        required: false
+        default: ""
 
 jobs:
   render:
@@ -88,8 +92,13 @@ jobs:
           HERMEST_PEXELS_API_KEY: ${{ secrets.HERMEST_PEXELS_API_KEY }}
           HERMEST_FAL_API_KEY: ${{ secrets.HERMEST_FAL_API_KEY }}
           HERMEST_ELEVENLABS_API_KEY: ${{ secrets.HERMEST_ELEVENLABS_API_KEY }}
+          HERMEST_SCENE_BUILD_FRAME_LIMIT: ${{ inputs.frame_limit }}
         run: |
           set -euo pipefail
+          # Место на диске — часть картины: секвенция кадров на 60 fps весит
+          # гигабайты, и «кончился диск» выглядит как что угодно, только не как
+          # нехватка места.
+          df -h /tmp / | tee -a "$GITHUB_STEP_SUMMARY"
           output="$(mktemp -d /tmp/hermest-render-XXXXXX)"
           npm run --silent render:project -- \
             --input "${{ inputs.project }}" \

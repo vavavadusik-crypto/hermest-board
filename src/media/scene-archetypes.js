@@ -679,6 +679,13 @@ function buildComparison(ctx) {
     border-color: rgba(45, 212, 191, 0.5);
     border-width: ${s(0.2)}px;
     background: linear-gradient(160deg, rgba(20, 46, 52, 0.9), rgba(11, 21, 38, 0.86));
+  }
+  /* Свечение живёт на псевдоэлементе, а не на самой стороне. На стороне уже
+     есть анимация доли, а свойство animation — шорткат: второе правило с
+     равной специфичностью затирает список целиком, и свечение не запускалось. */
+  .cp-after::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    pointer-events: none;
     animation: cp-glow 6.5s ease-in-out 1.6s infinite;
   }
   .cp-after .cp-text { font-size: ${s(2.7)}px; }
