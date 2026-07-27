@@ -37,7 +37,9 @@ on:
 jobs:
   render:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Выдача идёт на 60 кадрах: сцена снимается вдвое большим числом кадров,
+    # чем при 30, и прежние 45 минут перестали быть запасом.
+    timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v4

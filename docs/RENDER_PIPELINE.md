@@ -184,10 +184,17 @@ Optional CC0 music bed from the local library (`music-library.js`,
 | `tiktok` | `tiktok-9x16-1080p` | 1080×1920 (9:16) | aspect-only R1; ≤180 s |
 | `instagram_reels` | `reels-9x16-1080p` | 1080×1920 (9:16) | aspect-only R1; ≤180 s |
 
-All recipes: `fps` 30, `pixelFormat` `yuv420p`, `videoCodec` `libx264`,
+All recipes: `fps` 60, `pixelFormat` `yuv420p`, `videoCodec` `libx264`,
 `audioCodec` `aac`, `audioSampleRate` 48000, `audioChannels` 2,
 `loudnessTargetLufs` -16, `subtitleMode` `burn_and_sidecar` (burned-in **and**
-sidecar SRT). Vertical recipes carry `readinessBlockers:
+sidecar SRT).
+
+Delivery profile (`videoEncoderArgs`/`audioEncoderArgs` in
+`src/media/ffmpeg-args.js`, the single place it is defined): `-preset medium
+-crf 18 -maxrate 16M -bufsize 32M`, explicit `bt709` colour metadata, a keyframe
+every two seconds, AAC at 192 kbit/s. The manifest validator checks the executed
+argv against the same builder, so the promised profile and the command that ran
+cannot drift apart. Vertical recipes carry `readinessBlockers:
 ["semantic_edit_not_implemented"]` — they are honest aspect-ratio reframes, not
 a semantic re-edit.
 
@@ -202,8 +209,10 @@ The audio graph is built for reproducible output
 - Streams are normalized with `aformat=sample_rates=<sr>:channel_layouts=stereo`
   before mixing.
 - Final loudness normalization: **`loudnorm=I=-16:TP=-1.5:LRA=11`**.
-- Video runs at a fixed `fps`; `zoompan`/`tpad`/`trim` use frame-count math from
-  `durationSeconds * fps`.
+- Video runs at a fixed `fps`; `tpad`/`trim` use frame-count math from
+  `durationSeconds * fps`. The camera move is **not** an ffmpeg filter: it is a
+  layer of the scene markup (`src/media/scene-motion.js`), rendered by the
+  browser at full resolution and frozen per frame like everything else.
 
 Because inputs and the recipe are hashed (`inputs.projectSha256`,
 `recipeSha256`) and each artifact carries verified `bytes` + `sha256`, a render
