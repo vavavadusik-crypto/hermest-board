@@ -8,7 +8,8 @@
   "narrationProvider": "piper",
   "targetDurationSeconds": 45,
   "tone": "ироничный, тёплый",
-  "brollMode": "off"
+  "brollMode": "deterministic",
+  "generateVisuals": false
  },
  "cards": [
   {
