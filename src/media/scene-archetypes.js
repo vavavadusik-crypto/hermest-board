@@ -563,7 +563,9 @@ function buildFormatTrio(ctx) {
     animation: amb-sheen 6.5s ease-in-out calc(1.2s + var(--i) * 0.7s) infinite;
   }
   .ft-label {
-    color: ${THEME.textMuted}; font-size: ${s(1.9)}px; font-weight: 700; letter-spacing: 2px;
+    /* Приглушённый цвет здесь не работал: подпись стоит у нижней кромки, где
+       кадр и так затемняется под субтитры, и она пропадала совсем. */
+    color: ${THEME.text}; font-size: ${s(1.9)}px; font-weight: 700; letter-spacing: 2px;
     animation: rise-in 0.45s ease-out calc(1.05s + var(--i) * 0.18s) backwards;
   }`
   };
