@@ -166,6 +166,8 @@ import {
     ];
     const narrationLanguageSelect = document.getElementById("narrationLanguage");
     const narrationVoiceSelect = document.getElementById("narrationVoice");
+const narrationVoicePreview = document.getElementById("narrationVoicePreview");
+let voicePreviewPlayer = null;
     const narrationProviderSelect = document.getElementById("narrationProvider");
     const musicBedSelect = document.getElementById("musicBed");
     const generateVisualsToggle = document.getElementById("generateVisualsToggle");
@@ -185,6 +187,8 @@ import {
       { code: "ja", label: "日本語 — ElevenLabs", piper: false },
       { code: "zh", label: "中文 — ElevenLabs", piper: false }
     ];
+    // Та же форма, что проверяет адаптер ElevenLabs перед запросом.
+    const ELEVENLABS_VOICE_ID_PATTERN = /^[A-Za-z0-9]{8,64}$/;
     const NARRATION_VOICES = {
       ru: [
         { id: "", label: "Авто — Дмитрий (Piper)" },
@@ -579,8 +583,12 @@ import {
       const narrationProvider = piperCoversLanguage
         ? (source.narrationProvider === "elevenlabs" ? "elevenlabs" : "")
         : "elevenlabs";
-      const voices = narrationProvider === "elevenlabs" ? [] : NARRATION_VOICES[language] || [];
-      const voice = voices.some(entry => entry.id === source.voice) ? source.voice : "";
+      // У Piper список голосов конечен и известен заранее. У ElevenLabs голоса
+      // живут в аккаунте пользователя, поэтому здесь проверяется форма id —
+      // сам id всё равно ещё раз проверяет адаптер перед запросом к провайдеру.
+      const voice = narrationProvider === "elevenlabs"
+        ? (typeof source.voice === "string" && ELEVENLABS_VOICE_ID_PATTERN.test(source.voice) ? source.voice : "")
+        : ((NARRATION_VOICES[language] || []).some(entry => entry.id === source.voice) ? source.voice : "");
       const music = source.music === "off"
         ? "off"
         : typeof source.music === "string"
@@ -1769,6 +1777,11 @@ import {
             body: JSON.stringify({ key })
           });
           flashStatus(`${provider.label}: ключ передан локальному worker`);
+          // Новый ключ — новый аккаунт: старый каталог голосов больше не про него.
+          if (provider.id === "elevenlabs") {
+            resetElevenLabsCatalogue();
+            syncNarrationControls();
+          }
         } catch (error) {
           flashStatus(`${provider.label}: ${friendlyErrorMessage(error, "provider")}`);
         } finally {
@@ -1790,6 +1803,10 @@ import {
               body: "{}"
             });
           } catch (_) {}
+          if (provider.id === "elevenlabs") {
+            resetElevenLabsCatalogue();
+            syncNarrationControls();
+          }
           await loadProviderKeys();
         });
         row.append(clearButton);
@@ -1798,6 +1815,86 @@ import {
     }
 
     void loadProviderKeys();
+
+    // Каталог голосов ElevenLabs приходит от локального worker. Ключ остаётся у
+    // worker: в браузер попадают только имя, id и ссылка на превью провайдера.
+    const elevenLabsCatalogue = { state: "idle", configured: false, voices: [] };
+    let elevenLabsCatalogueRequest = null;
+
+    function resetElevenLabsCatalogue() {
+      elevenLabsCatalogue.state = "idle";
+      elevenLabsCatalogue.voices = [];
+      elevenLabsCatalogue.configured = false;
+    }
+
+    function ensureElevenLabsVoices() {
+      if (elevenLabsCatalogue.state !== "idle") return elevenLabsCatalogueRequest;
+      elevenLabsCatalogue.state = "loading";
+      elevenLabsCatalogueRequest = (async () => {
+        try {
+          const data = await fetchJson("/api/local-media/narration-voices?provider=elevenlabs", {
+            headers: { "x-hermest-local-media": "1" }
+          });
+          elevenLabsCatalogue.configured = data.configured === true;
+          elevenLabsCatalogue.voices = Array.isArray(data.voices) ? data.voices : [];
+          elevenLabsCatalogue.state = "ready";
+        } catch (_) {
+          elevenLabsCatalogue.state = "failed";
+        } finally {
+          elevenLabsCatalogueRequest = null;
+          syncNarrationControls();
+        }
+      })();
+      return elevenLabsCatalogueRequest;
+    }
+
+    function elevenLabsVoiceOptions() {
+      const auto = { id: "", label: "Авто — голос ElevenLabs по умолчанию" };
+      if (elevenLabsCatalogue.state !== "ready" || elevenLabsCatalogue.voices.length === 0) return [auto];
+      return [auto, ...elevenLabsCatalogue.voices.map(voice => ({
+        id: voice.id,
+        label: voice.language ? `${voice.name} · ${voice.language}` : voice.name
+      }))];
+    }
+
+    function elevenLabsVoiceHint(piperCoversLanguage) {
+      if (elevenLabsCatalogue.state === "loading") return "Загружаю каталог голосов ElevenLabs…";
+      if (elevenLabsCatalogue.state === "failed") {
+        return "Каталог голосов ElevenLabs недоступен: проверьте ключ и сеть. Озвучка пойдёт голосом по умолчанию.";
+      }
+      if (elevenLabsCatalogue.state === "ready" && !elevenLabsCatalogue.configured) {
+        return "Добавьте ключ ElevenLabs в настройках — и здесь появятся ваши голоса, включая созданные вами.";
+      }
+      if (elevenLabsCatalogue.state === "ready") {
+        return `Голосов в аккаунте: ${elevenLabsCatalogue.voices.length}. Свои — в начале списка.`;
+      }
+      return piperCoversLanguage
+        ? "Премиум-озвучка ElevenLabs: нужен свой API-ключ (BYOK)."
+        : "Язык вне матрицы Piper — доступно через ElevenLabs (BYOK), нужен свой API-ключ.";
+    }
+
+    function selectedElevenLabsVoice() {
+      if (state.brief.narrationProvider !== "elevenlabs") return null;
+      return elevenLabsCatalogue.voices.find(voice => voice.id === state.brief.voice) || null;
+    }
+
+    function syncVoicePreviewButton() {
+      if (!narrationVoicePreview) return;
+      const voice = selectedElevenLabsVoice();
+      const playable = Boolean(voice?.previewUrl);
+      narrationVoicePreview.hidden = !playable;
+      narrationVoicePreview.disabled = !playable;
+    }
+
+    if (narrationVoicePreview) {
+      narrationVoicePreview.addEventListener("click", () => {
+        const voice = selectedElevenLabsVoice();
+        if (!voice?.previewUrl) return;
+        if (voicePreviewPlayer) voicePreviewPlayer.pause();
+        voicePreviewPlayer = new Audio(voice.previewUrl);
+        voicePreviewPlayer.play().catch(() => flashStatus("Превью голоса не воспроизвелось"));
+      });
+    }
 
     function syncNarrationControls() {
       narrationLanguageSelect.replaceChildren(...NARRATION_LANGUAGES.map(entry => {
@@ -1810,9 +1907,9 @@ import {
       const piperCoversLanguage = NARRATION_LANGUAGES.find(entry => entry.code === state.brief.language)?.piper === true;
       narrationProviderSelect.value = state.brief.narrationProvider;
       narrationProviderSelect.disabled = !piperCoversLanguage;
-      const voices = state.brief.narrationProvider === "elevenlabs"
-        ? [{ id: "", label: "Голос ElevenLabs по умолчанию" }]
-        : NARRATION_VOICES[state.brief.language] || [];
+      const usesElevenLabs = state.brief.narrationProvider === "elevenlabs";
+      if (usesElevenLabs) void ensureElevenLabsVoices();
+      const voices = usesElevenLabs ? elevenLabsVoiceOptions() : NARRATION_VOICES[state.brief.language] || [];
       narrationVoiceSelect.replaceChildren(...voices.map(entry => {
         const option = document.createElement("option");
         option.value = entry.id;
@@ -1820,12 +1917,17 @@ import {
         return option;
       }));
       narrationVoiceSelect.value = state.brief.voice;
-      narrationVoiceSelect.disabled = state.brief.narrationProvider === "elevenlabs";
-      narrationHint.textContent = state.brief.narrationProvider === "elevenlabs"
-        ? (piperCoversLanguage
-          ? "Премиум-озвучка ElevenLabs: нужен свой API-ключ (BYOK)."
-          : "Язык вне матрицы Piper — доступно через ElevenLabs (BYOK), нужен свой API-ключ.")
+      // Выбранного голоса может не быть в каталоге (сменился аккаунт, ключ убрали):
+      // тогда select молча падает на первый пункт, и бриф обязан это отразить.
+      if (narrationVoiceSelect.value !== state.brief.voice) {
+        narrationVoiceSelect.value = "";
+        state.brief.voice = "";
+      }
+      narrationVoiceSelect.disabled = usesElevenLabs && elevenLabsCatalogue.state === "loading";
+      narrationHint.textContent = usesElevenLabs
+        ? elevenLabsVoiceHint(piperCoversLanguage)
         : "Piper синтезирует локально и бесплатно. Языку соответствует свой каталог голосов.";
+      syncVoicePreviewButton();
       musicBedSelect.value = state.brief.music === "off" ? "off" : "";
       generateVisualsToggle.checked = state.brief.generateVisuals === true;
       if (brollModeSelect) {

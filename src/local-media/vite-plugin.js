@@ -5,6 +5,7 @@ import path from "node:path";
 import { DURATION_PLAN_LIMITS } from "../domain/duration-plan.js";
 import { renderProject } from "../media/render-project.js";
 import { describeBridgeAvailability } from "../media/text-model.js";
+import { listElevenLabsVoices } from "../media/elevenlabs-tts.js";
 import { createDraftJobManager } from "./draft-job-manager.js";
 import { draftBoardService } from "./draft-service.js";
 import { boardCommandService } from "./board-command-service.js";
@@ -66,7 +67,8 @@ export function createLocalMediaRequestHandler({
   describeBridge = describeBridgeAvailability,
   runEdition = editionService,
   planSeries = planSeriesService,
-  runBoardCommand = boardCommandService
+  runBoardCommand = boardCommandService,
+  listNarrationVoices = listElevenLabsVoices
 } = {}) {
   if (!manager || typeof manager.submit !== "function") {
     throw new TypeError("A local media job manager is required");
@@ -78,7 +80,10 @@ export function createLocalMediaRequestHandler({
     throw new RangeError(`maxBodyBytes must be within 64..${DEFAULT_MAX_BODY_BYTES}`);
   }
 
-  const context = { manager, draftManager, maxBodyBytes, providerKeys, describeBridge, runEdition, planSeries, runBoardCommand };
+  const context = {
+    manager, draftManager, maxBodyBytes, providerKeys,
+    describeBridge, runEdition, planSeries, runBoardCommand, listNarrationVoices
+  };
   return function localMediaHandler(request, response, next) {
     void routeRequest(request, response, context, next).catch(error => {
       // Fail-closed: любой сбой обработчика (включая сбой самой отправки
@@ -103,7 +108,10 @@ export function createLocalMediaRequestHandler({
 }
 
 async function routeRequest(request, response, context, next) {
-  const { manager, draftManager, maxBodyBytes, providerKeys, describeBridge, runEdition, planSeries, runBoardCommand } = context;
+  const {
+    manager, draftManager, maxBodyBytes, providerKeys,
+    describeBridge, runEdition, planSeries, runBoardCommand, listNarrationVoices
+  } = context;
   const host = String(request.headers.host || "");
   if (!isLoopbackHost(host) || !isAllowedOrigin(request.headers.origin, host)) {
     throw new HttpError(403, "local_media_origin_forbidden");
@@ -150,6 +158,33 @@ async function routeRequest(request, response, context, next) {
       available: availability.status === "executable",
       providers: Array.isArray(availability.providers) ? availability.providers : [],
       reason: availability.reason || null
+    });
+    return;
+  }
+
+  // Каталог голосов провайдера. Запрос уходит наружу с ключом, поэтому он
+  // проходит тот же mutation-контроль, что и запись ключа, хотя и читает.
+  if (request.method === "GET" && pathname === `${API_PREFIX}/narration-voices`) {
+    requireMutationHeader(request);
+    const provider = requestUrl.searchParams.get("provider") || "elevenlabs";
+    if (provider !== "elevenlabs") throw new HttpError(400, "narration_voices_provider_unsupported");
+    const configured = providerKeys.listProviders().some(entry => entry.id === provider && entry.configured);
+    if (!configured) {
+      sendJson(response, 200, { ok: true, provider, configured: false, voices: [] });
+      return;
+    }
+    let catalogue;
+    try {
+      catalogue = await listNarrationVoices({});
+    } catch {
+      // Причина отказа провайдера наружу не пересказывается: в ней бывает эхо ключа.
+      throw new HttpError(502, "narration_voices_unavailable");
+    }
+    sendJson(response, 200, {
+      ok: true,
+      provider,
+      configured: true,
+      voices: Array.isArray(catalogue?.voices) ? catalogue.voices : []
     });
     return;
   }
@@ -381,10 +416,16 @@ async function routeRequest(request, response, context, next) {
   throw new HttpError(404, "not_found");
 }
 
-function requireMutationRequest(request) {
+// Заголовок намерения обязателен и для запросов без тела: он отсекает простые
+// кросс-сайтовые запросы, которые браузер отправил бы без preflight.
+function requireMutationHeader(request) {
   if (request.headers[MUTATION_HEADER] !== "1") {
     throw new HttpError(403, "local_media_mutation_header_required");
   }
+}
+
+function requireMutationRequest(request) {
+  requireMutationHeader(request);
   if (!String(request.headers["content-type"] || "").toLowerCase().startsWith("application/json")) {
     throw new HttpError(415, "application_json_required");
   }

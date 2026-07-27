@@ -54,6 +54,30 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# BYOK-ключи из личного хранилища: приложение стартует с уже настроенными
+# провайдерами, и человеку не приходится вставлять ключ каждую сессию.
+# Забираем только те переменные, которые приложение понимает, — остальные
+# секреты хранилища в окружение приложения не попадают.
+SECRETS_FILE="${HERMEST_SECRETS_FILE:-$HOME/.secrets/env.sh}"
+if [[ -r "$SECRETS_FILE" ]]; then
+  adopted=()
+  while IFS= read -r assignment; do
+    [[ -n "$assignment" ]] || continue
+    export "${assignment?}"
+    adopted+=("${assignment%%=*}")
+  done < <(
+    set -a
+    # shellcheck disable=SC1090
+    . "$SECRETS_FILE" >/dev/null 2>&1 || true
+    set +a
+    for name in HERMEST_ELEVENLABS_API_KEY HERMEST_FAL_API_KEY HERMEST_PEXELS_API_KEY; do
+      [[ -n "${!name:-}" ]] && printf '%s=%s\n' "$name" "${!name}"
+    done
+  )
+  # В журнал уходят только имена переменных, никогда значения.
+  ((${#adopted[@]})) && printf 'Ключи из хранилища: %s\n' "${adopted[*]}"
+fi
+
 command -v node >/dev/null 2>&1 || fail "не найден node — установите Node.js 20 или новее"
 command -v npm  >/dev/null 2>&1 || fail "не найден npm"
 

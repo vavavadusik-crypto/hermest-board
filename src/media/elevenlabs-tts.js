@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 
 import { assertSafeGeneratedPath } from "./ffmpeg-args.js";
-import { readBoundedBytes } from "./bounded-body.js";
+import { readBoundedBytes, readBoundedJson } from "./bounded-body.js";
 import { probeMediaFile } from "./process-runner.js";
 import { normalizeNarrationLanguage, normalizeNarrationScript } from "./tts.js";
 
@@ -15,6 +15,8 @@ const DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM";
 const VOICE_ID_PATTERN = /^[A-Za-z0-9]{8,64}$/;
 const DEFAULT_MAX_CHARACTERS_PER_JOB = 10000;
 const MAX_AUDIO_BYTES = 64 * 1024 * 1024;
+const MAX_VOICE_CATALOG_BYTES = 4 * 1024 * 1024;
+const MAX_VOICES_RETURNED = 120;
 const MAX_SEED = 4294967295;
 const REQUEST_TIMEOUT_MS = 120000;
 const RETRY_DELAYS_MS = Object.freeze([500, 1500]);
@@ -98,6 +100,92 @@ export function createElevenLabsNarrationAdapter(dependencies = {}) {
       return metadata;
     }
   });
+}
+
+/**
+ * Каталог голосов аккаунта. Нужен, чтобы человек выбирал голос по имени, а не
+ * вписывал двадцатисимвольный id руками. Ключ остаётся на стороне воркера:
+ * наружу уходят только имя, id, язык и ссылка на превью самого провайдера.
+ */
+export async function listElevenLabsVoices({
+  env = process.env,
+  fetchImpl = globalThis.fetch,
+  apiKeyProvider,
+  signal
+} = {}) {
+  if (typeof fetchImpl !== "function") {
+    throw new TypeError("ElevenLabs catalogue requires a fetch implementation");
+  }
+  const readKey = apiKeyProvider
+    || (async () => (typeof env.HERMEST_ELEVENLABS_API_KEY === "string" ? env.HERMEST_ELEVENLABS_API_KEY.trim() : ""));
+  const apiKey = String((await readKey()) || "").trim();
+  if (!apiKey) throw new RangeError("ElevenLabs API key is not configured");
+
+  const response = await fetchCatalogue({ fetchImpl, apiKey, signal });
+  if (!response.ok) {
+    const status = Number(response.status);
+    // Тело ответа провайдера не читаем и не пересказываем: в нём может лежать
+    // эхо заголовков вместе с ключом.
+    response.body?.cancel?.();
+    if (status === 401 || status === 403) {
+      throw new RangeError("ElevenLabs rejected the API key (invalid or missing permissions)");
+    }
+    throw new RangeError(`ElevenLabs voice catalogue failed with status ${status}`);
+  }
+  const payload = await readBoundedJson(response, MAX_VOICE_CATALOG_BYTES, "ElevenLabs voice catalogue");
+  const raw = Array.isArray(payload?.voices) ? payload.voices : [];
+  const voices = [];
+  for (const entry of raw) {
+    const id = typeof entry?.voice_id === "string" ? entry.voice_id : "";
+    if (!VOICE_ID_PATTERN.test(id)) continue;
+    const name = normalizeCatalogueText(entry?.name, 80);
+    if (!name) continue;
+    const previewUrl = typeof entry?.preview_url === "string" && entry.preview_url.startsWith("https://")
+      ? entry.preview_url
+      : "";
+    voices.push({
+      id,
+      name,
+      language: normalizeCatalogueText(entry?.labels?.language, 16),
+      category: normalizeCatalogueText(entry?.category, 24),
+      previewUrl
+    });
+    if (voices.length >= MAX_VOICES_RETURNED) break;
+  }
+  // Свои голоса вперёд: пользователь ищет то, что создал сам, а не витрину.
+  voices.sort((left, right) => {
+    const ownership = Number(left.category === "premade") - Number(right.category === "premade");
+    return ownership !== 0 ? ownership : left.name.localeCompare(right.name, "ru");
+  });
+  return { provider: ELEVENLABS_PROVIDER, voices };
+}
+
+function normalizeCatalogueText(value, limit) {
+  if (typeof value !== "string") return "";
+  // Управляющие символы из чужого ответа не должны доехать до разметки.
+  return value.replace(/[\u0000-\u001f\u007f-\u009f]/gu, " ").replace(/\s+/gu, " ").trim().slice(0, limit);
+}
+
+async function fetchCatalogue({ fetchImpl, apiKey, signal }) {
+  signal?.throwIfAborted();
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(new Error("ElevenLabs request timed out")),
+    REQUEST_TIMEOUT_MS
+  );
+  const onAbort = () => controller.abort(signal?.reason);
+  signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    return await fetchImpl(`${ELEVENLABS_BASE_URL}/v1/voices`, {
+      method: "GET",
+      headers: { "xi-api-key": apiKey, accept: "application/json" },
+      redirect: "error",
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
 }
 
 async function requestSynthesis({ fetchImpl, apiKey, voiceId, requestBody, sleep, signal }) {
