@@ -68,6 +68,17 @@ npm run dev          # local dev server + media worker on 127.0.0.1:5173
 
 Open the printed address in your browser. `npm run dev` (not opening `index.html` as a file) starts the local worker, without which video rendering and the "topic → video" wizard won't work.
 
+**Desktop app (Linux)** — one script, no terminal afterwards:
+
+```bash
+scripts/install-desktop-entry.sh    # adds the launcher to the menu and desktop
+```
+
+The launcher builds when needed, starts the local worker on a free loopback
+port, opens the app in its own window, and shuts the worker down when the
+window closes. Opening `index.html` directly gives you a page that cannot do
+anything — see [`docs/DESKTOP_APP.md`](docs/DESKTOP_APP.md).
+
 **GitHub Codespaces** (zero laptop load, cloud dev environment):
 
 1. Click **Code** → **Codespaces** → **Create codespace on main**
