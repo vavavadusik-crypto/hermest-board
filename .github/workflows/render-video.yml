@@ -100,6 +100,25 @@ jobs:
           # нехватка места.
           df -h /tmp / | tee -a "$GITHUB_STEP_SUMMARY"
           output="$(mktemp -d /tmp/hermest-render-XXXXXX)"
+          # Упавший рендер обязан оставить улики. Иначе единственное, что видно,
+          # это итоговое число — а из него причину не выводят.
+          on_failure() {
+            echo "::group::Что осталось от упавшего рендера"
+            find "$output" -maxdepth 2 -type f -printf '%s\t%p\n' | sort -rn | head -40
+            for file in "$output"/**/*.mp4 "$output"/*.mp4; do
+              [ -f "$file" ] || continue
+              echo "--- $file"
+              /usr/bin/ffprobe -v error -show_entries format=duration \
+                -show_entries stream=codec_type,duration,nb_frames -of default=nw=1 "$file" || true
+            done
+            for file in "$output"/**/*.srt "$output"/*.srt; do
+              [ -f "$file" ] || continue
+              echo "--- $file: $(grep -c ' --> ' "$file") реплик, последняя метка:"
+              grep ' --> ' "$file" | tail -1
+            done
+            echo "::endgroup::"
+          }
+          trap on_failure ERR
           npm run --silent render:project -- \
             --input "${{ inputs.project }}" \
             --output "$output" \
