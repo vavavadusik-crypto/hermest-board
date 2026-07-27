@@ -133,7 +133,8 @@ export function buildSceneMarkup({
     sceneIndex: index,
     sceneCount: total,
     sceneTitles: titles,
-    heroFontSize
+    heroFontSize,
+    durationMs: scene.durationMs
   });
 
   return `<!DOCTYPE html>

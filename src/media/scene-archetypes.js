@@ -20,6 +20,7 @@ import {
   renderSetting,
   speechBubble
 } from "./cartoon-cast.js";
+import { buildBeatCss } from "./scene-beats.js";
 import { NODE_COLORS, THEME, clampText, escapeHtml, scaled } from "./scene-design.js";
 
 const MAX_CHIPS = 5;
@@ -386,7 +387,6 @@ function buildDeviceMockup(ctx) {
     display: flex; align-items: center; gap: ${s(0.9)}px;
     padding: ${s(0.7)}px ${s(0.9)}px; border-radius: ${s(0.6)}px;
     background: rgba(17, 32, 54, 0.72); border: 1px solid rgba(36, 64, 95, 0.6);
-    animation: rise-in 0.45s cubic-bezier(0.22, 0.9, 0.3, 1) calc(1.25s + var(--i) * 0.19s) backwards;
   }
   .dv-dot { width: ${s(0.8)}px; height: ${s(0.8)}px; border-radius: 50%; flex: none; }
   .dv-text { color: ${THEME.textMuted}; font-size: ${s(1.45)}px; line-height: 1.25; overflow: hidden; }
@@ -417,7 +417,7 @@ function buildDeviceMockup(ctx) {
     from { opacity: 0; transform: perspective(${s(160)}px) rotateY(${copyFirst ? "-" : ""}14deg) translateY(${s(3)}px) scale(0.94); }
     to { opacity: 1; transform: perspective(${s(160)}px) rotateY(0deg) translateY(0) scale(1); }
   }
-  @keyframes dv-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }`
+  @keyframes dv-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }${buildBeatCss({ durationMs: ctx.durationMs, count: rows.length, selector: ".dv-row", name: "dv" })}`
   };
 }
 
@@ -467,7 +467,6 @@ function buildBoardColumns(ctx) {
     align-items: ${layout.isNarrow ? "center" : "stretch"};
     gap: ${s(1.2)}px; border-radius: ${s(1.4)}px; padding: ${s(1.4)}px;
     ${panelSurface()}
-    animation: rise-in 0.55s cubic-bezier(0.22, 0.9, 0.3, 1) calc(0.62s + var(--i) * 0.14s) backwards;
   }
   .bc-head {
     display: flex; align-items: center; gap: ${s(0.8)}px;
@@ -499,7 +498,7 @@ function buildBoardColumns(ctx) {
     0%, 12% { transform: translate3d(0, 0, 0); }
     38%, 62% { transform: translate3d(${layout.isNarrow ? `0, ${s(6)}px` : `${s(11)}px, 0`}, 0); }
     88%, 100% { transform: translate3d(0, 0, 0); }
-  }`
+  }${buildBeatCss({ durationMs: ctx.durationMs, count: lanes.length, selector: ".bc-lane", name: "bc" })}`
   };
 }
 
@@ -546,7 +545,6 @@ function buildFormatTrio(ctx) {
   }
   .ft-item {
     margin: 0; display: flex; flex-direction: column; align-items: center; gap: ${s(1.2)}px;
-    animation: panel-in 0.65s cubic-bezier(0.22, 0.9, 0.3, 1) calc(0.6s + var(--i) * 0.18s) backwards, amb-float 9s ease-in-out calc(var(--i) * -2.4s) infinite;
   }
   .ft-frame {
     position: relative; overflow: hidden; border-radius: ${s(1.1)}px;
@@ -567,7 +565,7 @@ function buildFormatTrio(ctx) {
        кадр и так затемняется под субтитры, и она пропадала совсем. */
     color: ${THEME.text}; font-size: ${s(1.9)}px; font-weight: 700; letter-spacing: 2px;
     animation: rise-in 0.45s ease-out calc(1.05s + var(--i) * 0.18s) backwards;
-  }`
+  }${buildBeatCss({ durationMs: ctx.durationMs, count: labels.length, selector: ".ft-item", name: "ft" })}`
   };
 }
 
@@ -610,7 +608,6 @@ function buildChecklist(ctx) {
     display: flex; align-items: center; flex: 1 1 auto; max-height: ${s(9)}px; gap: ${s(1.3)}px;
     padding: ${s(1.1)}px ${s(1.2)}px; border-radius: ${s(0.9)}px;
     background: rgba(17, 32, 54, 0.6); border: 1px solid rgba(36, 64, 95, 0.6);
-    animation: rise-in 0.5s cubic-bezier(0.22, 0.9, 0.3, 1) calc(0.75s + var(--i) * 0.2s) backwards;
   }
   .cl-box {
     width: ${s(2.8)}px; height: ${s(2.8)}px; flex: none; border-radius: ${s(0.7)}px;
@@ -625,7 +622,7 @@ function buildChecklist(ctx) {
     animation: cl-sweep 9s ease-in-out 2.2s infinite;
   }
   @keyframes check-draw { from { stroke-dashoffset: 30; } to { stroke-dashoffset: 0; } }
-  @keyframes cl-sweep { 0% { transform: translateY(-100%); } 100% { transform: translateY(${Math.max(items.length, 1) * 100}%); } }`
+  @keyframes cl-sweep { 0% { transform: translateY(-100%); } 100% { transform: translateY(${Math.max(items.length, 1) * 100}%); } }${buildBeatCss({ durationMs: ctx.durationMs, count: items.length, selector: ".cl-row", name: "cl" })}`
   };
 }
 
@@ -676,14 +673,13 @@ function buildComparison(ctx) {
   .cp-before {
     border-color: rgba(255, 93, 115, 0.45);
     background: rgba(9, 15, 27, 0.72);
-    animation: cp-in-before 0.7s cubic-bezier(0.22, 0.9, 0.3, 1) 0.55s backwards, amb-breathe 12s ease-in-out 1.4s infinite;
   }
   .cp-before .cp-text { color: ${THEME.textMuted}; font-weight: 400; }
   .cp-after {
     border-color: rgba(45, 212, 191, 0.5);
     border-width: ${s(0.2)}px;
     background: linear-gradient(160deg, rgba(20, 46, 52, 0.9), rgba(11, 21, 38, 0.86));
-    animation: cp-in-after 0.7s cubic-bezier(0.22, 0.9, 0.3, 1) 0.72s backwards, cp-glow 6.5s ease-in-out 1.6s infinite;
+    animation: cp-glow 6.5s ease-in-out 1.6s infinite;
   }
   .cp-after .cp-text { font-size: ${s(2.7)}px; }
   .cp-label {
@@ -706,13 +702,11 @@ function buildComparison(ctx) {
     background: linear-gradient(${layout.isNarrow ? "90deg" : "180deg"}, rgba(45, 212, 191, 0), ${THEME.accent}, rgba(124, 92, 255, 0));
     animation: cp-divider 0.8s ease-out 0.9s backwards, amb-pulse 7s ease-in-out 1.8s infinite;
   }
-  @keyframes cp-in-before { from { opacity: 0; transform: translate3d(${layout.isNarrow ? `0, -${s(3)}px` : `-${s(4)}px, 0`}, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
-  @keyframes cp-in-after { from { opacity: 0; transform: translate3d(${layout.isNarrow ? `0, ${s(3)}px` : `${s(4)}px, 0`}, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
   @keyframes cp-divider { from { opacity: 0; transform: scale${layout.isNarrow ? "X" : "Y"}(0.2); } to { opacity: 1; transform: none; } }
   @keyframes cp-glow {
     0%, 100% { box-shadow: 0 24px 60px rgba(1, 6, 14, 0.6), 0 0 0 rgba(45, 212, 191, 0); }
     50% { box-shadow: 0 24px 60px rgba(1, 6, 14, 0.6), 0 0 ${s(4)}px rgba(45, 212, 191, 0.3); }
-  }`
+  }${buildBeatCss({ durationMs: ctx.durationMs, count: 2, selector: ".cp-side", name: "cp" })}`
   };
 }
 
@@ -857,7 +851,6 @@ function buildMetricGrid(ctx) {
     padding: ${s(2)}px; border-radius: ${s(1.5)}px;
     ${panelSurface()}
     border-left-width: ${s(0.4)}px;
-    animation: panel-in 0.62s cubic-bezier(0.22, 0.9, 0.3, 1) calc(0.55s + var(--i) * 0.15s) backwards, amb-float 10s ease-in-out calc(var(--i) * -2.2s) infinite;
   }
   .mg-figure { display: flex; align-items: baseline; gap: ${s(0.6)}px; color: ${THEME.text}; }
   /* Плитка теперь во всю высоту сцены, поэтому и число крупнее: прежний кегль
@@ -865,7 +858,7 @@ function buildMetricGrid(ctx) {
   .mg-value { font-size: ${s(layout.isNarrow ? 8 : 9)}px; font-weight: 700; line-height: 1; letter-spacing: -2px; }
   .mg-unit { font-size: ${s(3)}px; font-weight: 700; color: ${THEME.accent}; }
   .mg-label { color: ${THEME.textMuted}; font-size: ${s(1.8)}px; line-height: 1.3; }
-  .sr-value { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }${counters.map(counter => counter.css).join("")}`
+  .sr-value { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }${counters.map(counter => counter.css).join("")}${buildBeatCss({ durationMs: ctx.durationMs, count: numbers.length, selector: ".mg-tile", name: "mg" })}`
   };
 }
 
@@ -876,7 +869,6 @@ function buildMetricGrid(ctx) {
 function buildFlowSteps(ctx) {
   const { layout, content, topic, s } = ctx;
   const steps = (content.steps.length ? content.steps : content.bullets).slice(0, MAX_CHIPS);
-  const cycleSeconds = (Math.max(steps.length, 1) * 1.6).toFixed(1);
   const arrow = layout.isNarrow
     ? `<svg class="fs-arrow" viewBox="0 0 24 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><line class="fs-line" x1="12" y1="2" x2="12" y2="28" stroke="#24405f" stroke-width="2.4" stroke-dasharray="26"/><polygon class="fs-tip" points="12,38 5,26 19,26" fill="#24405f"/></svg>`
     : `<svg class="fs-arrow" viewBox="0 0 40 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><line class="fs-line" x1="2" y1="12" x2="28" y2="12" stroke="#24405f" stroke-width="2.4" stroke-dasharray="26"/><polygon class="fs-tip" points="38,12 26,5 26,19" fill="#24405f"/></svg>`;
@@ -906,8 +898,6 @@ function buildFlowSteps(ctx) {
     padding: ${s(1.5)}px ${s(1.6)}px; border-radius: ${s(1.2)}px;
     ${panelSurface()}
     border-color: rgba(36, 64, 95, 0.8);
-    animation: rise-in 0.5s cubic-bezier(0.22, 0.9, 0.3, 1) calc(0.6s + var(--i) * 0.16s) backwards,
-      fs-active ${cycleSeconds}s ease-in-out calc(1.9s + var(--i) * ${(Number(cycleSeconds) / Math.max(steps.length, 1)).toFixed(2)}s) infinite;
   }
   .fs-index {
     width: ${s(2.8)}px; height: ${s(2.8)}px; flex: none; border-radius: 50%;
@@ -920,12 +910,7 @@ function buildFlowSteps(ctx) {
   }
   .fs-line { animation: fs-draw 0.4s ease-out 1.15s backwards; }
   .fs-tip { animation: rise-in 0.3s ease-out 1.45s backwards; }
-  @keyframes fs-draw { from { stroke-dashoffset: 26; } to { stroke-dashoffset: 0; } }
-  @keyframes fs-active {
-    0%, 100% { border-color: rgba(36, 64, 95, 0.8); transform: translate3d(0, 0, 0); }
-    ${(100 / Math.max(steps.length, 1) / 2).toFixed(1)}% { border-color: var(--c); transform: translate3d(0, -${s(0.6)}px, 0); }
-    ${(100 / Math.max(steps.length, 1)).toFixed(1)}% { border-color: rgba(36, 64, 95, 0.8); transform: translate3d(0, 0, 0); }
-  }`
+  @keyframes fs-draw { from { stroke-dashoffset: 26; } to { stroke-dashoffset: 0; } }${buildBeatCss({ durationMs: ctx.durationMs, count: steps.length, selector: ".fs-step", name: "fs" })}`
   };
 }
 
@@ -1171,7 +1156,8 @@ export function renderSceneArchetype({
   sceneIndex = 0,
   sceneCount = 1,
   sceneTitles = [],
-  heroFontSize
+  heroFontSize,
+  durationMs = 0
 }) {
   const builder = BUILDERS[archetype];
   if (!builder) throw new RangeError(`Unsupported scene archetype: ${archetype}`);
@@ -1184,6 +1170,7 @@ export function renderSceneArchetype({
     sceneCount,
     sceneTitles,
     heroFontSize,
+    durationMs,
     s: factor => scaled(layout, factor)
   });
 }
