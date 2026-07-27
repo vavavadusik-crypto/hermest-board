@@ -68,16 +68,20 @@ const CAPABILITY_DEFINITIONS = Object.freeze([
     // personal access token in X-Figma-Token.
     // https://developers.figma.com/docs/rest-api/ (checked 2026-07-26)
     adapter("figma-file-import-v1", ["figma"], true, ["server", "local_media"], "server_env", ["FIGMA_ACCESS_TOKEN"]),
-    // Canva Connect: OAuth 2.0 authorization code + PKCE; a public integration is
+    // Implemented in src/connectors/canva-design.js (exchangeCode, refreshToken,
+    // listDesigns, getDesign, exportDesign). OAuth 2.0 authorization code + PKCE,
+    // Bearer access token against api.canva.com.
+    // The blocker stays: the code exists and is tested against the documented
+    // contract, but it has never run against Canva — a public integration is
     // usable only after Canva review, a private one needs Canva Enterprise.
-    // https://www.canva.dev/docs/connect/ (checked 2026-07-26)
+    // https://www.canva.dev/docs/connect/ (checked 2026-07-27)
     adapter(
       "canva-design-import-v1",
       ["canva"],
-      false,
+      true,
       ["server"],
       "oauth",
-      ["CANVA_CLIENT_ID", "CANVA_CLIENT_SECRET"],
+      ["CANVA_CLIENT_ID", "CANVA_CLIENT_SECRET", "CANVA_ACCESS_TOKEN"],
       ["canva_integration_review_required"]
     ),
     // Drive API v3 files.list/files.get. drive.file is the non-sensitive scope, but
