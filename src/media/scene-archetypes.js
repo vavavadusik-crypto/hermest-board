@@ -211,9 +211,19 @@ function buildClassic(ctx) {
   .dg-drift { animation: amb-float 12s ease-in-out 0s infinite; }
   .dg-center { animation: center-in 0.55s cubic-bezier(0.22, 0.9, 0.3, 1) 0.78s backwards; }
   .dg-link { animation: link-draw 0.45s ease-in-out calc(0.95s + var(--i) * 0.16s) backwards; }
-  .dg-node { animation: node-in 0.5s cubic-bezier(0.22, 0.9, 0.3, 1) calc(1.08s + var(--i) * 0.16s) backwards; }
+  /* Узлы въезжают за полторы секунды, и дальше граф стоял. Волна внимания
+     обходит узлы по кругу: она меняет только яркость, поэтому связи между
+     узлами остаются на своих местах. */
+  .dg-node {
+    animation: node-in 0.5s cubic-bezier(0.22, 0.9, 0.3, 1) calc(1.08s + var(--i) * 0.16s) backwards,
+      amb-wave 6.8s ease-in-out calc(2.4s + var(--i) * 0.55s) infinite;
+  }
   .dg-label { animation: label-in 0.4s ease-out calc(1.2s + var(--i) * 0.16s) backwards; }
-  .dg-node-active { animation: node-in 0.5s cubic-bezier(0.22, 0.9, 0.3, 1) calc(1.08s + var(--i) * 0.16s) backwards, node-pulse 2.6s ease-in-out calc(2.2s + var(--i) * 0.16s) infinite; }`
+  .dg-node-active {
+    animation: node-in 0.5s cubic-bezier(0.22, 0.9, 0.3, 1) calc(1.08s + var(--i) * 0.16s) backwards,
+      amb-wave 6.8s ease-in-out calc(2.4s + var(--i) * 0.55s) infinite,
+      node-pulse 2.6s ease-in-out calc(2.2s + var(--i) * 0.16s) infinite;
+  }`
   };
 }
 
@@ -253,7 +263,14 @@ function buildStatement(ctx) {
   }
   .a-statement { position: relative; max-width: ${layout.isNarrow || closing ? "100%" : "82%"}; animation: amb-float 15s ease-in-out 0s infinite; }
   .a-statement h1 { font-size: ${Math.round(ctx.heroFontSize * 1.06)}px; }
-  .st-w { display: inline-block; animation: rise-in 0.62s cubic-bezier(0.22, 0.9, 0.3, 1) calc(0.28s + var(--i) * 0.085s) backwards; }
+  /* После въезда по словам заголовок стоял бы неподвижно всю сцену. Волна
+     внимания идёт по словам дальше; она не двигает буквы, поэтому строка не
+     дёргается и не перевёрстывается. */
+  .st-w {
+    display: inline-block;
+    animation: rise-in 0.62s cubic-bezier(0.22, 0.9, 0.3, 1) calc(0.28s + var(--i) * 0.085s) backwards,
+      amb-wave 7.5s ease-in-out calc(2.2s + var(--i) * 0.42s) infinite;
+  }
   .st-rule {
     height: ${s(0.7)}px; width: ${ruleWidth}px; margin: ${s(2)}px ${layout.isNarrow || closing ? "auto" : "0"} ${s(2.6)}px;
     border-radius: ${s(0.4)}px;
@@ -766,6 +783,7 @@ function buildStatHighlight(ctx) {
       <svg class="sh-ring" width="${ringSize}" height="${ringSize}" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <circle cx="60" cy="60" r="52" fill="none" stroke="#152840" stroke-width="5"/>
         <circle class="sh-arc" cx="60" cy="60" r="52" fill="none" stroke="${THEME.accent}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${circumference}" transform="rotate(-90 60 60)"/>
+        <circle class="sh-spark" cx="60" cy="60" r="52" fill="none" stroke="#dffaf4" stroke-width="5" stroke-linecap="round" transform="rotate(-90 60 60)"/>
       </svg>
       <div class="sh-figure">
         ${counter.html}${number.unit ? `<span class="sh-unit">${escapeHtml(number.unit)}</span>` : ""}
@@ -783,6 +801,14 @@ function buildStatHighlight(ctx) {
   }
   .sh-ring { position: relative; display: block; animation: amb-breathe 10s ease-in-out 0s infinite; }
   .sh-arc { animation: sh-arc 1.6s cubic-bezier(0.16, 0.84, 0.24, 1) 0.55s backwards; }
+  /* Дуга дорисовывается за полторы секунды, и дальше кольцо стояло всю сцену.
+     По нему идёт короткий блик: он бежит по контуру, ничего не смещая, поэтому
+     геометрия кадра остаётся той же. */
+  .sh-spark {
+    stroke-dasharray: ${(Number(circumference) * 0.06).toFixed(1)} ${(Number(circumference) * 0.94).toFixed(1)};
+    opacity: 0.55;
+    animation: sh-spark 5.4s linear 2.1s infinite;
+  }
   /* Число и единица стоят колонкой внутри кольца: строкой единица уезжала к
      верхнему краю квадрата и ложилась поверх дуги. Вписанный в окружность
      квадрат — 0.707 диаметра, поэтому кегли считаются от него. */
@@ -799,7 +825,8 @@ function buildStatHighlight(ctx) {
   .sh-kicker { animation: rise-in 0.5s ease-out 1.2s backwards; }
   .sh-title { font-size: ${Math.round(ctx.heroFontSize * 0.9)}px; animation: rise-in 0.55s cubic-bezier(0.22, 0.9, 0.3, 1) 1.32s backwards; }
   .sh-caption { animation: rise-in 0.5s ease-out 1.5s backwards; }
-  @keyframes sh-arc { from { stroke-dashoffset: ${circumference}; } to { stroke-dashoffset: ${(Number(circumference) * 0.18).toFixed(1)}; } }${counter.css}`
+  @keyframes sh-arc { from { stroke-dashoffset: ${circumference}; } to { stroke-dashoffset: ${(Number(circumference) * 0.18).toFixed(1)}; } }
+  @keyframes sh-spark { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -${circumference}; } }${counter.css}`
   };
 }
 
@@ -925,6 +952,17 @@ function buildFlowSteps(ctx) {
 // quote — оформленная цитата.
 // ---------------------------------------------------------------------------
 
+
+// Слова цитаты нумеруются, чтобы волна внимания могла идти по ним со сдвигом
+// фазы. Пробел между span-ами обязателен: без него слова слипаются.
+function quoteWords(text) {
+  const words = String(text).split(/\s+/u).filter(Boolean);
+  if (!words.length) return escapeHtml(String(text));
+  return words
+    .map((word, index) => `<span class="qt-w" style="--i:${index}">${escapeHtml(word)}</span>`)
+    .join(" ");
+}
+
 function buildQuote(ctx) {
   const { layout, content, topic, s } = ctx;
   const quote = content.quote ?? { text: content.lead || content.title, source: "" };
@@ -934,7 +972,7 @@ function buildQuote(ctx) {
     stage: `<div class="qt-wrap">
       <div class="qt-glyph" aria-hidden="true">“</div>
       <div class="kicker qt-kicker">${escapeHtml(topic)}</div>
-      <blockquote class="qt-text">${escapeHtml(quote.text)}</blockquote>
+      <blockquote class="qt-text">${quoteWords(quote.text)}</blockquote>
       ${quote.source ? `<div class="qt-source">${escapeHtml(quote.source)}</div>` : ""}
     </div>`,
     css: `
@@ -963,7 +1001,10 @@ function buildQuote(ctx) {
     font-size: ${Math.round(ctx.heroFontSize * 0.36)}px; font-weight: 700; letter-spacing: 2px;
     animation: rise-in 0.5s ease-out 0.95s backwards;
   }
-  .qt-source::before { content: "— "; }`
+  .qt-source::before { content: "— "; }
+  /* Цитата въезжает целиком, а дальше по её словам идёт волна внимания: она
+     меняет только яркость, поэтому строки не перевёрстываются на каждом кадре. */
+  .qt-w { display: inline-block; animation: amb-wave 8.5s ease-in-out calc(1.6s + var(--i) * 0.34s) infinite; }`
   };
 }
 

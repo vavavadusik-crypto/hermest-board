@@ -238,10 +238,23 @@ function sequenceInput(frame) {
 
 // Секвенция кадров build-in играет целиком, затем финальный кадр клонируется
 // (tpad) до точной длительности сцены; trim держит таймлайн сетккалендарно.
-function sequenceHoldChain({ frameCount, sequenceFps, durationSeconds, durationArg, fps }) {
+// Сегмент сцены режется по КАДРАМ, а не по секундам, и пересобирает свои
+// таймстампы с нуля.
+//
+// Резать по времени оказалось небезопасно: `trim=duration` смотрит на PTS
+// входа, а они после `tpad` зависят от версии ffmpeg. На 8.0 всё сходилось, на
+// 6.1 из CI тот же граф отдавал 78.65 с вместо 121.73 — почти сорок секунд
+// исчезали молча. Раньше поток нормализовал `zoompan` (он пересобирал каждый
+// кадр), и, убрав его вместе с наездом, мы убрали и эту неявную страховку.
+//
+// `end_frame` считает кадры, `setpts` выдаёт ровную сетку от нуля — сегмент
+// длится ровно столько кадров, сколько заказано, на любой версии.
+function sequenceHoldChain({ frameCount, sequenceFps, durationSeconds, fps }) {
   const playedSeconds = frameCount / sequenceFps;
   const padSeconds = Math.max(0, durationSeconds - playedSeconds);
-  return `fps=${fps},tpad=stop_mode=clone:stop_duration=${padSeconds.toFixed(3)},trim=duration=${durationArg}`;
+  const endFrame = Math.max(Math.round(durationSeconds * fps), 1);
+  return `fps=${fps},tpad=stop_mode=clone:stop_duration=${padSeconds.toFixed(3)}`
+    + `,trim=end_frame=${endFrame},setpts=N/FRAME_RATE/TB`;
 }
 
 // Детерминированный Ken Burns: 4 фиксированных пресета дрейфа, выбираемые
@@ -337,7 +350,6 @@ export function buildComposedVideoRenderArgs({
           frameCount: sequence.frameCount,
           sequenceFps: sequence.sequenceFps,
           durationSeconds: frameDuration,
-          durationArg,
           fps
         })},setsar=1`;
       } else {
@@ -367,7 +379,6 @@ export function buildComposedVideoRenderArgs({
           frameCount: sequence.frameCount,
           sequenceFps: sequence.sequenceFps,
           durationSeconds: frameDuration,
-          durationArg,
           fps
         })},setsar=1`;
       } else {
@@ -387,7 +398,6 @@ export function buildComposedVideoRenderArgs({
         frameCount: sequence.frameCount,
         sequenceFps: sequence.sequenceFps,
         durationSeconds: frameDuration,
-        durationArg,
         fps
       });
       // Камера живёт в разметке сцены и рисуется в исходном разрешении.

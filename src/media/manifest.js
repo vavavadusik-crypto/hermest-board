@@ -554,10 +554,12 @@ const FILTER_SEGMENT_PATTERNS = Object.freeze([
     ":d=1:s=\\d+x\\d+:fps=\\d+," +
     "eq=brightness=-?\\d+(?:\\.\\d+)?:saturation=\\d+(?:\\.\\d+)?,setsar=1\\[b\\d+\\]$"
   ),
-  // Секвенция сцены: удержание последнего кадра и всё. Камера переехала в
-  // разметку, поэтому zoompan здесь больше не разрешён.
-  /^\[\d+:v\]fps=\d+,tpad=stop_mode=clone:stop_duration=\d+(?:\.\d{1,3})?,trim=duration=\d+(?:\.\d{1,3})?,setsar=1,format=yuv420p\[v\d+\]$/,
-  /^\[\d+:v\]fps=\d+,tpad=stop_mode=clone:stop_duration=\d+(?:\.\d{1,3})?,trim=duration=\d+(?:\.\d{1,3})?,setsar=1\[f\d+\]$/
+  // Секвенция сцены: удержание последнего кадра, обрезка ПО КАДРАМ и пересборка
+  // таймстампов. Камера переехала в разметку, поэтому zoompan здесь не разрешён,
+  // а обрезка по времени запрещена — она вела себя по-разному на разных версиях
+  // ffmpeg и молча теряла десятки секунд.
+  /^\[\d+:v\]fps=\d+,tpad=stop_mode=clone:stop_duration=\d+(?:\.\d{1,3})?,trim=end_frame=\d+,setpts=N\/FRAME_RATE\/TB,setsar=1,format=yuv420p\[v\d+\]$/,
+  /^\[\d+:v\]fps=\d+,tpad=stop_mode=clone:stop_duration=\d+(?:\.\d{1,3})?,trim=end_frame=\d+,setpts=N\/FRAME_RATE\/TB,setsar=1\[f\d+\]$/
 ]);
 const SCENE_SEGMENT_PATTERN_INDICES = Object.freeze([0, 1, 2, 3, 6, 7, 8]);
 

@@ -199,6 +199,14 @@ export function ambientCss(layout) {
   @keyframes amb-sway { 0%, 100% { transform: translate3d(-${driftX}px, 0, 0); } 50% { transform: translate3d(${driftX}px, ${driftY}px, 0); } }
   @keyframes amb-sheen { 0% { transform: translateX(-140%) skewX(-18deg); } 55%, 100% { transform: translateX(260%) skewX(-18deg); } }
   @keyframes amb-pulse { 0%, 100% { opacity: 0.32; } 50% { opacity: 0.85; } }
+  /* Волна внимания: акцент медленно бежит по ряду элементов, потому что фаза
+     сдвинута по --i. Трогает только яркость и свечение — геометрию не двигает.
+     Поэтому её можно поставить рядом с анимацией въезда, не отняв у той
+     transform, и она заведомо не выталкивает элемент за защитную зону. */
+  @keyframes amb-wave {
+    0%, 62%, 100% { filter: brightness(1); text-shadow: none; }
+    18% { filter: brightness(1.32); text-shadow: 0 0 ${scaled(layout, 1.2)}px rgba(125, 211, 252, 0.4); }
+  }
   .amb-float { animation: amb-float 9s ease-in-out calc(var(--i, 0) * -1.3s) infinite; }
   .amb-breathe { animation: amb-breathe 11s ease-in-out calc(var(--i, 0) * -1.7s) infinite; }
   .amb-sway { animation: amb-sway 16s ease-in-out calc(var(--i, 0) * -2.1s) infinite; }`;
