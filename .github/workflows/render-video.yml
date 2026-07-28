@@ -93,6 +93,9 @@ jobs:
           HERMEST_FAL_API_KEY: ${{ secrets.HERMEST_FAL_API_KEY }}
           HERMEST_ELEVENLABS_API_KEY: ${{ secrets.HERMEST_ELEVENLABS_API_KEY }}
           HERMEST_SCENE_BUILD_FRAME_LIMIT: ${{ inputs.frame_limit }}
+          # Без этого рендер уносит каталог прогона с собой, и разбирать
+          # падение оказывается не по чему: `find` ниже находил пустоту.
+          HERMEST_KEEP_FAILED_RUN: "1"
         run: |
           set -euo pipefail
           # Место на диске — часть картины: секвенция кадров на 60 fps весит
@@ -115,6 +118,20 @@ jobs:
               [ -f "$file" ] || continue
               echo "--- $file: $(grep -c ' --> ' "$file") реплик, последняя метка:"
               grep ' --> ' "$file" | tail -1
+            done
+            # Главный вопрос при расхождении длительности: раскадровка и голос
+            # говорят об одном и том же ролике? Сумма сцен и число сцен отвечают
+            # на него прямо, без догадок по итоговому числу.
+            for file in "$output"/**/storyboard.json "$output"/storyboard.json; do
+              [ -f "$file" ] || continue
+              echo "--- $file"
+              node -e '
+                const board = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+                const scenes = board.scenes ?? [];
+                const totalMs = scenes.reduce((sum, scene) => sum + (scene.durationMs ?? 0), 0);
+                console.log(`сцен: ${scenes.length}, сумма длительностей: ${(totalMs / 1000).toFixed(3)} с`);
+                console.log(scenes.map((scene, index) => `  ${index + 1}. ${((scene.durationMs ?? 0) / 1000).toFixed(3)} с — ${scene.archetype ?? "?"}`).join("\n"));
+              ' "$file" || true
             done
             echo "::endgroup::"
           }

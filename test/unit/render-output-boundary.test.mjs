@@ -6,7 +6,8 @@ import test from "node:test";
 
 import {
   assertAllowedOutputDirectory,
-  assertEmptyOutputDirectory
+  assertEmptyOutputDirectory,
+  keepsFailedRunDir
 } from "../../src/media/render-project.js";
 
 test("render output must be a child of an explicit allowed root", () => {
@@ -32,6 +33,16 @@ test("render output must be a child of an explicit allowed root", () => {
     assertAllowedOutputDirectory("/tmp", allowedRoots),
     "/tmp"
   );
+});
+
+test("a failed run is only kept when diagnostics are asked for explicitly", () => {
+  assert.equal(keepsFailedRunDir({}), false);
+  assert.equal(keepsFailedRunDir({ HERMEST_KEEP_FAILED_RUN: "" }), false);
+  assert.equal(keepsFailedRunDir({ HERMEST_KEEP_FAILED_RUN: "0" }), false);
+  assert.equal(keepsFailedRunDir({ HERMEST_KEEP_FAILED_RUN: "false" }), false);
+  assert.equal(keepsFailedRunDir({ HERMEST_KEEP_FAILED_RUN: "1" }), true);
+  assert.equal(keepsFailedRunDir({ HERMEST_KEEP_FAILED_RUN: " TRUE " }), true);
+  assert.equal(keepsFailedRunDir({ HERMEST_KEEP_FAILED_RUN: "yes" }), true);
 });
 
 test("render refuses to overwrite a non-empty output directory", async () => {

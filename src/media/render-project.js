@@ -41,6 +41,13 @@ import { createCachedImageAdapter } from "./asset-cache.js";
 import { createBrollProviderRegistry, STILL_IMAGE_PROVIDER_KINDS } from "./broll-providers.js";
 
 const DEFAULT_STYLE_PRESET = "cinematic dark tech aesthetic, deep blue and teal palette, volumetric light, high detail, no text, no watermark";
+
+// Диагностический режим: включается только явным «1»/«true», чтобы случайно
+// выставленная пустая переменная не начала копить каталоги упавших прогонов.
+export function keepsFailedRunDir(env = {}) {
+  const value = String(env.HERMEST_KEEP_FAILED_RUN ?? "").trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+}
 const MAX_GENERATED_BACKGROUNDS = 8;
 import { loadMusicLibrary, selectMusicTrack } from "./music-library.js";
 import { assertVideoProbe } from "./ffprobe.js";
@@ -608,7 +615,13 @@ export async function renderProject({
       durationPlan
     };
   } finally {
-    if (!completed) await rm(runDir, { recursive: true, force: true });
+    // Неудачный прогон по умолчанию не оставляет мусора под именем готового
+    // артефакта. Но при разборе полёта это же правило стирает единственные
+    // улики — частичный MP4, раскадровку, субтитры, — и причина падения
+    // становится невыводимой. Флаг оставляет каталог ровно на такой случай.
+    if (!completed && !keepsFailedRunDir(process.env)) {
+      await rm(runDir, { recursive: true, force: true });
+    }
   }
 }
 
