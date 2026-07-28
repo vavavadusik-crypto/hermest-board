@@ -34,7 +34,7 @@ import {
   assertSafeGeneratedPath
 } from "./ffmpeg-args.js";
 import { readPngHeader } from "./png-header.js";
-import { composeSceneFrames, describeSceneComposerAvailability } from "./scene-frames.js";
+import { assertSequenceComplete, composeSceneFrames, describeSceneComposerAvailability } from "./scene-frames.js";
 import { createPexelsBrollAdapter, describeBrollAvailability } from "./broll-source.js";
 import { hasKeyedImageProvider } from "./image-source.js";
 import { createCachedImageAdapter } from "./asset-cache.js";
@@ -398,6 +398,19 @@ export async function renderProject({
             }
           });
         }
+      }
+      // Секвенции проверяются второй раз — уже перед самой сборкой, а не только
+      // сразу после съёмки. Между этими двумя моментами кадр может исчезнуть, а
+      // цена дырки несоразмерна: image2 доходит до пропущенного индекса и молча
+      // заканчивает сцену. Проверено: в ряду из 120 кадров дырка на 50-м даёт
+      // ffmpeg ровно 50 кадров, а битый (обрезанный) кадр — 119, то есть теряет
+      // только себя. Молчаливо короткий ролик — как раз про дырку.
+      for (const frame of composition.frames) {
+        if (frame.sequencePattern === undefined) continue;
+        await assertSequenceComplete({
+          pattern: frame.sequencePattern,
+          frameCount: frame.sequenceFrameCount
+        });
       }
       renderCommand = {
         id: "render-composed",

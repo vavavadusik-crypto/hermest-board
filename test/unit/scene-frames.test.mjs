@@ -8,6 +8,11 @@ import test from "node:test";
 import { composeSceneFrames, describeSceneComposerAvailability } from "../../src/media/scene-frames.js";
 
 const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+// Хвост IEND обязателен: съёмка принимает только дописанный до конца кадр.
+// Двойник, у которого хвоста нет, — это обрезанный скриншот, а такие мы теперь
+// не пишем на диск, потому что ffmpeg на них спотыкается.
+const PNG_TRAILER = Buffer.from([0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]);
+const wholePng = (...parts) => Buffer.concat([PNG_HEADER, ...parts, PNG_TRAILER]);
 
 const storyboard = Object.freeze({
   scenes: [
@@ -18,7 +23,7 @@ const storyboard = Object.freeze({
 const recipe = Object.freeze({ width: 1920, height: 1080, fps: 30 });
 
 // Двойник CDP-браузера: один экземпляр на весь прогон, как и настоящий.
-function createFakeBrowser({ frameBytes = () => PNG_HEADER, workerCount = 1 } = {}) {
+function createFakeBrowser({ frameBytes = () => wholePng(), workerCount = 1 } = {}) {
   const calls = { scenes: [], frames: [], workers: [], closed: 0 };
   return {
     calls,
@@ -137,7 +142,7 @@ test("composeSceneFrames spreads a scene sequence across the tab pool without ga
     // Каждый кадр отдаёт уникальные байты, чтобы поймать перепутанные файлы.
     const browser = createFakeBrowser({
       workerCount: 3,
-      frameBytes: frameTimeMs => Buffer.concat([PNG_HEADER, Buffer.from(`t${frameTimeMs}`)])
+      frameBytes: frameTimeMs => wholePng(Buffer.from(`t${frameTimeMs}`))
     });
     const result = await composeSceneFrames({
       storyboard: { scenes: [{ title: "Одна", narration: "Текст.", durationMs: 5000 }] },
@@ -155,7 +160,7 @@ test("composeSceneFrames spreads a scene sequence across the tab pool without ga
     for (let frameIndex = 0; frameIndex < 7; frameIndex += 1) {
       const frameTimeMs = Math.round((frameIndex * 1000) / 30);
       const written = await readFile(path.join(runDir, `scene-001-f${String(frameIndex).padStart(4, "0")}.png`));
-      assert.equal(written.subarray(PNG_HEADER.length).toString(), `t${frameTimeMs}`, "frame index maps to its file");
+      assert.equal(written.subarray(PNG_HEADER.length, written.length - PNG_TRAILER.length).toString(), `t${frameTimeMs}`, "frame index maps to its file");
     }
     const lastBytes = await readFile(path.join(runDir, "scene-001-f0006.png"));
     assert.equal(
@@ -200,7 +205,7 @@ test("composeSceneFrames fails closed on non-png capture output and still closes
         seed: 1,
         browserFactory: async () => browser
       }),
-      /not a valid PNG/
+      /incomplete PNG/
     );
     assert.equal(browser.calls.closed, 1, "browser must not leak when a capture is rejected");
     const written = await readdir(runDir);
@@ -216,7 +221,7 @@ test("composeSceneFrames closes the browser when a capture throws", async () => 
     const browser = createFakeBrowser({
       frameBytes: (_frameTimeMs, index) => {
         if (index === 2) throw new Error("chrome CDP command Page.captureScreenshot timed out after 60000ms");
-        return PNG_HEADER;
+        return wholePng();
       }
     });
     await assert.rejects(
@@ -243,7 +248,7 @@ test("composeSceneFrames aborts mid-sequence and closes the browser", async () =
     const browser = createFakeBrowser({
       frameBytes: (_frameTimeMs, index) => {
         if (index === 1) controller.abort();
-        return PNG_HEADER;
+        return wholePng();
       }
     });
     await assert.rejects(

@@ -136,6 +136,22 @@ jobs:
             echo "всего файлов: $(wc -l < /tmp/render-wreckage.txt)"
             echo "--- кадров на сцену (сколько PNG реально лежит на диске)"
             sed 's#.*/##' /tmp/render-wreckage.txt | grep -oE '^scene-[0-9]+' | sort | uniq -c
+            # А теперь тот же вопрос, но заданный самому ffmpeg: сколько кадров
+            # он способен прочитать из секвенции. Числа расходятся ровно тогда,
+            # когда image2 упирается в битый кадр и молча заканчивает сцену —
+            # из-за чего сегмент выходит короче заказанного, а весь ролик
+            # недосчитывается десятков секунд. Файлы на диске об этом не говорят
+            # ничего: они есть и они ненулевые.
+            echo "--- кадров на сцену (сколько из них читает ffmpeg)"
+            for pattern in $(sed 's#.*/##' /tmp/render-wreckage.txt | grep -oE '^scene-[0-9]+' | sort -u); do
+              dir="$(grep -m1 "/${pattern}-f" /tmp/render-wreckage.txt | cut -f2 | xargs dirname)"
+              read_frames="$(/usr/bin/ffmpeg -v error -f image2 -framerate 60 \
+                -i "${dir}/${pattern}-f%04d.png" -f null - 2>&1 >/dev/null; \
+                /usr/bin/ffprobe -v error -f image2 -framerate 60 -count_frames \
+                -show_entries stream=nb_read_frames -of default=nw=1:nk=1 \
+                "${dir}/${pattern}-f%04d.png")"
+              echo "  ${pattern}: ffmpeg читает ${read_frames}"
+            done
             for file in "$output"/**/*.mp4 "$output"/*.mp4; do
               [ -f "$file" ] || continue
               echo "--- $file"

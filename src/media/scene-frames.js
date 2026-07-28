@@ -4,6 +4,7 @@ import { constants as fsConstants } from "node:fs";
 import path from "node:path";
 
 import { openSceneBrowser } from "./chrome-cdp.js";
+import { isCompletePng } from "./png-header.js";
 import { assertSafeGeneratedPath } from "./ffmpeg-args.js";
 import { planSceneArchetypes } from "./scene-content.js";
 import { buildSceneMarkup } from "./scene-markup.js";
@@ -180,10 +181,12 @@ export async function composeSceneFrames({
             if (frameIndex >= frameCount || sequenceFailed) return;
             signal?.throwIfAborted();
             const frameFile = path.join(safeRunDir, `scene-${sceneTag}-f${String(frameIndex).padStart(4, "0")}.png`);
-            const frameBytes = await browser.captureFrame(Math.round((frameIndex * 1000) / fps), workerIndex);
-            if (!Buffer.isBuffer(frameBytes) || frameBytes.length === 0 || !isPng(frameBytes)) {
-              throw new TypeError(`Scene frame ${sceneTag} is not a valid PNG screenshot`);
-            }
+            const frameBytes = await captureCompleteFrame({
+              browser,
+              timeMs: Math.round((frameIndex * 1000) / fps),
+              workerIndex,
+              label: `${sceneTag}-f${frameIndex}`
+            });
             await writeFile(frameFile, frameBytes, { flag: "wx", mode: PRIVATE_FILE_MODE });
             if (frameIndex === lastFrameIndex) lastFrameBytes = frameBytes;
           }
@@ -222,9 +225,24 @@ export async function composeSceneFrames({
   return { frames, commands, composer: "scene-markup@2" };
 }
 
-function isPng(bytes) {
-  return bytes.length > 8
-    && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+// Обрезанный скриншот — не повод хоронить весь рендер: на нагруженной машине
+// это разовая осечка, и повторный снимок того же виртуального времени обязан
+// дать тот же кадр (документ свежий, время фиксировано). Поэтому сначала
+// повтор, и только потом отказ — с точным именем кадра, а не «что-то пошло не
+// так на сборке».
+const FRAME_CAPTURE_ATTEMPTS = 3;
+
+export async function captureCompleteFrame({ browser, timeMs, workerIndex, label }) {
+  let lastSize = null;
+  for (let attempt = 1; attempt <= FRAME_CAPTURE_ATTEMPTS; attempt += 1) {
+    const frameBytes = await browser.captureFrame(timeMs, workerIndex);
+    if (isCompletePng(frameBytes)) return frameBytes;
+    lastSize = Buffer.isBuffer(frameBytes) ? frameBytes.length : null;
+  }
+  throw new TypeError(
+    `Scene frame ${label} came back as an incomplete PNG after ${FRAME_CAPTURE_ATTEMPTS} attempts`
+    + `${lastSize === null ? "" : ` (last attempt: ${lastSize} bytes without the IEND trailer)`}`
+  );
 }
 
 function positiveInteger(value, name) {
