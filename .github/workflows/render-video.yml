@@ -37,6 +37,16 @@ on:
         description: "Cap captured frames per scene (empty = full motion; use a small number to test the graph without the volume)"
         required: false
         default: ""
+      narration_provider:
+        description: "Override the narration provider (empty = as written in the project)"
+        required: false
+        default: ""
+        type: choice
+        options: ["", piper, elevenlabs, ffmpeg-flite]
+      narration_voice:
+        description: "Override the voice id (ElevenLabs id or Piper voice name; required when switching to elevenlabs)"
+        required: false
+        default: ""
 
 jobs:
   render:
@@ -93,6 +103,8 @@ jobs:
           HERMEST_FAL_API_KEY: ${{ secrets.HERMEST_FAL_API_KEY }}
           HERMEST_ELEVENLABS_API_KEY: ${{ secrets.HERMEST_ELEVENLABS_API_KEY }}
           HERMEST_SCENE_BUILD_FRAME_LIMIT: ${{ inputs.frame_limit }}
+          NARRATION_PROVIDER: ${{ inputs.narration_provider }}
+          NARRATION_VOICE: ${{ inputs.narration_voice }}
           # Без этого рендер уносит каталог прогона с собой, и разбирать
           # падение оказывается не по чему: `find` ниже находил пустоту.
           HERMEST_KEEP_FAILED_RUN: "1"
@@ -150,10 +162,24 @@ jobs:
             echo "::endgroup::"
           }
           trap on_failure ERR
+          # Переозвучка тем же проектом: голос задаётся прогоном, а не правкой
+          # файла в репозитории. Пустые значения не превращаются в пустые
+          # аргументы — CLI отверг бы их как «голос без имени».
+          # Значения приходят через окружение, а не подстановкой в текст
+          # команды: подставленный ${{ }} — это чужая строка внутри моего
+          # скрипта, и кавычки в ней ломают разбор.
+          narration=()
+          if [ -n "$NARRATION_PROVIDER" ]; then
+            narration+=(--narration-provider "$NARRATION_PROVIDER")
+          fi
+          if [ -n "$NARRATION_VOICE" ]; then
+            narration+=(--voice "$NARRATION_VOICE")
+          fi
           npm run --silent render:project -- \
             --input "${{ inputs.project }}" \
             --output "$output" \
-            --platform "${{ inputs.platform }}" | tee /tmp/render-result.json
+            --platform "${{ inputs.platform }}" \
+            "${narration[@]}" | tee /tmp/render-result.json
           video="$(node -p 'JSON.parse(require("fs").readFileSync("/tmp/render-result.json","utf8")).videoFile')"
           echo "video=$video" >> "$GITHUB_OUTPUT"
           echo "outputDir=$(dirname "$video")" >> "$GITHUB_OUTPUT"

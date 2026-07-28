@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 
 import { preflightBoardInput, renderProject } from "../src/media/render-project.js";
+import { applyNarrationOverrides } from "../src/media/narration.js";
 
 const options = parseArgs(process.argv.slice(2));
 if (!options.input) {
   process.stderr.write(
-    "Usage: npm run render:project -- --input /safe/project.json [--output /tmp/existing-output] [--platform youtube_video]\n"
+    "Usage: npm run render:project -- --input /safe/project.json [--output /tmp/existing-output]"
+      + " [--platform youtube_video] [--narration-provider piper|elevenlabs|ffmpeg-flite] [--voice <id>]\n"
   );
   process.exitCode = 2;
 } else {
@@ -13,7 +15,7 @@ if (!options.input) {
     const project = await preflightBoardInput(options.input);
     const output = options.output || "/tmp";
     const result = await renderProject({
-      project,
+      project: withNarrationOverrides(project, options),
       outputDir: output,
       platform: options.platform || "youtube_video"
     });
@@ -33,11 +35,18 @@ if (!options.input) {
   }
 }
 
+function withNarrationOverrides(project, options) {
+  return applyNarrationOverrides(project, {
+    provider: options["narration-provider"],
+    voice: options.voice
+  });
+}
+
 function parseArgs(args) {
   const options = {};
   for (let index = 0; index < args.length; index += 1) {
     const key = args[index];
-    if (!["--input", "--output", "--platform"].includes(key)) {
+    if (!["--input", "--output", "--platform", "--narration-provider", "--voice"].includes(key)) {
       throw new TypeError(`Unknown argument: ${key}`);
     }
     const value = args[index + 1];
