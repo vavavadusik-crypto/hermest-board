@@ -38,11 +38,13 @@ on:
         required: false
         default: ""
       narration_provider:
-        description: "Override the narration provider (empty = as written in the project)"
+        # Не choice: пустой вариант в списке — это «не переопределять», а
+        # пустая строка отдельным пунктом меню читается как настройка.
+        # Допустимые значения всё равно проверяет CLI, и он же объясняет,
+        # какие бывают.
+        description: "Override the narration provider: piper | elevenlabs | ffmpeg-flite (empty = as written in the project)"
         required: false
         default: ""
-        type: choice
-        options: ["", piper, elevenlabs, ffmpeg-flite]
       narration_voice:
         description: "Override the voice id (ElevenLabs id or Piper voice name; required when switching to elevenlabs)"
         required: false
@@ -165,8 +167,8 @@ jobs:
           # Переозвучка тем же проектом: голос задаётся прогоном, а не правкой
           # файла в репозитории. Пустые значения не превращаются в пустые
           # аргументы — CLI отверг бы их как «голос без имени».
-          # Значения приходят через окружение, а не подстановкой в текст
-          # команды: подставленный ${{ }} — это чужая строка внутри моего
+          # Значения приходят через окружение, а не подстановкой выражения в
+          # текст команды: подставленный ввод — это чужая строка внутри моего
           # скрипта, и кавычки в ней ломают разбор.
           narration=()
           if [ -n "$NARRATION_PROVIDER" ]; then
