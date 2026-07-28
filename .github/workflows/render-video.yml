@@ -110,8 +110,18 @@ jobs:
           # Упавший рендер обязан оставить улики. Иначе единственное, что видно,
           # это итоговое число — а из него причину не выводят.
           on_failure() {
+            # Ловушка живёт под `set -euo pipefail`, и `sort | head` в ней
+            # убивает сама себя: head закрывает трубу, sort падает на SIGPIPE,
+            # функция обрывается на первой же строке. Именно это и случилось —
+            # улики не напечатались ни разу. Внутри разбора полёта строгий
+            # режим не нужен: здесь важно досмотреть всё до конца.
+            set +e +o pipefail
             echo "::group::Что осталось от упавшего рендера"
-            find "$output" -maxdepth 2 -type f -printf '%s\t%p\n' | sort -rn | head -40
+            find "$output" -maxdepth 2 -type f -printf '%s\t%p\n' > /tmp/render-wreckage.txt
+            sort -rn /tmp/render-wreckage.txt | head -40
+            echo "всего файлов: $(wc -l < /tmp/render-wreckage.txt)"
+            echo "--- кадров на сцену (сколько PNG реально лежит на диске)"
+            sed 's#.*/##' /tmp/render-wreckage.txt | grep -oE '^scene-[0-9]+' | sort | uniq -c
             for file in "$output"/**/*.mp4 "$output"/*.mp4; do
               [ -f "$file" ] || continue
               echo "--- $file"
