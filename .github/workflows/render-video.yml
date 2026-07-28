@@ -103,6 +103,10 @@ jobs:
           # нехватка места.
           df -h /tmp / | tee -a "$GITHUB_STEP_SUMMARY"
           output="$(mktemp -d /tmp/hermest-render-XXXXXX)"
+          # Каталог объявляется сразу, а не после успеха: иначе шаг выгрузки
+          # улик не знает, где они лежат, ровно в том случае, ради которого он и
+          # существует.
+          echo "workDir=$output" >> "$GITHUB_OUTPUT"
           # Упавший рендер обязан оставить улики. Иначе единственное, что видно,
           # это итоговое число — а из него причину не выводят.
           on_failure() {
@@ -188,6 +192,24 @@ jobs:
           node scripts/check-visual-coverage.mjs "$manifest" \
             --min-live '${{ inputs.min_live_visuals }}' \
             --min-footage '${{ inputs.min_stock_footage }}' | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the wreckage of a failed render
+        # Когда рендер падает на внутреннем гейте, готового артефакта нет, и
+        # шаг выше не срабатывает — а разбирать надо именно этот случай.
+        # Частичный MP4 отвечает на вопрос, которого нет в логе: какие сцены
+        # вышли короче заказанного и на сколько.
+        if: failure() && steps.render.outputs.workDir != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermest-failed-render-${{ inputs.platform }}-${{ github.run_id }}
+          # PNG-секвенции сюда не входят: это гигабайты, а нужен смонтированный
+          # результат и то, из чего он собирался.
+          path: |
+            ${{ steps.render.outputs.workDir }}/**/*.mp4
+            ${{ steps.render.outputs.workDir }}/**/*.srt
+            ${{ steps.render.outputs.workDir }}/**/*.json
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: Upload rendered video and sidecars
         # Ролик нужен и когда он не попал в целевую длительность: по нему
