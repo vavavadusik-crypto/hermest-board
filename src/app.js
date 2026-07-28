@@ -309,7 +309,11 @@ let voicePreviewPlayer = null;
         schemaVersion: CONTENT_VERSION,
         title: "Hermest: оболочка над ИИ-агентами",
         view: { x: -120, y: -120, zoom: 1 },
-        brief: { language: "ru", voice: "", narrationProvider: "", music: "", generateVisuals: false, brollMode: "auto" },
+        // Фоны сцен включены с самого начала: Pollinations бесплатен и не просит
+        // ключа, а «Собрать видео» без них отдаёт тёмную подложку вместо
+        // обещанной интерфейсом картинки. Демо-доска остаётся на false осознанно
+        // (см. demo-project.test.mjs) — пример обязан открываться офлайн.
+        brief: { language: "ru", voice: "", narrationProvider: "", music: "", generateVisuals: true, brollMode: "auto" },
         plan: [
           "1. Объяснить проблему: один чат быстро превращается в хаос, если в нем смешаны роли, память, инструменты и задачи.",
           "2. Показать Hermest как оболочку: один управляемый слой над агентами, файлами, API, памятью и логами.",

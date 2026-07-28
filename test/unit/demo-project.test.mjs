@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { buildDemoProject } from "../../src/ui/demo-project.js";
@@ -44,6 +45,19 @@ test("demo contains no secrets or credential hints", () => {
   const doc = buildDemoProject({ visual: () => "" });
   const serialized = JSON.stringify(doc);
   assert.doesNotMatch(serialized, SECRET_HINTS);
+});
+
+// Две доски — два разных обещания, и расходятся они намеренно. Демо обязано
+// открываться офлайн, поэтому у него фоны выключены (проверка выше). Доска,
+// которую человек заводит сам, наоборот, должна сразу показывать продукт таким,
+// каким его обещает интерфейс, — иначе «Собрать видео» отдаёт тёмную подложку.
+// Тест текстовый, потому что app.js — браузерный модуль и в Node не грузится.
+test("a board a person starts themselves has scene backgrounds on", () => {
+  const app = readFileSync(new URL("../../src/app.js", import.meta.url), "utf8");
+  const starter = app.slice(app.indexOf("function starterState()"));
+  const brief = starter.slice(starter.indexOf("brief: {"), starter.indexOf("plan: ["));
+  assert.match(brief, /generateVisuals:\s*true/, "новая доска стартует с включёнными фонами сцен");
+  assert.match(brief, /brollMode:\s*"auto"/, "и берёт бесплатные источники раньше платных");
 });
 
 test("demo build is deterministic (same output every call)", () => {
