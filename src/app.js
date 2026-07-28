@@ -28,6 +28,7 @@ import {
   formatDurationLabel,
   normalizeTargetDurationSeconds
 } from "./domain/duration-plan.js";
+import { createWireRenderer } from "./ui/wire-renderer.js";
 
     const STORAGE_KEY = "hermest-board:v1";
     const AI_SETTINGS_LOCAL_KEY = "hermest-board:ai-settings:v1";
@@ -302,7 +303,12 @@ let voicePreviewPlayer = null;
       try { localStorage.setItem(ACTIVE_JOBS_KEY, JSON.stringify(next)); } catch (_) {}
     }
     let drag = null;
-    let raf = null;
+    const cardElements = new Map();
+    const wireRenderer = createWireRenderer({
+      wire,
+      boardWidth: BOARD_WIDTH,
+      boardHeight: BOARD_HEIGHT
+    });
 
     function starterState() {
       return {
@@ -695,6 +701,7 @@ let voicePreviewPlayer = null;
       syncChecks(platformChecks, state.publish?.platforms || []);
       syncChecks(toolChecks, state.publish?.tools || []);
       board.querySelectorAll(".card").forEach(el => el.remove());
+      cardElements.clear();
       for (const card of state.cards) {
         board.appendChild(createCard(card));
       }
@@ -709,13 +716,10 @@ let voicePreviewPlayer = null;
       const el = document.createElement("article");
       el.className = "card";
       el.dataset.id = card.id;
-      el.style.left = `${card.x}px`;
-      el.style.top = `${card.y}px`;
-      el.style.width = `${card.w}px`;
-      el.style.height = `${card.h}px`;
+      renderCardGeometry(el, card);
       el.style.zIndex = card.z || 1;
-      el.style.transform = `rotate(${card.rot || 0}deg)`;
       el.style.setProperty("--card-accent", card.color || "#5eead4");
+      cardElements.set(card.id, el);
       el.innerHTML = `
         <div class="card-head">
           <div class="card-kicker" contenteditable="true" spellcheck="false"></div>
@@ -783,6 +787,15 @@ let voicePreviewPlayer = null;
       });
 
       return el;
+    }
+
+    function renderCardGeometry(el, card) {
+      const width = `${card.w}px`;
+      const height = `${card.h}px`;
+      const transform = `translate3d(${card.x}px, ${card.y}px, 0) rotate(${card.rot || 0}deg)`;
+      if (el.style.width !== width) el.style.width = width;
+      if (el.style.height !== height) el.style.height = height;
+      if (el.style.transform !== transform) el.style.transform = transform;
     }
 
     function startCardDrag(event, id) {
@@ -866,14 +879,10 @@ let voicePreviewPlayer = null;
     });
 
     function scheduleRenderCard(card) {
-      const el = board.querySelector(`.card[data-id="${card.id}"]`);
+      const el = cardElements.get(card.id);
       if (!el) return;
-      el.style.left = `${card.x}px`;
-      el.style.top = `${card.y}px`;
-      el.style.width = `${card.w}px`;
-      el.style.height = `${card.h}px`;
-      el.style.transform = `rotate(${card.rot || 0}deg)`;
-      drawLinks();
+      renderCardGeometry(el, card);
+      drawLinks(card.id);
     }
 
     boardWrap.addEventListener("wheel", event => {
@@ -898,22 +907,11 @@ let voicePreviewPlayer = null;
       zoomValue.textContent = `${Math.round(state.view.zoom * 100)}%`;
     }
 
-    function drawLinks() {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        wire.setAttribute("viewBox", `0 0 ${BOARD_WIDTH} ${BOARD_HEIGHT}`);
-        wire.innerHTML = "";
-        for (const [a, b] of state.links) {
-          const ca = cardById(a);
-          const cb = cardById(b);
-          if (!ca || !cb) continue;
-          const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-          line.setAttribute("x1", ca.x + ca.w / 2);
-          line.setAttribute("y1", ca.y + ca.h / 2);
-          line.setAttribute("x2", cb.x + cb.w / 2);
-          line.setAttribute("y2", cb.y + cb.h / 2);
-          wire.appendChild(line);
-        }
+    function drawLinks(changedCardId = null) {
+      wireRenderer.drawLinks({
+        nextLinks: state.links,
+        nextCards: state.cards,
+        changedCardId
       });
     }
 
@@ -921,7 +919,7 @@ let voicePreviewPlayer = null;
       const card = cardById(id);
       if (!card) return;
       card.z = ++zCounter;
-      const el = board.querySelector(`.card[data-id="${id}"]`);
+      const el = cardElements.get(id);
       if (el) el.style.zIndex = card.z;
       saveState();
     }

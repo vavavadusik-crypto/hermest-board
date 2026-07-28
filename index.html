@@ -678,6 +678,7 @@
       width: var(--board-w);
       height: var(--board-h);
       transform-origin: 0 0;
+      will-change: transform;
     }
 
     body.touring .board {
@@ -686,6 +687,8 @@
 
     .card {
       position: absolute;
+      left: 0;
+      top: 0;
       width: 320px;
       min-width: 220px;
       min-height: 230px;
