@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { access, rm, writeFile } from "node:fs/promises";
+import { access, rm, stat, writeFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import path from "node:path";
 
@@ -36,6 +36,45 @@ function resolveChromeBinaryPathFromEnv(env) {
     return assertSafeGeneratedPath(configured);
   }
   return "/usr/bin/google-chrome";
+}
+
+/**
+ * Секвенция, которую сцена обещает манифесту, обязана существовать на диске
+ * целиком и подряд.
+ *
+ * Иначе потеря кадров молчалива по построению: `image2` читает файлы подряд и
+ * останавливается на первой дырке, `tpad` дотягивает сегмент только на ту
+ * недостачу, которая заявлена в `sequenceFrameCount`, а ffmpeg завершается
+ * кодом 0 и без единого предупреждения. Замерено на копии реального монтажа
+ * (ffmpeg 6.1.1, десять сцен, 7304 кадра): убрали 663 кадра в середине второй
+ * сцены — получили 110.683 с вместо 121.733 и ни одной строки в stderr.
+ *
+ * Проверка превращает «ролик почему-то короче» в «сцена N недосчиталась кадра
+ * K» — то есть в факт, с которым можно работать.
+ */
+export async function assertSequenceComplete({ pattern, frameCount, statImpl = stat }) {
+  const missing = [];
+  const empty = [];
+  for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+    const file = pattern.replace("%04d", String(frameIndex).padStart(4, "0"));
+    try {
+      const stats = await statImpl(file);
+      if (!stats.size) empty.push(frameIndex);
+    } catch {
+      missing.push(frameIndex);
+    }
+    // Список нужен для диагноза, а не для полноты: первых нескольких индексов
+    // хватает, чтобы понять, где рвётся, и не раздувать сообщение об ошибке.
+    if (missing.length + empty.length >= 5) break;
+  }
+  if (!missing.length && !empty.length) return;
+  const details = [
+    missing.length ? `нет кадров: ${missing.join(", ")}` : "",
+    empty.length ? `пустые кадры: ${empty.join(", ")}` : ""
+  ].filter(Boolean).join("; ");
+  throw new Error(
+    `Scene frame sequence ${pattern} is incomplete (${frameCount} expected) — ${details}`
+  );
 }
 
 function resolveBuildFrameLimit(env, explicitLimit) {
@@ -154,9 +193,12 @@ export async function composeSceneFrames({
         }
       })()));
 
+      const sequencePattern = path.join(safeRunDir, `scene-${sceneTag}-f%04d.png`);
+      await assertSequenceComplete({ pattern: sequencePattern, frameCount });
+
       frames.push({
         path: lastFrameFile,
-        sequencePattern: path.join(safeRunDir, `scene-${sceneTag}-f%04d.png`),
+        sequencePattern,
         sequenceFrameCount: frameCount,
         sequenceFps: fps,
         durationSeconds: sceneSeconds,
