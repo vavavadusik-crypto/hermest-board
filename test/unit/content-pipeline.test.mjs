@@ -146,3 +146,19 @@ test("per-scene reconciliation fails closed on mismatched or invalid measurement
   assert.throws(() => reconcileStoryboardWithSceneDurations(storyboard, [Number.NaN]), TypeError);
   assert.throws(() => reconcileStoryboardWithSceneDurations({ scenes: [] }, []), TypeError);
 });
+
+test("legacy project without motion migrates to the existing depth/calm render profile", () => {
+  const legacyProject = {
+    schemaVersion: 4,
+    title: "Старый проект",
+    brief: { language: "ru", topic: "тема" },
+    cards: [{ id: "intro", x: 0, y: 0, title: "Вход", text: "Сцена без нового поля." }]
+  };
+  const storyboard = buildStoryboard(legacyProject);
+
+  assert.deepEqual(storyboard.motion, { depth: "depth", character: "calm" });
+  assert.deepEqual(
+    buildStoryboard({ ...legacyProject, brief: { ...legacyProject.brief, motion: { depth: "space", character: "lively" } } }).motion,
+    { depth: "space", character: "lively" }
+  );
+});

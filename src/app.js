@@ -29,6 +29,8 @@ import {
   normalizeTargetDurationSeconds
 } from "./domain/duration-plan.js";
 import { createWireRenderer } from "./ui/wire-renderer.js";
+import { buildSceneMarkup } from "./media/scene-markup.js";
+import { DEFAULT_SCENE_MOTION, normalizeSceneMotion } from "./domain/scene-motion-profile.js";
 
     const STORAGE_KEY = "hermest-board:v1";
     const AI_SETTINGS_LOCAL_KEY = "hermest-board:ai-settings:v1";
@@ -177,6 +179,9 @@ let voicePreviewPlayer = null;
     const musicBedSelect = document.getElementById("musicBed");
     const generateVisualsToggle = document.getElementById("generateVisualsToggle");
     const brollModeSelect = document.getElementById("brollMode");
+    const motionDepthGroup = document.getElementById("motionDepthGroup");
+    const motionCharacterGroup = document.getElementById("motionCharacterGroup");
+    const motionPreview = document.getElementById("motionPreview");
     // Держим в синхроне с VALID_BROLL_MODES в src/media/render-project.js
     const BROLL_MODES = ["auto", "free", "premium", "deterministic"];
     const narrationHint = document.getElementById("narrationHint");
@@ -319,7 +324,10 @@ let voicePreviewPlayer = null;
         // ключа, а «Собрать видео» без них отдаёт тёмную подложку вместо
         // обещанной интерфейсом картинки. Демо-доска остаётся на false осознанно
         // (см. demo-project.test.mjs) — пример обязан открываться офлайн.
-        brief: { language: "ru", voice: "", narrationProvider: "", music: "", generateVisuals: true, brollMode: "auto" },
+        brief: {
+          language: "ru", voice: "", narrationProvider: "", music: "", generateVisuals: true, brollMode: "auto",
+          motion: { ...DEFAULT_SCENE_MOTION }
+        },
         plan: [
           "1. Объяснить проблему: один чат быстро превращается в хаос, если в нем смешаны роли, память, инструменты и задачи.",
           "2. Показать Hermest как оболочку: один управляемый слой над агентами, файлами, API, памятью и логами.",
@@ -622,6 +630,10 @@ let voicePreviewPlayer = null;
       // мусор и выход за лимиты домена молча превращаются в «цель не задана».
       const targetDuration = safeTargetDuration(source.targetDurationSeconds)
         ?? safeTargetDuration(fallback.targetDurationSeconds);
+      // Для старого документа source.motion отсутствует: именно здесь он
+      // получает безопасный прежний режим depth/calm и сохраняется при первом
+      // автосохранении / экспорте JSON.
+      const motion = normalizeSceneMotion(source.motion ?? fallback.motion);
       return {
         language,
         voice,
@@ -629,6 +641,7 @@ let voicePreviewPlayer = null;
         music,
         generateVisuals,
         brollMode,
+        motion,
         ...(targetDuration === null ? {} : { targetDurationSeconds: targetDuration })
       };
     }
@@ -1943,6 +1956,107 @@ let voicePreviewPlayer = null;
       if (brollModeSelect) {
         brollModeSelect.value = BROLL_MODES.includes(state.brief.brollMode) ? state.brief.brollMode : "auto";
       }
+      syncMotionControls();
+    }
+
+    function syncMotionControls() {
+      const motion = normalizeSceneMotion(state.brief?.motion);
+      state.brief.motion = motion;
+      syncMotionRadioGroup(motionDepthGroup, "depth", motion.depth);
+      syncMotionRadioGroup(motionCharacterGroup, "character", motion.character);
+      renderMotionPreview();
+    }
+
+    function syncMotionRadioGroup(group, field, value) {
+      if (!group) return;
+      for (const radio of group.querySelectorAll('[role="radio"]')) {
+        const checked = radio.dataset[`motion${field[0].toUpperCase()}${field.slice(1)}`] === value;
+        radio.setAttribute("aria-checked", String(checked));
+        radio.tabIndex = checked ? 0 : -1;
+      }
+    }
+
+    function setMotionChoice(field, value) {
+      state.brief = normalizeBrief(
+        { ...state.brief, motion: { ...state.brief.motion, [field]: value } },
+        state.brief
+      );
+      syncMotionControls();
+      saveState(field === "depth" ? "Глубина движения сохранена" : "Характер движения сохранён");
+    }
+
+    function wireMotionRadioGroup(group, field) {
+      if (!group) return;
+      const radios = () => Array.from(group.querySelectorAll('[role="radio"]'));
+      const dataKey = `motion${field[0].toUpperCase()}${field.slice(1)}`;
+      const activate = radio => {
+        const value = radio?.dataset?.[dataKey];
+        if (!value) return;
+        setMotionChoice(field, value);
+        radio.focus();
+      };
+      group.addEventListener("click", event => {
+        const radio = event.target.closest('[role="radio"]');
+        if (radio && group.contains(radio)) activate(radio);
+      });
+      group.addEventListener("keydown", event => {
+        const options = radios();
+        const current = event.target.closest('[role="radio"]');
+        if (!current || !options.includes(current)) return;
+        const direction = {
+          ArrowRight: 1,
+          ArrowDown: 1,
+          ArrowLeft: -1,
+          ArrowUp: -1
+        }[event.key];
+        let next = null;
+        if (direction) {
+          next = options[(options.indexOf(current) + direction + options.length) % options.length];
+        } else if (event.key === "Home") {
+          next = options[0];
+        } else if (event.key === "End") {
+          next = options.at(-1);
+        }
+        if (!next) return;
+        event.preventDefault();
+        activate(next);
+      });
+    }
+
+    function renderMotionPreview() {
+      if (!motionPreview) return;
+      const motion = normalizeSceneMotion(state.brief?.motion);
+      // Это не нарисованная для UI имитация: iframe получает ту же разметку,
+      // что и headless-композер, а значит и тот же buildCameraCss.
+      motionPreview.srcdoc = buildSceneMarkup({
+        scene: {
+          id: "motion-preview-scene",
+          title: "Один кадр, разная камера",
+          narration: "Сравните характер и глубину движения на одной сцене.",
+          durationMs: 6000
+        },
+        sceneIndex: 1,
+        sceneTitles: ["Вступление", "Движение", "Финал"],
+        brief: { language: state.brief?.language || "ru", topic: "Предпросмотр движения", motion },
+        width: 320,
+        height: 180,
+        seed: 73,
+        safeZones: { top: 9, right: 16, bottom: 9, left: 16 }
+      });
+    }
+
+    let motionPreviewTimer = null;
+    function startMotionPreviewLoop() {
+      if (!motionPreview || motionPreviewTimer) return;
+      // Пересборка srcdoc заново разбирает документ внутри iframe, поэтому
+      // крутим цикл только когда предпросмотр действительно на экране.
+      const isPreviewVisible = () => !document.hidden && motionPreview.offsetParent !== null;
+      motionPreviewTimer = window.setInterval(() => {
+        if (isPreviewVisible()) renderMotionPreview();
+      }, 6200);
+      document.addEventListener("visibilitychange", () => {
+        if (isPreviewVisible()) renderMotionPreview();
+      });
     }
 
     narrationLanguageSelect.addEventListener("change", () => {
@@ -2006,7 +2120,10 @@ let voicePreviewPlayer = null;
       );
       saveState(generateVisualsToggle.checked ? "Генерация фонов включена" : "Генерация фонов выключена");
     });
+    wireMotionRadioGroup(motionDepthGroup, "depth");
+    wireMotionRadioGroup(motionCharacterGroup, "character");
     syncNarrationControls();
+    startMotionPreviewLoop();
     document.getElementById("buildMediaBrief").addEventListener("click", () => {
       state.publish.packageText = buildMediaBrief();
       publishOutput.value = state.publish.packageText;

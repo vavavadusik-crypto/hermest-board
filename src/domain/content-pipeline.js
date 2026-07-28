@@ -1,3 +1,5 @@
+import { normalizeSceneMotion } from "./scene-motion-profile.js";
+
 const DEFAULT_WORDS_PER_MINUTE = 150;
 const DEFAULT_MIN_SCENE_DURATION_MS = 2000;
 export const MIN_RECONCILED_SCENE_DURATION_MS = 250;
@@ -67,7 +69,15 @@ export function buildStoryboard(board, options = {}) {
     throw new RangeError("Storyboard estimated duration exceeds the two-hour render limit");
   }
 
-  return { schemaVersion: 1, title, scenes };
+  // В storyboard.json попадает именно нормализованный профиль: старый проект
+  // без поля воспроизводится как прежний 2.5D-ролик, а не получает случайный
+  // режим на стороне рендера.
+  return {
+    schemaVersion: 1,
+    title,
+    motion: normalizeSceneMotion(board?.brief?.motion),
+    scenes
+  };
 }
 
 export function buildNarrationScript(storyboard) {

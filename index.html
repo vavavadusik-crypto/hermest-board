@@ -1015,6 +1015,71 @@
       margin-bottom: 8px;
     }
 
+    .motion-axis {
+      display: grid;
+      gap: 7px;
+      margin: 13px 0;
+    }
+
+    .motion-axis-label {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .motion-radio-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    .motion-radio-grid.character {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .motion-radio {
+      width: 100%;
+      height: auto;
+      min-height: 54px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 3px;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 780;
+    }
+
+    .motion-radio .motion-radio-detail {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+
+    .motion-radio[aria-checked="true"] {
+      border-color: var(--accent);
+      background: linear-gradient(135deg, rgba(94, 234, 212, .2), rgba(96, 165, 250, .15));
+      box-shadow: inset 0 0 0 1px rgba(94, 234, 212, .18);
+    }
+
+    .motion-preview {
+      width: min(100%, 320px);
+      aspect-ratio: 16 / 9;
+      display: block;
+      margin-inline: auto;
+      border: 1px solid rgba(94, 234, 212, .3);
+      border-radius: 9px;
+      background: #07101d;
+    }
+
+    @media (max-width: 400px) {
+      .motion-radio-grid.character { grid-template-columns: 1fr; }
+    }
+
     .settings-list {
       display: grid;
       gap: 7px;
@@ -1759,6 +1824,50 @@
               <div id="byokProviders" class="artifact-list" aria-live="polite"></div>
               <div class="mini-note">Ключи живут только в памяти локального worker до его перезапуска и не попадают в проект, localStorage и manifest.</div>
             </div>
+            </section>
+            <section class="panel-section" aria-labelledby="motionSettingsTitle">
+              <h2 id="motionSettingsTitle">Движение</h2>
+              <div class="motion-axis">
+                <p class="motion-axis-label" id="motionDepthLabel">Глубина</p>
+                <div class="motion-radio-grid" id="motionDepthGroup" role="radiogroup" aria-labelledby="motionDepthLabel" aria-describedby="motionDepthHelp">
+                  <button class="motion-radio" id="motionDepthStill" type="button" role="radio" aria-checked="false" tabindex="-1" data-motion-depth="still">
+                    <span>Без движения</span>
+                    <span class="motion-radio-detail">Статичный кадр до смены сцены</span>
+                  </button>
+                  <button class="motion-radio" id="motionDepthFlat" type="button" role="radio" aria-checked="false" tabindex="-1" data-motion-depth="flat">
+                    <span>Плоская · 2D</span>
+                    <span class="motion-radio-detail">Только въезды и затухания элементов</span>
+                  </button>
+                  <button class="motion-radio" id="motionDepthDepth" type="button" role="radio" aria-checked="true" tabindex="0" data-motion-depth="depth">
+                    <span>С глубиной · 2.5D</span>
+                    <span class="motion-radio-detail">Камера и параллакс фона</span>
+                  </button>
+                  <button class="motion-radio" id="motionDepthSpace" type="button" role="radio" aria-checked="false" tabindex="-1" data-motion-depth="space">
+                    <span>Объёмная · 3D</span>
+                    <span class="motion-radio-detail">Перспектива, разворот сцены и ось Z</span>
+                  </button>
+                </div>
+                <div class="mini-note" id="motionDepthHelp">«Объёмная» применяется к общей плоскости сцены, поэтому работает для каждого архетипа; её границы остаются внутри защитной зоны.</div>
+              </div>
+              <div class="motion-axis">
+                <p class="motion-axis-label" id="motionCharacterLabel">Характер</p>
+                <div class="motion-radio-grid character" id="motionCharacterGroup" role="radiogroup" aria-labelledby="motionCharacterLabel">
+                  <button class="motion-radio" id="motionCharacterCalm" type="button" role="radio" aria-checked="true" tabindex="0" data-motion-character="calm">
+                    <span>Спокойный</span>
+                    <span class="motion-radio-detail">Мягкий короткий ход</span>
+                  </button>
+                  <button class="motion-radio" id="motionCharacterLively" type="button" role="radio" aria-checked="false" tabindex="-1" data-motion-character="lively">
+                    <span>Живой</span>
+                    <span class="motion-radio-detail">Быстрее и заметнее</span>
+                  </button>
+                  <button class="motion-radio" id="motionCharacterCinematic" type="button" role="radio" aria-checked="false" tabindex="-1" data-motion-character="cinematic">
+                    <span>Кинематографичный</span>
+                    <span class="motion-radio-detail">Длинный ход через сцену</span>
+                  </button>
+                </div>
+              </div>
+              <iframe class="motion-preview" id="motionPreview" title="Живой предпросмотр движения сцены" sandbox="allow-scripts"></iframe>
+              <p class="mini-note">Цена выбора: «объёмная» в контрольном замере 1920×1080 / 12 кадров заняла примерно на 1% дольше; фактическое время зависит от сцены и устройства.</p>
             </section>
             <section class="panel-section local-render-panel">
           <h2>Готовый файл</h2>

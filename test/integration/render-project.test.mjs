@@ -86,6 +86,7 @@ for (const expected of [
     const audio = diskManifest.artifacts.find(artifact => artifact.type === "audio/wav");
     const subtitles = diskManifest.artifacts.find(artifact => artifact.name.endsWith(".srt"));
     const storyboard = diskManifest.artifacts.find(artifact => artifact.name === "storyboard.json");
+    const renderedStoryboard = JSON.parse(await readFile(result.storyboardFile, "utf8"));
 
     assert.deepEqual(diskManifest, result.manifest);
     assert.equal(result.platform, expected.platform);
@@ -109,6 +110,9 @@ for (const expected of [
     assert.ok(audio.bytes > 0);
     assert.ok(subtitles.bytes > 0);
     assert.ok(storyboard.bytes > 0);
+    // Файл, который уезжает из рендера вместе с MP4, а не только объект домена,
+    // обязан не потерять миграционный дефолт движения старого проекта.
+    assert.deepEqual(renderedStoryboard.motion, { depth: "depth", character: "calm" });
 
     // Обложка проверяется по самому файлу, а не по записи в манифесте: заявить
     // PNG нужного размера легко, доказать — только байтами с диска.

@@ -3,7 +3,7 @@
 // (scene-archetypes.js) — шелл только выбирает архетип и вклеивает его куски.
 
 import { renderSceneArchetype } from "./scene-archetypes.js";
-import { buildCameraCss } from "./scene-motion.js";
+import { buildCameraCss, normalizeSceneMotion } from "./scene-motion.js";
 import { deriveSceneContent, isSceneArchetype, pickSceneArchetype } from "./scene-content.js";
 import {
   THEME,
@@ -116,12 +116,17 @@ export function buildSceneMarkup({
     : Math.round(safeHeight / (layout.isVertical ? 16 : 11));
 
   // Камера складывается поверх архетипа: слои сцены и фона идут с разной
-  // скоростью всю сцену, а не только в окне въезда.
+  // скоростью всю сцену, а не только в окне въезда. `still` выключает и
+  // камеру, и build-in: в таком ролике между сценами меняется только кадр.
+  const motion = normalizeSceneMotion(brief?.motion);
   const cameraCss = buildCameraCss({
     sceneIndex: index,
     role: resolvedRole,
     durationMs: scene.durationMs,
-    seed: numericSeed
+    seed: numericSeed,
+    motion,
+    width: safeWidth,
+    height: safeHeight
   });
 
   const built = renderSceneArchetype({
@@ -215,7 +220,7 @@ export function buildSceneMarkup({
   /* Слои фона дрейфуют в разные стороны — параллакс живёт всю сцену, а не
      только окно build-in. */
   .bd-stars { animation: amb-sway 22s ease-in-out 0s infinite; }
-  .bd-grid { animation: amb-sway 30s ease-in-out -8s infinite reverse; }${ambientCss(layout)}${built.css}${cameraCss}${animated ? "" : "\n  * { animation: none !important; }"}
+  .bd-grid { animation: amb-sway 30s ease-in-out -8s infinite reverse; }${ambientCss(layout)}${built.css}${cameraCss}${animated && motion.depth !== "still" ? "" : "\n  * { animation: none !important; }"}
 </style>
 </head>
 <body>
@@ -245,10 +250,13 @@ ${isOverlay ? '  <div class="headline-scrim"></div>' : `  <svg class="backdrop" 
   <script>
 // Детерминированный покадровый захват: #t=<ms> ставит каждую анимацию на
 // точное виртуальное время и замораживает её до скриншота.
-const frameTimeMs = Number((location.hash.match(/t=(\\d+)/) || [0, 0])[1]);
-for (const animation of document.getAnimations({ subtree: true })) {
-  animation.currentTime = frameTimeMs;
-  animation.pause();
+const frameTimeMatch = location.hash.match(/t=(\\d+)/);
+if (frameTimeMatch) {
+  const frameTimeMs = Number(frameTimeMatch[1]);
+  for (const animation of document.getAnimations({ subtree: true })) {
+    animation.currentTime = frameTimeMs;
+    animation.pause();
+  }
 }
   </script>
 </body>

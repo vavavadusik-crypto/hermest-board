@@ -6,7 +6,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildCameraCss, selectCameraMove, stageCameraKeyframes } from "../../src/media/scene-motion.js";
+import {
+  buildCameraCss,
+  buildCameraPlan,
+  interpolateCameraPoint,
+  isStageInsideSafeZone,
+  selectCameraMove,
+  stageCameraKeyframes
+} from "../../src/media/scene-motion.js";
 import { buildSceneMarkup } from "../../src/media/scene-markup.js";
 
 const MOVES = [
@@ -95,4 +102,81 @@ test("the frozen frame equals the end of the move, not its start", () => {
   const move = selectCameraMove({ sceneIndex: 1, role: "body", seed: 5 });
   const [, to] = stageCameraKeyframes(move);
   assert.ok(stageTransform.includes(`scale(${to.scale.toFixed(4)})`), `база слоя ${stageTransform} не равна финалу хода`);
+});
+
+test("all motion profiles preserve the safe zone through every camera frame in every recipe shape", () => {
+  const formats = [
+    { width: 1920, height: 1080, label: "16:9" },
+    { width: 1080, height: 1920, label: "9:16" },
+    { width: 1080, height: 1080, label: "1:1" }
+  ];
+  const depths = ["still", "flat", "depth", "space"];
+  const characters = ["calm", "lively", "cinematic"];
+
+  for (const format of formats) {
+    for (const depth of depths) {
+      for (const character of characters) {
+        for (const seed of [1, 42]) {
+          for (const { sceneIndex, role } of MOVES) {
+            const plan = buildCameraPlan({
+              sceneIndex,
+              role,
+              durationMs: 9000,
+              seed,
+              motion: { depth, character },
+              width: format.width,
+              height: format.height
+            });
+            const keyframes = plan.enabled ? plan.stage : [
+              { scale: 1, x: 0, y: 0 },
+              { scale: 1, x: 0, y: 0 }
+            ];
+            for (let frame = 0; frame <= 120; frame += 1) {
+              const point = interpolateCameraPoint(keyframes[0], keyframes[1], frame / 120);
+              assert.ok(
+                isStageInsideSafeZone(point, format),
+                `${format.label} ${depth}/${character} seed ${seed}: frame ${frame} left the safe zone`
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+});
+
+test("depth choices are honest in the generated camera CSS", () => {
+  const common = { sceneIndex: 2, role: "body", durationMs: 8000, seed: 9, width: 1920, height: 1080 };
+  const still = buildCameraCss({ ...common, motion: { depth: "still", character: "calm" } });
+  const flat = buildCameraCss({ ...common, motion: { depth: "flat", character: "calm" } });
+  const depth = buildCameraCss({ ...common, motion: { depth: "depth", character: "calm" } });
+  const space = buildCameraCss({ ...common, motion: { depth: "space", character: "calm" } });
+
+  assert.doesNotMatch(still, /cam-stage/u);
+  assert.doesNotMatch(flat, /cam-stage/u);
+  assert.match(depth, /animation: cam-stage/u);
+  assert.doesNotMatch(depth, /perspective\(/u);
+  assert.match(space, /perspective\(/u);
+  assert.match(space, /rotateX\(/u);
+  assert.match(space, /rotateY\(/u);
+  assert.match(space, /translate3d\([^,]+,[^,]+,[^)]*px\)/u);
+});
+
+test("the selected motion profile is deterministic and still freezes every scene animation", () => {
+  const scene = { id: "scene-01", title: "Тема", durationMs: 8000, text: "Короткий текст сцены." };
+  const shared = {
+    scene, sceneIndex: 1, sceneTitles: ["a", "b", "c"], width: 1920, height: 1080,
+    seed: 5, safeZones: { top: 54, right: 96, bottom: 54, left: 96 }
+  };
+  const motion = { depth: "space", character: "cinematic" };
+  const first = buildSceneMarkup({ ...shared, brief: { language: "ru", topic: "тема", motion } });
+  const second = buildSceneMarkup({ ...shared, brief: { language: "ru", topic: "тема", motion } });
+  const still = buildSceneMarkup({
+    ...shared,
+    brief: { language: "ru", topic: "тема", motion: { depth: "still", character: "lively" } }
+  });
+
+  assert.equal(first, second);
+  assert.match(still, /Камера и параллакс отключены: still/u);
+  assert.match(still, /\* \{ animation: none !important; \}/u);
 });
