@@ -25,6 +25,8 @@
       --warn: #facc15;
       --danger: #fb7185;
       --shadow: rgba(0, 0, 0, 0.42);
+      --mode-rail-width: 72px;
+      --side-panel-width: 360px;
     }
 
     * { box-sizing: border-box; }
@@ -336,7 +338,7 @@
     .topbar {
       position: fixed;
       top: 12px;
-      left: 12px;
+      left: calc(var(--mode-rail-width) + 12px);
       right: 12px;
       z-index: 30;
       padding: 8px;
@@ -407,7 +409,7 @@
     }
 
     /* Командная строка: тема + свободная длительность + одна главная кнопка.
-       Верх намеренно пуст — всё остальное живёт в свёрнутых «Настройках». */
+       Производственные параметры живут отдельно, в режиме «Ролик». */
     .command-bar {
       display: grid;
       grid-template-columns: minmax(220px, 2.1fr) minmax(260px, 1.3fr) auto;
@@ -570,42 +572,17 @@
     }
 
     .command-settings {
-      margin-top: 10px;
-      border-top: 1px solid rgba(123, 220, 255, .14);
-      padding-top: 8px;
+      margin: 0;
     }
-
-    .command-settings > summary {
-      cursor: pointer;
-      list-style: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      padding: 5px 9px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      color: #cfefff;
-      font-size: 12px;
-      font-weight: 750;
-    }
-
-    .command-settings > summary::-webkit-details-marker { display: none; }
-    .command-settings > summary::before { content: "▸"; color: var(--accent); }
-    .command-settings[open] > summary::before { content: "▾"; }
 
     .command-settings-body {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
-      gap: 0 14px;
-      max-height: 44vh;
-      overflow: auto;
-      margin-top: 6px;
-      padding-right: 4px;
+      display: block;
     }
 
     /* Видимый фокус: клавиатурный проход по командной строке должен быть заметен. */
     .topbar :focus-visible,
-    .side-panel :focus-visible {
+    .side-panel :focus-visible,
+    .mode-rail :focus-visible {
       outline: 2px solid var(--accent);
       outline-offset: 2px;
     }
@@ -631,6 +608,68 @@
     }
 
     .board-wrap.panning { cursor: grabbing; }
+
+    .mode-rail {
+      position: fixed;
+      inset: 0 auto 0 0;
+      width: var(--mode-rail-width);
+      z-index: 42;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      padding: 8px 6px;
+      border-right: 1px solid rgba(123, 220, 255, .18);
+      background: rgba(5, 10, 20, .94);
+      box-shadow: 16px 0 38px rgba(0, 0, 0, .26);
+      backdrop-filter: blur(18px);
+    }
+
+    .mode-tab,
+    .mode-rail-action {
+      width: 100%;
+      min-width: 0;
+      height: 60px;
+      display: grid;
+      grid-template-rows: 24px auto;
+      gap: 3px;
+      place-content: center;
+      padding: 6px 2px;
+      line-height: 1;
+    }
+
+    .mode-tab-icon {
+      font-size: 20px;
+      line-height: 24px;
+    }
+
+    .mode-tab-label {
+      max-width: 100%;
+      overflow: hidden;
+      color: #a9c7d8;
+      font-size: 8px;
+      font-weight: 800;
+      line-height: 1.1;
+      text-overflow: ellipsis;
+    }
+
+    .mode-tab[aria-selected="true"] {
+      color: #041016;
+      border-color: rgba(94, 234, 212, .72);
+      background: linear-gradient(145deg, rgba(94, 234, 212, .92), rgba(147, 197, 253, .9));
+      box-shadow: inset 3px 0 0 #eaffff;
+    }
+
+    .mode-tab[aria-selected="true"] .mode-tab-label {
+      color: #041016;
+    }
+
+    .mode-rail-actions {
+      display: grid;
+      gap: 5px;
+      margin-top: auto;
+      padding-top: 8px;
+      border-top: 1px solid rgba(123, 220, 255, .14);
+    }
 
     .board {
       position: absolute;
@@ -812,10 +851,10 @@
     .side-panel {
       position: fixed;
       right: 12px;
-      /* Топбар растёт вместе с командной строкой и раскрытыми настройками,
-         поэтому его фактическую высоту измеряет JS (--topbar-height). */
+      /* Топбар растёт вместе с командной строкой, поэтому его фактическую
+         высоту измеряет JS (--topbar-height). */
       top: calc(var(--topbar-height, 54px) + 24px);
-      width: 308px;
+      width: var(--side-panel-width);
       max-height: calc(100vh - var(--topbar-height, 54px) - 42px);
       z-index: 25;
       overflow: auto;
@@ -825,6 +864,24 @@
       background: var(--panel);
       box-shadow: 0 18px 44px var(--shadow);
       backdrop-filter: blur(16px);
+    }
+
+    .side-panel-title {
+      margin: 0 0 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(123, 220, 255, .14);
+      color: #eafcff;
+      font-size: 18px;
+    }
+
+    .mode-panel[hidden] {
+      display: none;
+    }
+
+    .mode-panel > .panel-section:first-child {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
     }
 
     .side-panel h2 {
@@ -1145,7 +1202,7 @@
 
     .status {
       position: fixed;
-      left: 12px;
+      left: calc(var(--mode-rail-width) + 12px);
       bottom: 12px;
       z-index: 34;
       border: 1px solid rgba(123, 220, 255, .2);
@@ -1176,6 +1233,7 @@
 
     body.recording .topbar,
     body.recording .side-panel,
+    body.recording .mode-rail,
     body.recording .status {
       display: none;
     }
@@ -1360,7 +1418,15 @@
       }
     }
 
-    @media (max-width: 860px) {
+    @media (max-width: 899px) {
+      .topbar {
+        top: 8px;
+        left: 8px;
+        right: 8px;
+        max-height: 54vh;
+        max-height: 54dvh;
+        overflow-y: auto;
+      }
       .topbar-head {
         grid-template-columns: 1fr auto;
       }
@@ -1370,14 +1436,55 @@
         align-items: stretch;
       }
       .command-actions button { flex: 1; }
-      .command-settings-body { max-height: 38vh; }
       .side-panel {
-        left: 12px;
-        right: 12px;
+        left: 8px;
+        right: 8px;
         width: auto;
-        top: auto;
-        bottom: 12px;
-        max-height: 34vh;
+        top: calc(var(--topbar-height, 54px) + 16px);
+        bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+        max-height: none;
+      }
+      .mode-rail {
+        inset: auto 0 0;
+        width: 100%;
+        height: calc(72px + env(safe-area-inset-bottom, 0px));
+        flex-direction: row;
+        gap: 3px;
+        padding: 4px 5px calc(4px + env(safe-area-inset-bottom, 0px));
+        border-top: 1px solid rgba(123, 220, 255, .2);
+        border-right: 0;
+        box-shadow: 0 -16px 38px rgba(0, 0, 0, .32);
+      }
+      .mode-tab,
+      .mode-rail-action {
+        flex: 1 1 0;
+        width: auto;
+        min-width: 0;
+        height: 63px;
+        padding-inline: 0;
+      }
+      .mode-tab[aria-selected="true"] {
+        box-shadow: inset 0 3px 0 #eaffff;
+      }
+      .mode-rail-actions {
+        display: contents;
+      }
+      .status {
+        left: 8px;
+        bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+      }
+    }
+
+    @media (max-width: 520px) {
+      .brand > span {
+        display: none;
+      }
+      .toolbar {
+        overflow-x: auto;
+        scrollbar-width: thin;
+      }
+      .mode-tab-label {
+        font-size: 7px;
       }
     }
   </style>
@@ -1401,8 +1508,6 @@
           <button id="addCard" aria-label="Добавить карточку" title="Добавить карточку">＋</button>
           <button id="connectMode" aria-label="Соединить выбранные карточки" title="Соединить выбранные карточки">⛓</button>
           <button id="fitView" aria-label="Показать все карточки" title="Показать все карточки">⌖</button>
-          <button id="openSettings" aria-label="Настройки" title="Настройки">⚙</button>
-          <button id="togglePanel" aria-label="Панель настроек" title="Панель настроек">☰</button>
           <button id="recordMode" aria-label="Режим записи" title="Режим записи">◉</button>
           <button id="exportJson" aria-label="Экспорт JSON" title="Экспорт JSON">⇩</button>
           <button id="importJson" aria-label="Импорт JSON" title="Импорт JSON">⇧</button>
@@ -1447,11 +1552,124 @@
       <p class="command-warning" id="durationWarning" role="alert" hidden></p>
       <div class="command-status" id="wizardStatus" role="status" aria-live="polite">Готово. Введи тему и нажми «Собрать видео».</div>
       <span class="job-elapsed" id="wizardElapsed" aria-hidden="true" hidden></span>
+    </header>
 
-      <details class="command-settings" id="commandSettings">
-        <summary id="commandSettingsSummary">Настройки: сцены, модель, голос, музыка, фон</summary>
-        <div class="command-settings-body">
-          <div>
+    <nav class="mode-rail" id="modeTablist" role="tablist" aria-label="Режимы приложения" aria-orientation="vertical">
+      <button class="mode-tab" id="modeTabBoard" type="button" role="tab"
+              aria-selected="true" aria-controls="modePanelBoard" tabindex="0">
+        <span class="mode-tab-icon" aria-hidden="true">◫</span>
+        <span class="mode-tab-label">Доска</span>
+      </button>
+      <button class="mode-tab" id="modeTabVideo" type="button" role="tab"
+              aria-selected="false" aria-controls="modePanelVideo" tabindex="-1">
+        <span class="mode-tab-icon" aria-hidden="true">🎬</span>
+        <span class="mode-tab-label">Ролик</span>
+      </button>
+      <button class="mode-tab" id="modeTabPublish" type="button" role="tab"
+              aria-selected="false" aria-controls="modePanelPublish" tabindex="-1">
+        <span class="mode-tab-icon" aria-hidden="true">↗</span>
+        <span class="mode-tab-label">Публикация</span>
+      </button>
+      <button class="mode-tab" id="modeTabStorage" type="button" role="tab"
+              aria-selected="false" aria-controls="modePanelStorage" tabindex="-1">
+        <span class="mode-tab-icon" aria-hidden="true">☁</span>
+        <span class="mode-tab-label">Хранилище</span>
+      </button>
+      <div class="mode-rail-actions" role="group" aria-label="Общие действия">
+        <button class="mode-rail-action" id="togglePanel" type="button"
+                aria-label="Свернуть панель режимов" title="Свернуть панель режимов"
+                aria-controls="sidePanel" aria-expanded="true">
+          <span class="mode-tab-icon" aria-hidden="true">☰</span>
+          <span class="mode-tab-label">Панель</span>
+        </button>
+        <button class="mode-rail-action" id="openSettings" type="button"
+                aria-label="Настройки" title="Настройки">
+          <span class="mode-tab-icon" aria-hidden="true">⚙</span>
+          <span class="mode-tab-label">Настройки</span>
+        </button>
+        <button class="mode-rail-action" id="openWelcome" type="button"
+                aria-label="Помощь" title="Помощь">
+          <span class="mode-tab-icon" aria-hidden="true">?</span>
+          <span class="mode-tab-label">Помощь</span>
+        </button>
+      </div>
+    </nav>
+
+    <aside class="side-panel" id="sidePanel" aria-labelledby="modePanelTitle">
+      <h1 class="side-panel-title" id="modePanelTitle">Доска</h1>
+
+      <section class="mode-panel" id="modePanelBoard" role="tabpanel"
+               aria-labelledby="modeTabBoard" tabindex="0">
+        <section class="panel-section">
+          <h2>Выбранный блок</h2>
+          <div class="field">
+            <label for="rotateInput"><span>Поворот</span><span id="rotateValue">0°</span></label>
+            <input id="rotateInput" type="range" min="-24" max="24" value="0">
+          </div>
+          <div class="field">
+            <label for="zoomInput"><span>Масштаб сцены</span><span id="zoomValue">100%</span></label>
+            <input id="zoomInput" type="range" min="45" max="160" value="100">
+          </div>
+          <div class="field">
+            <label for="tagInput"><span>Тег</span></label>
+            <input id="tagInput" type="text" placeholder="agent wrapper, open layer">
+          </div>
+          <div class="field">
+            <label for="colorInput"><span>Акцент</span></label>
+            <input id="colorInput" type="color" value="#5eead4">
+          </div>
+          <div class="panel-row">
+            <button id="bringFront" aria-label="Поднять карточку наверх" title="Наверх">⇧</button>
+            <button id="duplicateCard" aria-label="Дублировать карточку" title="Дублировать">⧉</button>
+            <button id="deleteCard" aria-label="Удалить карточку" title="Удалить">×</button>
+          </div>
+          <div class="hint">
+            Перетаскивай блок за верхнюю полосу. Фото добавляется кликом по верхней зоне карточки. Пустое поле сцены можно двигать мышкой. Колесо мыши меняет масштаб.
+          </div>
+        </section>
+        <section class="panel-section">
+          <h2>План / Roadmap</h2>
+          <div class="field">
+            <label for="planInput"><span>План проекта</span></label>
+            <textarea id="planInput" placeholder="Вставь сюда план или загрузи .md/.txt файл"></textarea>
+          </div>
+          <div class="panel-row two">
+            <button id="loadPlanFile" title="Прицепить файл плана">План</button>
+            <button id="loadRoadmapFile" title="Прицепить файл roadmap">Roadmap</button>
+          </div>
+          <div class="field">
+            <label for="roadmapInput"><span>Roadmap</span></label>
+            <textarea id="roadmapInput" placeholder="Этапы, сроки, MVP, что делать дальше"></textarea>
+          </div>
+          <div class="panel-row two">
+            <button id="buildScript" title="Собрать сценарий из борда">Сценарий</button>
+            <button id="speakScript" title="Озвучить сценарий">Озвучить</button>
+          </div>
+          <div class="panel-row two">
+            <button id="playTour" title="Авто-показ карточек с озвучкой">Тур</button>
+            <button id="stopPlayback" title="Остановить озвучку и тур">Стоп</button>
+          </div>
+          <div class="panel-row wide">
+            <button id="recordVideo" title="Записать WebM через выбор окна Chrome">Записать WebM</button>
+          </div>
+        </section>
+        <section class="panel-section">
+          <h2>Быстрый старт</h2>
+          <div class="hint">Не хочешь начинать с пустой доски? Загрузи готовый пример — он работает без модели, ключей и сети.</div>
+          <div class="panel-row wide">
+            <button id="loadDemoBoard" type="button" title="Открыть готовый пример борда без запуска модели и без ключей">Открыть готовый пример</button>
+          </div>
+          <div class="mini-note">Браузерная ИИ-модель (через локальный мост, без API-ключа) исследует тему и собирает карточки прямо на доску. Дальше — обычный рендер.</div>
+        </section>
+      </section>
+
+      <section class="mode-panel" id="modePanelVideo" role="tabpanel"
+               aria-labelledby="modeTabVideo" tabindex="0" hidden>
+        <div class="command-settings" id="commandSettings" aria-labelledby="commandSettingsSummary">
+          <p class="mini-note" id="commandSettingsSummary">Настройки сцен, модели, голоса, музыки, фона и готового файла.</p>
+          <div class="command-settings-body">
+            <section class="panel-section">
+              <h2>Сценарий</h2>
             <div class="field">
               <label for="wizardSceneCount"><span>Сцен (по умолчанию считает система)</span></label>
               <input id="wizardSceneCount" type="number" min="2" max="12" placeholder="авто">
@@ -1491,8 +1709,9 @@
               </div>
               <div class="mini-note">Свой или бесплатный API (Ollama, OpenRouter, Hugging Face…). Ключ уходит на локальный worker только на время запроса и не попадает в проект, localStorage и manifest.</div>
             </div>
-          </div>
-          <div>
+            </section>
+            <section class="panel-section">
+              <h2>Звук</h2>
             <div class="field">
               <label for="narrationLanguage"><span>Язык озвучки</span></label>
               <select id="narrationLanguage"></select>
@@ -1517,8 +1736,9 @@
                 <option value="off">Без музыки</option>
               </select>
             </div>
-          </div>
-          <div>
+            </section>
+            <section class="panel-section">
+              <h2>Картинка</h2>
             <label class="check-item"><input id="generateVisualsToggle" type="checkbox"> Генерировать фоны сцен (бесплатно, Pollinations)</label>
             <div class="mini-note">Без ключа: ИИ рисует фон под каждую сцену. Выключено — тёмный брендированный фон. Свой FAL-ключ (в настройках) даёт премиум-качество.</div>
             <div class="field">
@@ -1536,71 +1756,12 @@
               <div id="byokProviders" class="artifact-list" aria-live="polite"></div>
               <div class="mini-note">Ключи живут только в памяти локального worker до его перезапуска и не попадают в проект, localStorage и manifest.</div>
             </div>
-            <div class="panel-row wide">
-              <button id="loadDemoBoard" type="button" title="Открыть готовый пример борда без запуска модели и без ключей">Открыть готовый пример</button>
-            </div>
-            <div class="mini-note">Браузерная ИИ-модель (через локальный мост, без API-ключа) исследует тему и собирает карточки прямо на доску. Дальше — обычный рендер.</div>
-          </div>
-        </div>
-      </details>
-    </header>
-
-    <aside class="side-panel" id="sidePanel">
-      <h2>Выбранный блок</h2>
-      <div class="field">
-        <label><span>Поворот</span><span id="rotateValue">0°</span></label>
-        <input id="rotateInput" type="range" min="-24" max="24" value="0">
-      </div>
-      <div class="field">
-        <label><span>Масштаб сцены</span><span id="zoomValue">100%</span></label>
-        <input id="zoomInput" type="range" min="45" max="160" value="100">
-      </div>
-      <div class="field">
-        <label><span>Тег</span></label>
-        <input id="tagInput" type="text" placeholder="agent wrapper, open layer">
-      </div>
-      <div class="field">
-        <label><span>Акцент</span></label>
-        <input id="colorInput" type="color" value="#5eead4">
-      </div>
-      <div class="panel-row">
-        <button id="bringFront" aria-label="Поднять карточку наверх" title="Наверх">⇧</button>
-        <button id="duplicateCard" aria-label="Дублировать карточку" title="Дублировать">⧉</button>
-        <button id="deleteCard" aria-label="Удалить карточку" title="Удалить">×</button>
-      </div>
-      <div class="hint">
-        Перетаскивай блок за верхнюю полосу. Фото добавляется кликом по верхней зоне карточки. Пустое поле сцены можно двигать мышкой. Колесо мыши меняет масштаб.
-      </div>
-      <section class="panel-section">
-        <h2>План / Roadmap / Видео</h2>
-        <div class="field">
-          <label><span>План проекта</span></label>
-          <textarea id="planInput" placeholder="Вставь сюда план или загрузи .md/.txt файл"></textarea>
-        </div>
-        <div class="panel-row two">
-          <button id="loadPlanFile" title="Прицепить файл плана">План</button>
-          <button id="loadRoadmapFile" title="Прицепить файл roadmap">Roadmap</button>
-        </div>
-        <div class="field">
-          <label><span>Roadmap</span></label>
-          <textarea id="roadmapInput" placeholder="Этапы, сроки, MVP, что делать дальше"></textarea>
-        </div>
-        <div class="panel-row two">
-          <button id="buildScript" title="Собрать сценарий из борда">Сценарий</button>
-          <button id="speakScript" title="Озвучить сценарий">Озвучить</button>
-        </div>
-        <div class="panel-row two">
-          <button id="playTour" title="Авто-показ карточек с озвучкой">Тур</button>
-          <button id="stopPlayback" title="Остановить озвучку и тур">Стоп</button>
-        </div>
-        <div class="panel-row wide">
-          <button id="recordVideo" title="Записать WebM через выбор окна Chrome">Записать WebM</button>
-        </div>
-        <div class="panel-section local-render-panel">
-          <h2>Настоящий локальный MP4</h2>
+            </section>
+            <section class="panel-section local-render-panel">
+          <h2>Готовый файл</h2>
           <div class="mini-note">Работает только через локальный `npm run dev`: Board ставит job в приватный FFmpeg worker, проверяет MP4/WAV и возвращает manifest. Публикация не выполняется.</div>
           <div class="field">
-            <label><span>Render recipe</span></label>
+            <label for="localRenderPlatform"><span>Render recipe</span></label>
             <select id="localRenderPlatform">
               <option value="youtube_video">YouTube 16:9 master</option>
               <option value="youtube_shorts">YouTube Shorts 9:16</option>
@@ -1609,7 +1770,7 @@
               <option value="instagram_feed">Instagram лента 1:1</option>
             </select>
           </div>
-          <div class="mini-note">Язык, голос, музыка и фон сцен переехали в «Настройки» верхней командной строки — рендер берёт их оттуда.</div>
+          <div class="mini-note">Язык, голос, музыка и фон сцен задаются выше в режиме «Ролик» — рендер берёт их оттуда.</div>
           <div class="panel-row two">
             <button id="renderLocalVideo" title="Создать настоящий локальный MP4 через FFmpeg">Рендер MP4</button>
             <button id="cancelLocalRender" class="btn-danger" title="Отменить текущий render job" aria-label="Отменить рендер MP4" disabled>Отмена</button>
@@ -1625,14 +1786,20 @@
               <select id="editionLanguage" aria-label="Язык издания"></select>
               <button id="createEdition" aria-label="Создать издание на выбранном языке">Создать издание</button>
             </div>
-            <div class="auth-status" id="editionStatus" role="status" aria-live="polite" hidden></div>
-          </section>
+              <div class="auth-status" id="editionStatus" role="status" aria-live="polite" hidden></div>
+            </section>
+              <div class="field">
+                <label for="scriptOutput"><span>Сценарий озвучки</span></label>
+                <textarea id="scriptOutput" class="script-output" placeholder="Здесь появится текст для озвучки и видео"></textarea>
+              </div>
+            </section>
+          </div>
         </div>
-        <div class="field">
-          <label><span>Сценарий озвучки</span></label>
-          <textarea id="scriptOutput" class="script-output" placeholder="Здесь появится текст для озвучки и видео"></textarea>
-        </div>
-        <div class="panel-section">
+      </section>
+
+      <section class="mode-panel" id="modePanelPublish" role="tabpanel"
+               aria-labelledby="modeTabPublish" tabindex="0" hidden>
+        <section class="panel-section">
           <h2>Площадки и агент</h2>
           <div class="field">
             <label><span>Публиковать на</span></label>
@@ -1646,11 +1813,11 @@
             <div class="mini-note">Автопубликация включится после подключения OAuth/API. Сейчас борд готовит пакет и очередь действий.</div>
           </div>
           <div class="field">
-            <label><span>Языки перевода</span></label>
+            <label for="languageInput"><span>Языки перевода</span></label>
             <input id="languageInput" type="text" placeholder="ru, en, de, uk, es">
           </div>
           <div class="field">
-            <label><span>Запрос для public parser</span></label>
+            <label for="researchQueryInput"><span>Запрос для public parser</span></label>
             <input id="researchQueryInput" type="text" placeholder="Hermest AI agents, open source automation">
           </div>
           <div class="field">
@@ -1665,7 +1832,7 @@
             </div>
           </div>
           <div class="field">
-            <label><span>Media brief</span></label>
+            <label for="mediaBriefInput"><span>Media brief</span></label>
             <textarea id="mediaBriefInput" placeholder="Что агент должен найти или сгенерировать: стиль, кадры, референсы, ограничения"></textarea>
           </div>
           <div class="panel-row two">
@@ -1677,14 +1844,6 @@
             <button id="showConnectorGuide" title="Показать как пользователю подключить аккаунты">Аккаунты</button>
           </div>
           <div class="panel-row wide">
-            <button id="showReadinessReport" title="Проверить готовность продукта к версии 1.0.0">1.0 статус</button>
-          </div>
-          <div class="panel-row two">
-            <button id="showStorageStatus" title="Проверить backend-хранилище">Хранилище</button>
-            <button id="saveProjectApi" title="Сохранить борд через backend API">API save</button>
-          </div>
-          <div class="panel-row two">
-            <button id="loadProjectApi" title="Загрузить последний борд из backend API">API load</button>
             <button id="runAgentPlan" title="Построить backend-план агента">План агента</button>
           </div>
           <div class="panel-row two">
@@ -1692,10 +1851,28 @@
             <button id="downloadPublishPack" title="Скачать пакет публикации JSON">JSON</button>
           </div>
           <div class="field">
-            <label><span>Пакет публикации / очередь агента</span></label>
+            <label for="publishOutput"><span>Пакет публикации / очередь агента</span></label>
             <textarea id="publishOutput" class="script-output" placeholder="Здесь появятся заголовки, описания, хэштеги, языки, площадки, медиа-задачи и очередь действий"></textarea>
           </div>
-        </div>
+        </section>
+      </section>
+
+      <section class="mode-panel" id="modePanelStorage" role="tabpanel"
+               aria-labelledby="modeTabStorage" tabindex="0" hidden>
+        <section class="panel-section">
+          <h2>Состояние проекта</h2>
+          <div class="mini-note">Проверка backend-хранилища, сохранение и загрузка борда, а также сводка готовности продукта к версии 1.0.0.</div>
+          <div class="panel-row wide">
+            <button id="showStorageStatus" title="Проверить backend-хранилище">Хранилище</button>
+          </div>
+          <div class="panel-row two">
+            <button id="saveProjectApi" title="Сохранить борд через backend API">API save</button>
+            <button id="loadProjectApi" title="Загрузить последний борд из backend API">API load</button>
+          </div>
+          <div class="panel-row wide">
+            <button id="showReadinessReport" title="Проверить готовность продукта к версии 1.0.0">1.0 статус</button>
+          </div>
+        </section>
       </section>
     </aside>
 

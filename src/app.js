@@ -76,6 +76,10 @@ import {
     const imageInput = document.getElementById("imageInput");
     const jsonInput = document.getElementById("jsonInput");
     const sidePanel = document.getElementById("sidePanel");
+    const modePanelTitle = document.getElementById("modePanelTitle");
+    const modeTablist = document.getElementById("modeTablist");
+    const modeTabs = Array.from(modeTablist.querySelectorAll('[role="tab"]'));
+    const togglePanelButton = document.getElementById("togglePanel");
     const statusEl = document.getElementById("status");
     const rotateInput = document.getElementById("rotateInput");
     const rotateValue = document.getElementById("rotateValue");
@@ -2023,6 +2027,42 @@ let voicePreviewPlayer = null;
     document.getElementById("signupAccount").addEventListener("click", signupAccount);
     document.getElementById("loginAccount").addEventListener("click", loginAccount);
     document.getElementById("logoutAccount").addEventListener("click", logoutAccount);
+    // Рейка режимов повторяет тот же roving-tabindex подход, что и вкладки
+    // модального окна настроек: активна одна вкладка и одна связанная панель.
+    const activateModeTab = nextTab => {
+      modeTabs.forEach(tab => {
+        const isActive = tab === nextTab;
+        tab.setAttribute("aria-selected", String(isActive));
+        tab.tabIndex = isActive ? 0 : -1;
+        document.getElementById(tab.getAttribute("aria-controls")).hidden = !isActive;
+      });
+      const label = nextTab.querySelector(".mode-tab-label");
+      modePanelTitle.textContent = label?.textContent?.trim() || "Режим";
+      sidePanel.hidden = false;
+      togglePanelButton.setAttribute("aria-expanded", "true");
+      togglePanelButton.setAttribute("aria-label", "Свернуть панель режимов");
+      togglePanelButton.title = "Свернуть панель режимов";
+      sidePanel.scrollTop = 0;
+      nextTab.focus();
+    };
+    modeTablist.addEventListener("click", event => {
+      const tab = event.target.closest('[role="tab"]');
+      if (tab && modeTabs.includes(tab)) activateModeTab(tab);
+    });
+    modeTablist.addEventListener("keydown", event => {
+      const tab = event.target.closest('[role="tab"]');
+      if (!tab || !modeTabs.includes(tab)) return;
+      const direction = {
+        ArrowRight: 1,
+        ArrowDown: 1,
+        ArrowLeft: -1,
+        ArrowUp: -1
+      }[event.key];
+      if (!direction) return;
+      event.preventDefault();
+      const nextIndex = (modeTabs.indexOf(tab) + direction + modeTabs.length) % modeTabs.length;
+      activateModeTab(modeTabs[nextIndex]);
+    });
     const activateSettingsTab = nextTab => {
       settingsTabs.forEach(tab => {
         const isActive = tab === nextTab;
@@ -2106,8 +2146,12 @@ let voicePreviewPlayer = null;
     });
 
     document.getElementById("fitView").addEventListener("click", fitView);
-    document.getElementById("togglePanel").addEventListener("click", () => {
+    togglePanelButton.addEventListener("click", () => {
       sidePanel.hidden = !sidePanel.hidden;
+      const isExpanded = !sidePanel.hidden;
+      togglePanelButton.setAttribute("aria-expanded", String(isExpanded));
+      togglePanelButton.setAttribute("aria-label", isExpanded ? "Свернуть панель режимов" : "Развернуть панель режимов");
+      togglePanelButton.title = isExpanded ? "Свернуть панель режимов" : "Развернуть панель режимов";
     });
     document.getElementById("recordMode").addEventListener("click", event => {
       document.body.classList.toggle("recording");
@@ -4075,10 +4119,12 @@ let voicePreviewPlayer = null;
     }
 
     function focusCard(card) {
-      const safeLeft = 32;
+      const controlsHidden = document.body.classList.contains("recording");
+      const compactShell = window.innerWidth < 900;
+      const safeLeft = controlsHidden || compactShell ? 32 : 104;
       const safeTop = 32;
-      const safeRight = 32;
-      const safeBottom = 32;
+      const safeRight = controlsHidden || sidePanel.hidden || compactShell ? 32 : 404;
+      const safeBottom = controlsHidden || !compactShell ? 32 : 104;
       const viewW = Math.max(320, window.innerWidth - safeLeft - safeRight);
       const viewH = Math.max(260, window.innerHeight - safeTop - safeBottom);
       const zoom = clamp(Math.min(viewW / (card.w + 240), viewH / (card.h + 220)), 0.72, 1.16);
@@ -4164,10 +4210,11 @@ let voicePreviewPlayer = null;
       const maxX = Math.max(...state.cards.map(c => c.x + c.w));
       const maxY = Math.max(...state.cards.map(c => c.y + c.h));
       const controlsHidden = document.body.classList.contains("recording");
-      const safeLeft = 24;
+      const compactShell = window.innerWidth < 900;
+      const safeLeft = controlsHidden || compactShell ? 24 : 96;
       const safeTop = controlsHidden ? 24 : 86;
-      const safeRight = controlsHidden || sidePanel.hidden ? 24 : 344;
-      const safeBottom = 24;
+      const safeRight = controlsHidden || sidePanel.hidden || compactShell ? 24 : 396;
+      const safeBottom = controlsHidden || !compactShell ? 24 : 96;
       const viewW = Math.max(320, window.innerWidth - safeLeft - safeRight);
       const viewH = Math.max(260, window.innerHeight - safeTop - safeBottom);
       const pad = 46;
@@ -4323,24 +4370,24 @@ let voicePreviewPlayer = null;
       const overlay = document.getElementById("welcomeOverlay");
       if (!overlay) return;
 
-      let alreadyOnboarded = false;
-      try { alreadyOnboarded = localStorage.getItem(ONBOARD_KEY) === "1"; } catch (_) {}
-      if (alreadyOnboarded) {
-        overlay.hidden = true;
-        return;
-      }
-
       const topicInput = document.getElementById("welcomeTopic");
       const startCta = document.getElementById("welcomeStart");
       const demoCta = document.getElementById("welcomeDemo");
       const skipCta = document.getElementById("welcomeSkip");
-      const dismiss = () => {
+      const openWelcomeButton = document.getElementById("openWelcome");
+      let welcomeReturnFocus = null;
+      const showWelcome = returnFocus => {
+        welcomeReturnFocus = returnFocus || document.activeElement;
+        overlay.hidden = false;
+        requestAnimationFrame(() => { if (topicInput) topicInput.focus(); });
+      };
+      const dismiss = (restoreFocus = false) => {
         overlay.hidden = true;
         try { localStorage.setItem(ONBOARD_KEY, "1"); } catch (_) {}
+        if (restoreFocus && welcomeReturnFocus && typeof welcomeReturnFocus.focus === "function") {
+          requestAnimationFrame(() => welcomeReturnFocus.focus());
+        }
       };
-
-      overlay.hidden = false;
-      requestAnimationFrame(() => { if (topicInput) topicInput.focus(); });
 
       if (startCta) startCta.addEventListener("click", () => {
         const topic = topicInput ? topicInput.value.trim() : "";
@@ -4351,14 +4398,15 @@ let voicePreviewPlayer = null;
         dismiss();
         loadDemoProject();
       });
-      if (skipCta) skipCta.addEventListener("click", dismiss);
+      if (skipCta) skipCta.addEventListener("click", () => dismiss(true));
+      if (openWelcomeButton) openWelcomeButton.addEventListener("click", () => showWelcome(openWelcomeButton));
       if (topicInput) topicInput.addEventListener("keydown", event => {
         if (event.key === "Enter" && startCta) { event.preventDefault(); startCta.click(); }
       });
       // Модалка удерживает фокус: Escape закрывает, Tab циклится внутри (a11y).
       const focusables = [topicInput, startCta, demoCta, skipCta].filter(Boolean);
       overlay.addEventListener("keydown", event => {
-        if (event.key === "Escape") { event.preventDefault(); dismiss(); return; }
+        if (event.key === "Escape") { event.preventDefault(); dismiss(true); return; }
         if (event.key === "Tab" && focusables.length) {
           const first = focusables[0];
           const last = focusables[focusables.length - 1];
@@ -4366,6 +4414,11 @@ let voicePreviewPlayer = null;
           else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
         }
       });
+
+      let alreadyOnboarded = false;
+      try { alreadyOnboarded = localStorage.getItem(ONBOARD_KEY) === "1"; } catch (_) {}
+      if (alreadyOnboarded) overlay.hidden = true;
+      else showWelcome();
     }
 
     // Переподключение к незавершённым задачам после reload (id из localStorage).

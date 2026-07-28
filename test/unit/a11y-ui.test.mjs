@@ -5,11 +5,11 @@ import test from "node:test";
 test("icon-only board controls carry an accessible name (aria-label)", async () => {
   const html = await readFile("index.html", "utf8");
   const iconButtons = [
-    "addCard", "connectMode", "fitView", "openSettings", "togglePanel",
+    "addCard", "connectMode", "fitView", "openSettings", "openWelcome", "togglePanel",
     "recordMode", "exportJson", "importJson", "bringFront", "duplicateCard", "deleteCard"
   ];
   for (const id of iconButtons) {
-    const match = new RegExp(`<button id="${id}"[^>]*>`).exec(html);
+    const match = new RegExp(`<button\\b(?=[^>]*\\bid="${id}")[^>]*>`).exec(html);
     assert.ok(match, `button ${id} exists`);
     assert.match(match[0], /aria-label="[^"]+"/, `button ${id} has aria-label`);
   }

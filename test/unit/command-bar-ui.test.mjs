@@ -48,9 +48,12 @@ test("every command-bar control has a name and the status is announced", () => {
   assert.match(html, /\.topbar :focus-visible,[\s\S]{0,80}outline: 2px solid var\(--accent\)/);
 });
 
-test("settings moved into the collapsible block instead of being copied", () => {
+test("settings moved into the video mode instead of being copied", () => {
   assert.doesNotMatch(html, /topic-wizard-panel/);
-  const settings = sectionOf(/<details class="command-settings" id="commandSettings">/, "</details>");
+  const videoStart = html.indexOf('id="modePanelVideo"');
+  const videoEnd = html.indexOf('id="modePanelPublish"', videoStart);
+  assert.ok(videoStart >= 0 && videoEnd > videoStart, "video mode exists before publish mode");
+  const settings = html.slice(videoStart, videoEnd);
   for (const id of [
     "wizardSceneCount", "wizardResearch", "wizardModel", "wizardByokConfig",
     "narrationLanguage", "narrationVoice", "narrationProvider",
@@ -65,6 +68,9 @@ test("settings moved into the collapsible block instead of being copied", () => 
   }
   assert.match(settings, /<label for="wizardSceneCount">/);
   assert.match(settings, /<label for="narrationLanguage">/);
+  for (const heading of ["Сценарий", "Звук", "Картинка", "Готовый файл"]) {
+    assert.match(settings, new RegExp(`<h2>${heading}</h2>`), `video mode has ${heading}`);
+  }
 });
 
 test("Enter in the command bar starts the build through one submit path", () => {
@@ -104,7 +110,9 @@ test("the side panel is positioned from the measured bar height", () => {
   assert.match(app, /setProperty\("--topbar-height"/);
 });
 
-test("mobile width keeps the command bar in one column", () => {
-  const mobile = html.slice(html.indexOf("@media (max-width: 860px)"));
+test("mobile width keeps the command bar in one column and moves the rail down", () => {
+  const mobile = html.slice(html.indexOf("@media (max-width: 899px)"));
   assert.match(mobile, /\.command-bar \{\s*grid-template-columns: 1fr;/);
+  assert.match(mobile, /\.mode-rail \{[\s\S]*?inset: auto 0 0;/);
+  assert.match(mobile, /\.side-panel \{[\s\S]*?left: 8px;[\s\S]*?right: 8px;[\s\S]*?width: auto;/);
 });
