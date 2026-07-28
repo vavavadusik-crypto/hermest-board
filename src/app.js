@@ -213,7 +213,11 @@ let voicePreviewPlayer = null;
       ]
     };
     const researchQueryInput = document.getElementById("researchQueryInput");
-    const settingsPanel = document.getElementById("settingsPanel");
+    const openSettingsButton = document.getElementById("openSettings");
+    const settingsDialog = document.getElementById("settingsDialog");
+    const closeSettingsButton = document.getElementById("closeSettings");
+    const settingsTablist = document.getElementById("settingsTablist");
+    const settingsTabs = Array.from(settingsTablist.querySelectorAll('[role="tab"]'));
     const aiProviderInput = document.getElementById("aiProvider");
     const aiModelInput = document.getElementById("aiModel");
     const aiKeyInput = document.getElementById("aiKey");
@@ -2019,10 +2023,45 @@ let voicePreviewPlayer = null;
     document.getElementById("signupAccount").addEventListener("click", signupAccount);
     document.getElementById("loginAccount").addEventListener("click", loginAccount);
     document.getElementById("logoutAccount").addEventListener("click", logoutAccount);
-    document.getElementById("openSettings").addEventListener("click", () => {
-      sidePanel.hidden = false;
-      settingsPanel.scrollIntoView({ block: "start", behavior: "smooth" });
-      aiModelInput.focus();
+    const activateSettingsTab = nextTab => {
+      settingsTabs.forEach(tab => {
+        const isActive = tab === nextTab;
+        tab.setAttribute("aria-selected", String(isActive));
+        tab.tabIndex = isActive ? 0 : -1;
+        document.getElementById(tab.getAttribute("aria-controls")).hidden = !isActive;
+      });
+      nextTab.focus();
+    };
+    openSettingsButton.addEventListener("click", () => {
+      if (!settingsDialog.open) settingsDialog.showModal();
+      (settingsTabs.find(tab => tab.getAttribute("aria-selected") === "true") || settingsTabs[0]).focus();
+    });
+    closeSettingsButton.addEventListener("click", () => {
+      settingsDialog.close();
+    });
+    settingsDialog.addEventListener("close", () => {
+      openSettingsButton.focus();
+    });
+    settingsDialog.addEventListener("click", event => {
+      if (event.target === settingsDialog) settingsDialog.close();
+    });
+    settingsTablist.addEventListener("click", event => {
+      const tab = event.target.closest('[role="tab"]');
+      if (tab && settingsTabs.includes(tab)) activateSettingsTab(tab);
+    });
+    settingsTablist.addEventListener("keydown", event => {
+      const tab = event.target.closest('[role="tab"]');
+      if (!tab || !settingsTabs.includes(tab)) return;
+      const direction = {
+        ArrowRight: 1,
+        ArrowDown: 1,
+        ArrowLeft: -1,
+        ArrowUp: -1
+      }[event.key];
+      if (!direction) return;
+      event.preventDefault();
+      const nextIndex = (settingsTabs.indexOf(tab) + direction + settingsTabs.length) % settingsTabs.length;
+      activateSettingsTab(settingsTabs[nextIndex]);
     });
     document.getElementById("saveAiSettings").addEventListener("click", () => {
       saveAiSettingsFromForm();
