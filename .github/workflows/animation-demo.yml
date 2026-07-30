@@ -36,10 +36,17 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Show what the runner already provides
+      # ffmpeg перестал входить в образ ubuntu-latest, а Chrome остался.
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      # Пайп сюда добавлять нельзя: код возврата возьмётся у последней команды,
+      # и отсутствующий бинарь проедет молча до самого рендера.
+      - name: Show what the runner provides
         run: |
           google-chrome --version
-          ffmpeg -version | head -1
+          ffmpeg -version
+          ffprobe -version
           node --version
 
       - name: Unit tests
