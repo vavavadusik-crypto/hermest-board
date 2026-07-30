@@ -1,0 +1,266 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=1920, initial-scale=1"><title>Ваня, кот и пробел — seek</title><style>
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #081326; }
+body { font-family: ui-rounded, "Trebuchet MS", system-ui, sans-serif; }
+.stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; isolation: isolate; background: #081326; }
+.camera-stage { position: absolute; inset: 0; transform-origin: 960px 540px; }
+.setting, .foreground, .actor { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: visible; }
+.setting { z-index: 1; } .actors { position: absolute; inset: 0; z-index: 2; } .foreground { z-index: 3; pointer-events: none; }
+.vanya { position: absolute; left: 488px; top: 360px; width: 248px; height: 520px; overflow: visible; }
+.cat { position: absolute; left: 1320px; top: 592px; width: 350px; height: 325px; overflow: visible; }
+.cat .ac-face { transform-origin: 140px 230px; }
+.speech { position: absolute; z-index: 4; left: 660px; top: 128px; width: 430px; padding: 25px 30px 27px; border: 4px solid #0a1120; border-radius: 38px; color: #0a1120; background: #f4f7ff; font-size: 35px; font-weight: 760; line-height: 1.14; letter-spacing: -.7px; box-shadow: 0 16px 0 rgba(10,17,32,.22); opacity: 0; }
+.speech::after { content: ""; position: absolute; right: 54px; bottom: -28px; width: 42px; height: 42px; border-right: 4px solid #0a1120; border-bottom: 4px solid #0a1120; background: #f4f7ff; transform: rotate(45deg); }
+.layer-speech { transform-origin: 50% 100%; }
+
+  .tc { --arm-l: -5deg; --fore-l: -3deg; --arm-r: 5deg; --fore-r: 3deg; --head: 1; }
+  /* Точки вращения заданы в координатах viewBox, а не по bounding box: у
+     fill-box начало отсчёта — габарит самой конечности, из-за чего рука
+     при повороте отрывалась от плеча. Суставы же — фиксированные числа. */
+  .tc-face, .tc-arm, .tc-fore, .tc-leg, .tc-head, .tc-body, .tc-eyes, .tc-brow { transform-box: view-box; }
+  .tc-face-left { transform: scaleX(-1); transform-origin: 100px 210px; }
+  .tc-arm-left { transform: rotate(var(--arm-l)); transform-origin: 52px 158px; }
+  .tc-arm-right { transform: rotate(var(--arm-r)); transform-origin: 148px 158px; }
+  .tc-fore-left { transform: rotate(var(--fore-l)); transform-origin: 45px 206px; }
+  .tc-fore-right { transform: rotate(var(--fore-r)); transform-origin: 155px 206px; }
+  .tc-leg-left { transform-origin: 82px 262px; }
+  .tc-leg-right { transform-origin: 118px 262px; }
+  .tc-head { transform-origin: 100px 126px; transform: scale(var(--head)); }
+  .tc-body { transform-origin: 100px 268px; }
+  .tc-eyes { transform-origin: 100px 78px; }
+  .tc-brow-left { transform-origin: 83px 58px; }
+  .tc-brow-right { transform-origin: 117px 58px; }
+  .tc-mouth-mid, .tc-mouth-open { opacity: 0; }
+
+  
+  
+  
+  
+
+  /* Речь: три формы рта переключаются жёстко и неравномерно. Ровный метроном
+     читается как механизм, поэтому цикл длинный и с рваным ритмом. */
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+  .tc { }
+  .tc-body { }
+  .tc-eyes { }
+
+  .pose-talk .tc-mouth-closed { }
+  .pose-talk .tc-mouth-mid { }
+  .pose-talk .tc-mouth-open { }
+  .pose-talk .tc-head { }
+  .pose-talk .tc-arm-right { }
+
+  .pose-point { --arm-r: -64deg; --fore-r: -12deg; }
+  .pose-shrug { --arm-r: -36deg; --fore-r: -76deg; --arm-l: 36deg; --fore-l: 76deg; }
+  /* Углы подобраны по геометрии, а не на глаз: рука двухзвенная, и чтобы
+     ладонь дошла до лица, предплечье обязано сложиться навстречу плечу. */
+  .pose-think { --arm-r: -100deg; --fore-r: -126deg; }
+  .pose-facepalm { --arm-r: -142deg; --fore-r: -92deg; }
+    /* Печать: предплечья заведены к центру, кисти сходятся перед корпусом. При
+     мелком сгибе поза читалась как «руки в боки», а не «за клавиатурой». */
+  .pose-type { --arm-r: -32deg; --fore-r: 88deg; --arm-l: 32deg; --fore-l: -88deg; }
+  .pose-cheer { --arm-r: -158deg; --fore-r: -10deg; --arm-l: 158deg; --fore-l: 10deg; }
+
+  .pose-facepalm .tc-head { transform: scale(var(--head)) rotate(-7deg); }
+  /* Закрытые глаза важнее моргания: жест без них читается как «рука у лба». */
+  .pose-facepalm .tc-eyes { transform: scaleY(0.14); }
+  .pose-think .tc-brow-right { transform: translateY(-4px) rotate(-8deg); }
+  .pose-shrug .tc-brow-left, .pose-shrug .tc-brow-right { transform: translateY(-5px); }
+  .pose-type .tc-fore-right { }
+  .pose-type .tc-fore-left { }
+  .pose-cheer { }
+  .pose-walk .tc-leg-left { }
+  .pose-walk .tc-leg-right { }
+  .pose-walk .tc-arm-left { }
+  .pose-walk .tc-arm-right { }
+
+  .ac { --body-x: 1; --body-y: 1; --head-angle: 0deg; --ear-left-angle: 0deg; --ear-right-angle: 0deg; --eye-left-y: 1; --eye-right-y: 1; --tail-1-angle: 0deg; --tail-2-angle: 0deg; --tail-3-angle: 0deg; --leg-fl-angle: 0deg; --leg-fr-angle: 0deg; --leg-bl-angle: 0deg; --leg-br-angle: 0deg; }
+  .ac-face, .ac, .ac-body, .ac-head, .ac-ear-left, .ac-ear-right, .ac-eye-left, .ac-eye-right, .ac-muzzle, .ac-tail-1, .ac-tail-2, .ac-tail-3, .ac-leg-fl, .ac-leg-fr, .ac-leg-bl, .ac-leg-br { transform-box: view-box; }
+  .ac-face-left { transform: scaleX(-1); transform-origin: 140px 130px; }
+  .ac-body { transform: scale(var(--body-x), var(--body-y)); transform-origin: 142px 178px; }
+  .ac-head { transform: rotate(var(--head-angle)); transform-origin: 164px 137px; }
+  .ac-ear-left { transform: rotate(var(--ear-left-angle)); transform-origin: 128px 61px; }
+  .ac-ear-right { transform: rotate(var(--ear-right-angle)); transform-origin: 181px 60px; }
+  .ac-eye-left { transform: scaleY(var(--eye-left-y)); transform-origin: 151px 91px; }
+  .ac-eye-right { transform: scaleY(var(--eye-right-y)); transform-origin: 193px 91px; }
+  .ac-muzzle { transform-origin: 175px 116px; }
+  .ac-tail-1 { transform: rotate(var(--tail-1-angle)); transform-origin: 90px 160px; }
+  .ac-tail-2 { transform: rotate(var(--tail-2-angle)); transform-origin: 55px 171px; }
+  .ac-tail-3 { transform: rotate(var(--tail-3-angle)); transform-origin: 36px 202px; }
+  .ac-leg-fl { transform: rotate(var(--leg-fl-angle)); transform-origin: 158px 175px; }
+  .ac-leg-fr { transform: rotate(var(--leg-fr-angle)); transform-origin: 181px 172px; }
+  .ac-leg-bl { transform: rotate(var(--leg-bl-angle)); transform-origin: 106px 174px; }
+  .ac-leg-br { transform: rotate(var(--leg-br-angle)); transform-origin: 128px 176px; }
+</style></head><body><main id="scene" class="stage" aria-label="Ночной офис: Ваня и кот на столе">
+  <div class="camera-stage layer-camera-stage" data-layer-id="camera-stage">
+    <svg class="setting" viewBox="0 0 1920 1080" aria-hidden="true"><rect x="0" y="0" width="1920" height="880" fill="#1d3252"/>
+      <rect x="0" y="0" width="1920" height="460" fill="#22395c"/>
+      <rect x="0" y="460" width="1920" height="4" fill="#2b4a75"/>
+      <rect x="0" y="868" width="1920" height="12" fill="#2b4a75"/>
+      <rect x="0" y="880" width="1920" height="200" fill="#16243c"/>
+      <rect x="0" y="944" width="1920" height="2" fill="#0f1c30" opacity="0.7"/><rect x="0" y="1008" width="1920" height="2" fill="#0f1c30" opacity="0.7"/><rect x="0" y="1072" width="1920" height="2" fill="#0f1c30" opacity="0.7"/>
+      <path d="M230,1080 L576,916 H1344 L1690,1080 Z" fill="#1b3d5e" opacity="0.55"/>
+      <rect x="1160" y="472" width="248" height="224" rx="8" fill="#0a1830"/>
+    <circle cx="1222" cy="553" r="2" fill="#cfe3ff" opacity="0.7"/><circle cx="1185" cy="680" r="2" fill="#cfe3ff" opacity="0.7"/><circle cx="1171" cy="482" r="2" fill="#cfe3ff" opacity="0.7"/><circle cx="1408" cy="649" r="2" fill="#cfe3ff" opacity="0.7"/><circle cx="1359" cy="592" r="2" fill="#cfe3ff" opacity="0.7"/><circle cx="1215" cy="477" r="2" fill="#cfe3ff" opacity="0.7"/><circle cx="1365" cy="527" r="2" fill="#cfe3ff" opacity="0.7"/><circle cx="1351" cy="553" r="2" fill="#cfe3ff" opacity="0.7"/><circle cx="1387" cy="658" r="2" fill="#cfe3ff" opacity="0.7"/><circle cx="1293" cy="650" r="2" fill="#cfe3ff" opacity="0.7"/>
+    <rect x="1160" y="472" width="248" height="224" rx="8" fill="none" stroke="#2b4a75" stroke-width="5"/>
+    <line x1="1284" y1="472" x2="1284" y2="696" stroke="#2b4a75" stroke-width="3"/>
+    <line x1="1160" y1="584" x2="1408" y2="584" stroke="#2b4a75" stroke-width="3"/>
+      <rect x="115" y="488" width="120" height="160" rx="6" fill="#132444" stroke="#2b4a75" stroke-width="4"/>
+    <circle cx="175" cy="546" r="24" fill="#2dd4bf" opacity="0.7"/>
+    <rect x="137" y="590" width="77" height="8" rx="4" fill="#7c5cff" opacity="0.7"/>
+      <rect x="1619" y="567" width="9" height="25" rx="2" fill="#f5b944" opacity="0.8"/><rect x="1630" y="571" width="14" height="21" rx="2" fill="#4f8dff" opacity="0.8"/><rect x="1646" y="565" width="10" height="27" rx="2" fill="#2dd4bf" opacity="0.8"/><rect x="1658" y="571" width="15" height="21" rx="2" fill="#f5b944" opacity="0.8"/><rect x="1675" y="571" width="9" height="21" rx="2" fill="#7c5cff" opacity="0.8"/><rect x="1686" y="567" width="12" height="25" rx="2" fill="#2dd4bf" opacity="0.8"/><rect x="1700" y="571" width="13" height="21" rx="2" fill="#ff5d73" opacity="0.8"/><rect x="1715" y="569" width="8" height="23" rx="2" fill="#f5b944" opacity="0.8"/><rect x="1725" y="564" width="14" height="28" rx="2" fill="#ff5d73" opacity="0.8"/><rect x="1741" y="568" width="8" height="24" rx="2" fill="#4f8dff" opacity="0.8"/><rect x="1751" y="572" width="11" height="20" rx="2" fill="#7c5cff" opacity="0.8"/><rect x="1764" y="571" width="12" height="21" rx="2" fill="#2dd4bf" opacity="0.8"/><rect x="1778" y="564" width="9" height="28" rx="2" fill="#2dd4bf" opacity="0.8"/><rect x="1613" y="592" width="184" height="7" rx="3" fill="#2b4a75"/>
+      <g class="toon-plant">
+    <path d="M97,853.8461538461538 L137,853.8461538461538 L131.6153846153846,880 L102.38461538461539,880 Z" fill="#24406a"/>
+    <path d="M117,853.8461538461538 q-6.153846153846154,-35.38461538461539 -26.153846153846157,-49.23076923076923 q23.076923076923077,3.076923076923077 26.153846153846157,33.84615384615385 q4.615384615384616,-32.30769230769231 26.153846153846157,-40 q-16.923076923076923,20 -20,55.38461538461539 z" fill="#1f8f6d"/>
+  </g></svg>
+    <div class="actors">
+      <svg class="actor vanya" viewBox="0 0 200 420" role="img" aria-label="Ваня печатает"><g class="tc-face layer-vanya-root" data-layer-id="vanya-root"><g class="tc pose-idle layer-vanya-puppet" data-layer-id="vanya-puppet">
+    <g class="tc-arm tc-arm-left layer-vanya-arm-left" data-layer-id="vanya-arm-left">
+        <path d="M52,158 L45,206" stroke="#23a595" stroke-width="21" stroke-linecap="round" fill="none"/>
+        <g class="tc-fore tc-fore-left layer-vanya-fore-left" data-layer-id="vanya-fore-left">
+          <path d="M45,206 L40,248" stroke="#23a595" stroke-width="18" stroke-linecap="round" fill="none"/>
+          <circle cx="40" cy="254" r="11" fill="#eab68d"/>
+        </g>
+      </g>
+    <g class="tc-leg tc-leg-left layer-vanya-leg-left" data-layer-id="vanya-leg-left">
+        <path d="M82,262 L79,396" stroke="#1d2b45" stroke-width="26" stroke-linecap="round" fill="none"/>
+        <ellipse cx="75" cy="404" rx="19" ry="10" fill="#0d1626"/>
+      </g>
+    <g class="tc-leg tc-leg-right layer-vanya-leg-right" data-layer-id="vanya-leg-right">
+        <path d="M118,262 L121,396" stroke="#1d2b45" stroke-width="26" stroke-linecap="round" fill="none"/>
+        <ellipse cx="125" cy="404" rx="19" ry="10" fill="#0d1626"/>
+      </g>
+    <rect x="88" y="120" width="24" height="30" rx="10" fill="#eab68d"/>
+    <g class="tc-body layer-vanya-body" data-layer-id="vanya-body">
+      <path d="M54,170 Q54,140 100,140 Q146,140 146,170 L150,266 Q100,280 50,266 Z" fill="#2dd4bf"/>
+      <path d="M86,142 Q100,162 114,142" fill="none" stroke="#0a1120" stroke-width="2.6" opacity="0.35"/>
+      <g class="tc-head layer-vanya-head" data-layer-id="vanya-head">
+        
+        <ellipse cx="100" cy="80" rx="42" ry="46" fill="#eab68d"/>
+        <ellipse cx="57" cy="86" rx="7" ry="10" fill="#eab68d"/>
+        <ellipse cx="143" cy="86" rx="7" ry="10" fill="#eab68d"/>
+        <g class="tc-eyes layer-vanya-eyes" data-layer-id="vanya-eyes">
+          <ellipse cx="83" cy="78" rx="10" ry="11.5" fill="#ffffff"/>
+          <ellipse cx="117" cy="78" rx="10" ry="11.5" fill="#ffffff"/>
+          <circle class="tc-pupil" cx="84" cy="80" r="5" fill="#0a1120"/>
+          <circle class="tc-pupil" cx="118" cy="80" r="5" fill="#0a1120"/>
+        </g>
+        <path class="tc-brow tc-brow-left layer-vanya-brow-left" data-layer-id="vanya-brow-left" d="M73,60 Q83,54 93,59" fill="none" stroke="#221a14" stroke-width="4.2" stroke-linecap="round"/>
+        <path class="tc-brow tc-brow-right layer-vanya-brow-right" data-layer-id="vanya-brow-right" d="M107,59 Q117,54 127,60" fill="none" stroke="#221a14" stroke-width="4.2" stroke-linecap="round"/>
+        <g class="tc-mouth layer-vanya-mouth" data-layer-id="vanya-mouth">
+          <path class="tc-mouth-closed layer-vanya-mouth-closed" data-layer-id="vanya-mouth-closed" d="M86,104 Q100,114 114,104" fill="none" stroke="#0a1120" stroke-width="3.6" stroke-linecap="round"/>
+          <ellipse class="tc-mouth-mid layer-vanya-mouth-mid" data-layer-id="vanya-mouth-mid" cx="100" cy="106" rx="11" ry="5" fill="#0a1120"/>
+          <ellipse class="tc-mouth-open layer-vanya-mouth-open" data-layer-id="vanya-mouth-open" cx="100" cy="108" rx="13" ry="11" fill="#0a1120"/>
+        </g>
+        <path d="M59,74 Q60,28 100,28 Q140,28 141,74 Q130,46 100,42 Q70,46 59,74 Z" fill="#221a14"/>
+        
+      </g>
+    </g>
+    <g class="tc-arm tc-arm-right layer-vanya-arm-right" data-layer-id="vanya-arm-right">
+        <path d="M148,158 L155,206" stroke="#23a595" stroke-width="21" stroke-linecap="round" fill="none"/>
+        <g class="tc-fore tc-fore-right layer-vanya-fore-right" data-layer-id="vanya-fore-right">
+          <path d="M155,206 L160,248" stroke="#23a595" stroke-width="18" stroke-linecap="round" fill="none"/>
+          <circle cx="160" cy="254" r="11" fill="#eab68d"/>
+        </g>
+      </g>
+  </g></g></svg>
+      <svg class="actor cat" viewBox="0 0 280 260" role="img" aria-label="Кот идёт к столу"><g class="ac-face ac-face-left layer-cat-root" data-layer-id="cat-root"><g class="ac layer-cat-puppet" data-layer-id="cat-puppet">
+    <g class="ac-tail-1 layer-cat-tail-1" data-layer-id="cat-tail-1">
+      <path d="M90,160 Q70,163 55,171" fill="none" stroke="#0a1120" stroke-width="25" stroke-linecap="round" stroke-linejoin="round"/><path d="M90,160 Q70,163 55,171" fill="none" stroke="#ef8354" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+      <g class="ac-tail-2 layer-cat-tail-2" data-layer-id="cat-tail-2">
+        <path d="M55,171 Q42,184 36,202" fill="none" stroke="#0a1120" stroke-width="25" stroke-linecap="round" stroke-linejoin="round"/><path d="M55,171 Q42,184 36,202" fill="none" stroke="#ef8354" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+        <g class="ac-tail-3 layer-cat-tail-3" data-layer-id="cat-tail-3">
+          <path d="M36,202 Q35,220 49,232" fill="none" stroke="#0a1120" stroke-width="23" stroke-linecap="round" stroke-linejoin="round"/><path d="M36,202 Q35,220 49,232" fill="none" stroke="#ef8354" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+      </g>
+    </g>
+    <g class="ac-body layer-cat-body" data-layer-id="cat-body">
+      <g class="ac-leg-bl layer-cat-leg-bl" data-layer-id="cat-leg-bl">
+        <path d="M106,174 Q102,200 108,220 Q116,228 128,221" fill="none" stroke="#0a1120" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M106,174 Q102,200 108,220 Q116,228 128,221" fill="none" stroke="#f6cfae" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <g class="ac-leg-br layer-cat-leg-br" data-layer-id="cat-leg-br">
+        <path d="M128,176 Q126,202 132,220 Q141,228 153,221" fill="none" stroke="#0a1120" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M128,176 Q126,202 132,220 Q141,228 153,221" fill="none" stroke="#f6cfae" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <g class="ac-leg-fl layer-cat-leg-fl" data-layer-id="cat-leg-fl">
+        <path d="M158,175 Q156,201 162,222 Q171,230 184,222" fill="none" stroke="#0a1120" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M158,175 Q156,201 162,222 Q171,230 184,222" fill="none" stroke="#f6cfae" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <g class="ac-leg-fr layer-cat-leg-fr" data-layer-id="cat-leg-fr">
+        <path d="M181,172 Q181,199 187,221 Q197,229 210,221" fill="none" stroke="#0a1120" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M181,172 Q181,199 187,221 Q197,229 210,221" fill="none" stroke="#f6cfae" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <path d="M79,161 Q80,127 116,123 Q158,116 194,137 Q213,151 204,181 Q194,198 153,197 Q109,199 88,184 Q79,177 79,161 Z" fill="#ef8354" stroke="#0a1120" stroke-width="5" stroke-linejoin="round"/>
+      <path d="M116,183 Q140,193 170,185" fill="none" stroke="#f6cfae" stroke-width="14" stroke-linecap="round" opacity=".82"/>
+    </g>
+    <g class="ac-head layer-cat-head" data-layer-id="cat-head">
+      <g class="ac-ear-left layer-cat-ear-left" data-layer-id="cat-ear-left">
+        <path d="M128,61 L119,20 Q145,32 154,65 Z" fill="#ef8354" stroke="#0a1120" stroke-width="5" stroke-linejoin="round"/>
+        <path d="M130,54 L125,32 Q140,40 146,58 Z" fill="#ffb3a6"/>
+      </g>
+      <g class="ac-ear-right layer-cat-ear-right" data-layer-id="cat-ear-right">
+        <path d="M181,60 L196,20 Q212,42 205,76 Z" fill="#ef8354" stroke="#0a1120" stroke-width="5" stroke-linejoin="round"/>
+        <path d="M191,55 L198,33 Q206,47 201,65 Z" fill="#ffb3a6"/>
+      </g>
+      <path d="M112,105 Q111,55 151,41 Q197,30 218,73 Q234,103 213,131 Q196,148 164,143 Q133,147 116,126 Q111,117 112,105 Z" fill="#ef8354" stroke="#0a1120" stroke-width="5" stroke-linejoin="round"/>
+      <g class="ac-eye-left layer-cat-eye-left" data-layer-id="cat-eye-left">
+        <ellipse cx="151" cy="91" rx="13" ry="15" fill="#f4f7ff" stroke="#0a1120" stroke-width="3"/>
+        <ellipse cx="154" cy="93" rx="5" ry="9" fill="#2dd4bf"/>
+        <circle cx="154" cy="94" r="3.6" fill="#0a1120"/>
+      </g>
+      <g class="ac-eye-right layer-cat-eye-right" data-layer-id="cat-eye-right">
+        <ellipse cx="193" cy="91" rx="13" ry="15" fill="#f4f7ff" stroke="#0a1120" stroke-width="3"/>
+        <ellipse cx="196" cy="93" rx="5" ry="9" fill="#2dd4bf"/>
+        <circle cx="196" cy="94" r="3.6" fill="#0a1120"/>
+      </g>
+      <g class="ac-muzzle layer-cat-muzzle" data-layer-id="cat-muzzle">
+        <ellipse cx="175" cy="116" rx="28" ry="20" fill="#f6cfae" stroke="#0a1120" stroke-width="3"/>
+        <path d="M169,108 L181,108 L175,116 Z" fill="#ff5d73" stroke="#0a1120" stroke-width="2.5" stroke-linejoin="round"/>
+        <path d="M175,116 Q168,126 160,120 M175,116 Q182,126 190,120" fill="none" stroke="#0a1120" stroke-width="2.8" stroke-linecap="round"/>
+        <path d="M157,116 L125,108 M158,121 L122,124 M193,116 L226,108 M192,121 L229,125" fill="none" stroke="#0a1120" stroke-width="2.6" stroke-linecap="round"/>
+      </g>
+    </g>
+  </g></g></svg>
+    </div>
+    <svg class="foreground" viewBox="0 0 1920 1080" aria-hidden="true"><g class="toon-prop">
+        <rect x="848" y="570" width="224" height="130" rx="5" fill="#16243c"/>
+        <rect x="861" y="583" width="197" height="96" rx="2" fill="#2dd4bf" opacity="0.42"/>
+        <rect x="828" y="692" width="264" height="8" rx="4" fill="#22364f"/>
+      </g>
+      <g class="toon-prop">
+        <rect x="712" y="688" width="96" height="12" rx="2" fill="#dce6f7" opacity="0.85"/>
+        <rect x="718" y="681" width="96" height="10" rx="2" fill="#c7d5ee" opacity="0.7"/>
+      </g>
+      <g class="toon-prop">
+        <rect x="1104" y="664" width="36" height="36" rx="8" fill="#f5b944"/>
+        <path d="M1140,674 q15,9 0,17" fill="none" stroke="#f5b944" stroke-width="5"/>
+      </g>
+      <rect x="154" y="717" width="20" height="363" fill="#1a2b42"/>
+      <rect x="1746" y="717" width="20" height="363" fill="#1a2b42"/>
+      <rect x="-58" y="700" width="2035" height="17" rx="9" fill="#33507a"/>
+      <rect x="-58" y="717" width="2035" height="5" fill="#1f3352"/></svg>
+    <aside class="speech layer-speech" data-layer-id="speech">Он опять сел<br>на пробел.</aside>
+  </div>
+</main><script type="module">
+import { createTimelineRenderer } from "../src/animation/index.js";
+const timeline = {"version":1,"durationMs":14000,"fps":30,"width":1920,"height":1080,"scenes":[{"id":"night-office","startMs":0,"durationMs":14000,"layers":[{"id":"camera-stage","tracks":[{"property":"scale","keys":[{"tMs":0,"value":1,"easing":"linear"},{"tMs":11000,"value":1,"easing":"linear"},{"tMs":14000,"value":1.05,"easing":"inOutQuad"}]}]},{"id":"vanya-root","tracks":[]},{"id":"vanya-arm-left","tracks":[{"property":"rotate","keys":[{"tMs":0,"value":32,"easing":"linear"},{"tMs":5900,"value":32,"easing":"linear"},{"tMs":5901,"value":0,"easing":"linear"},{"tMs":7200,"value":0,"easing":"linear"},{"tMs":8600,"value":-142,"easing":"inOutQuad"},{"tMs":11000,"value":-142,"easing":"linear"},{"tMs":12500,"value":0,"easing":"outBack"},{"tMs":14000,"value":0,"easing":"linear"}]}]},{"id":"vanya-fore-left","tracks":[{"property":"rotate","keys":[{"tMs":0,"value":-88,"easing":"linear"},{"tMs":170,"value":-81,"easing":"inOutQuad"},{"tMs":340,"value":-88,"easing":"inOutQuad"},{"tMs":510,"value":-81,"easing":"inOutQuad"},{"tMs":680,"value":-88,"easing":"inOutQuad"},{"tMs":850,"value":-81,"easing":"inOutQuad"},{"tMs":1020,"value":-88,"easing":"inOutQuad"},{"tMs":1190,"value":-81,"easing":"inOutQuad"},{"tMs":1360,"value":-88,"easing":"inOutQuad"},{"tMs":1530,"value":-81,"easing":"inOutQuad"},{"tMs":1700,"value":-88,"easing":"inOutQuad"},{"tMs":1870,"value":-81,"easing":"inOutQuad"},{"tMs":2040,"value":-88,"easing":"inOutQuad"},{"tMs":2210,"value":-81,"easing":"inOutQuad"},{"tMs":2380,"value":-88,"easing":"inOutQuad"},{"tMs":2550,"value":-81,"easing":"inOutQuad"},{"tMs":2720,"value":-88,"easing":"inOutQuad"},{"tMs":2890,"value":-81,"easing":"inOutQuad"},{"tMs":3060,"value":-88,"easing":"inOutQuad"},{"tMs":3230,"value":-81,"easing":"inOutQuad"},{"tMs":3400,"value":-88,"easing":"inOutQuad"},{"tMs":3570,"value":-81,"easing":"inOutQuad"},{"tMs":3740,"value":-88,"easing":"inOutQuad"},{"tMs":3910,"value":-81,"easing":"inOutQuad"},{"tMs":4080,"value":-88,"easing":"inOutQuad"},{"tMs":4250,"value":-81,"easing":"inOutQuad"},{"tMs":4420,"value":-88,"easing":"inOutQuad"},{"tMs":4590,"value":-81,"easing":"inOutQuad"},{"tMs":4760,"value":-88,"easing":"inOutQuad"},{"tMs":4930,"value":-81,"easing":"inOutQuad"},{"tMs":5100,"value":-88,"easing":"inOutQuad"},{"tMs":5270,"value":-81,"easing":"inOutQuad"},{"tMs":5440,"value":-88,"easing":"inOutQuad"},{"tMs":5610,"value":-81,"easing":"inOutQuad"},{"tMs":5780,"value":-88,"easing":"inOutQuad"},{"tMs":5900,"value":0,"easing":"outQuad"},{"tMs":5900,"value":0,"easing":"linear"},{"tMs":7200,"value":0,"easing":"linear"},{"tMs":8600,"value":-92,"easing":"inOutQuad"},{"tMs":11000,"value":-92,"easing":"linear"},{"tMs":12500,"value":0,"easing":"outBack"},{"tMs":14000,"value":0,"easing":"linear"}]}]},{"id":"vanya-arm-right","tracks":[{"property":"rotate","keys":[{"tMs":0,"value":-32,"easing":"linear"},{"tMs":5900,"value":-32,"easing":"linear"},{"tMs":5901,"value":0,"easing":"linear"},{"tMs":14000,"value":0,"easing":"linear"}]}]},{"id":"vanya-fore-right","tracks":[{"property":"rotate","keys":[{"tMs":0,"value":88,"easing":"linear"},{"tMs":170,"value":81,"easing":"inOutQuad"},{"tMs":340,"value":88,"easing":"inOutQuad"},{"tMs":510,"value":81,"easing":"inOutQuad"},{"tMs":680,"value":88,"easing":"inOutQuad"},{"tMs":850,"value":81,"easing":"inOutQuad"},{"tMs":1020,"value":88,"easing":"inOutQuad"},{"tMs":1190,"value":81,"easing":"inOutQuad"},{"tMs":1360,"value":88,"easing":"inOutQuad"},{"tMs":1530,"value":81,"easing":"inOutQuad"},{"tMs":1700,"value":88,"easing":"inOutQuad"},{"tMs":1870,"value":81,"easing":"inOutQuad"},{"tMs":2040,"value":88,"easing":"inOutQuad"},{"tMs":2210,"value":81,"easing":"inOutQuad"},{"tMs":2380,"value":88,"easing":"inOutQuad"},{"tMs":2550,"value":81,"easing":"inOutQuad"},{"tMs":2720,"value":88,"easing":"inOutQuad"},{"tMs":2890,"value":81,"easing":"inOutQuad"},{"tMs":3060,"value":88,"easing":"inOutQuad"},{"tMs":3230,"value":81,"easing":"inOutQuad"},{"tMs":3400,"value":88,"easing":"inOutQuad"},{"tMs":3570,"value":81,"easing":"inOutQuad"},{"tMs":3740,"value":88,"easing":"inOutQuad"},{"tMs":3910,"value":81,"easing":"inOutQuad"},{"tMs":4080,"value":88,"easing":"inOutQuad"},{"tMs":4250,"value":81,"easing":"inOutQuad"},{"tMs":4420,"value":88,"easing":"inOutQuad"},{"tMs":4590,"value":81,"easing":"inOutQuad"},{"tMs":4760,"value":88,"easing":"inOutQuad"},{"tMs":4930,"value":81,"easing":"inOutQuad"},{"tMs":5100,"value":88,"easing":"inOutQuad"},{"tMs":5270,"value":81,"easing":"inOutQuad"},{"tMs":5440,"value":88,"easing":"inOutQuad"},{"tMs":5610,"value":81,"easing":"inOutQuad"},{"tMs":5780,"value":88,"easing":"inOutQuad"},{"tMs":5900,"value":0,"easing":"outQuad"},{"tMs":14000,"value":0,"easing":"linear"}]}]},{"id":"vanya-head","tracks":[{"property":"rotate","keys":[{"tMs":0,"value":0,"easing":"linear"},{"tMs":5900,"value":0,"easing":"linear"},{"tMs":7200,"value":-14,"easing":"outQuad"},{"tMs":8600,"value":-7,"easing":"inOutQuad"},{"tMs":11000,"value":-7,"easing":"linear"},{"tMs":12500,"value":0,"easing":"outBack"},{"tMs":14000,"value":0,"easing":"linear"}]}]},{"id":"vanya-brow-left","tracks":[{"property":"translateY","keys":[{"tMs":0,"value":0,"easing":"linear"},{"tMs":5900,"value":0,"easing":"linear"},{"tMs":7200,"value":-4,"easing":"outQuad"},{"tMs":14000,"value":-4,"easing":"linear"}]}]},{"id":"vanya-brow-right","tracks":[{"property":"translateY","keys":[{"tMs":0,"value":0,"easing":"linear"},{"tMs":5900,"value":0,"easing":"linear"},{"tMs":7200,"value":-4,"easing":"outQuad"},{"tMs":14000,"value":-4,"easing":"linear"}]}]},{"id":"vanya-eyes","tracks":[{"property":"scaleY","keys":[{"tMs":0,"value":1,"easing":"linear"},{"tMs":7200,"value":1,"easing":"linear"},{"tMs":8600,"value":0.14,"easing":"inOutQuad"},{"tMs":8750,"value":1,"easing":"outQuad"},{"tMs":14000,"value":1,"easing":"linear"}]}]},{"id":"vanya-mouth-closed","tracks":[{"property":"opacity","keys":[{"tMs":0,"value":1,"easing":"linear"},{"tMs":9500,"value":1,"easing":"linear"},{"tMs":9501,"value":0,"easing":"linear"},{"tMs":9750,"value":0,"easing":"linear"},{"tMs":9751,"value":1,"easing":"linear"},{"tMs":10080,"value":1,"easing":"linear"},{"tMs":10081,"value":0,"easing":"linear"},{"tMs":10420,"value":0,"easing":"linear"},{"tMs":10421,"value":1,"easing":"linear"},{"tMs":10740,"value":1,"easing":"linear"},{"tMs":10741,"value":0,"easing":"linear"},{"tMs":11260,"value":0,"easing":"linear"},{"tMs":11261,"value":1,"easing":"linear"},{"tMs":11640,"value":1,"easing":"linear"},{"tMs":11641,"value":0,"easing":"linear"},{"tMs":12120,"value":0,"easing":"linear"},{"tMs":12121,"value":1,"easing":"linear"},{"tMs":12640,"value":1,"easing":"linear"},{"tMs":12641,"value":0,"easing":"linear"},{"tMs":13000,"value":0,"easing":"linear"},{"tMs":13001,"value":1,"easing":"linear"},{"tMs":14000,"value":1,"easing":"linear"}]}]},{"id":"vanya-mouth-mid","tracks":[{"property":"opacity","keys":[{"tMs":0,"value":0,"easing":"linear"},{"tMs":9500,"value":0,"easing":"linear"},{"tMs":9501,"value":1,"easing":"linear"},{"tMs":9750,"value":1,"easing":"linear"},{"tMs":9751,"value":0,"easing":"linear"},{"tMs":10080,"value":0,"easing":"linear"},{"tMs":10081,"value":1,"easing":"linear"},{"tMs":10420,"value":1,"easing":"linear"},{"tMs":10421,"value":0,"easing":"linear"},{"tMs":10740,"value":0,"easing":"linear"},{"tMs":10741,"value":1,"easing":"linear"},{"tMs":11260,"value":1,"easing":"linear"},{"tMs":11261,"value":0,"easing":"linear"},{"tMs":11640,"value":0,"easing":"linear"},{"tMs":11641,"value":1,"easing":"linear"},{"tMs":12120,"value":1,"easing":"linear"},{"tMs":12121,"value":0,"easing":"linear"},{"tMs":12640,"value":0,"easing":"linear"},{"tMs":12641,"value":1,"easing":"linear"},{"tMs":13000,"value":1,"easing":"linear"},{"tMs":13001,"value":0,"easing":"linear"},{"tMs":14000,"value":0,"easing":"linear"}]}]},{"id":"vanya-mouth-open","tracks":[{"property":"opacity","keys":[{"tMs":0,"value":0,"easing":"linear"},{"tMs":9500,"value":0,"easing":"linear"},{"tMs":9750,"value":0,"easing":"linear"},{"tMs":9751,"value":1,"easing":"linear"},{"tMs":10080,"value":1,"easing":"linear"},{"tMs":10081,"value":0,"easing":"linear"},{"tMs":10420,"value":0,"easing":"linear"},{"tMs":10421,"value":1,"easing":"linear"},{"tMs":10740,"value":1,"easing":"linear"},{"tMs":10741,"value":0,"easing":"linear"},{"tMs":11260,"value":0,"easing":"linear"},{"tMs":11261,"value":1,"easing":"linear"},{"tMs":11640,"value":1,"easing":"linear"},{"tMs":11641,"value":0,"easing":"linear"},{"tMs":12120,"value":0,"easing":"linear"},{"tMs":12121,"value":1,"easing":"linear"},{"tMs":12640,"value":1,"easing":"linear"},{"tMs":12641,"value":0,"easing":"linear"},{"tMs":13000,"value":0,"easing":"linear"},{"tMs":14000,"value":0,"easing":"linear"}]}]},{"id":"speech","tracks":[{"property":"opacity","keys":[{"tMs":0,"value":0,"easing":"linear"},{"tMs":9500,"value":0,"easing":"linear"},{"tMs":9800,"value":1,"easing":"outQuad"},{"tMs":13000,"value":1,"easing":"linear"},{"tMs":13300,"value":0,"easing":"inQuad"},{"tMs":14000,"value":0,"easing":"linear"}]}]},{"id":"cat-root","tracks":[{"property":"translateX","keys":[{"tMs":0,"value":0,"easing":"linear"},{"tMs":2200,"value":0,"easing":"linear"},{"tMs":4600,"value":-320,"easing":"linear"},{"tMs":14000,"value":-320,"easing":"linear"}]},{"property":"translateY","keys":[{"tMs":0,"value":0,"easing":"linear"},{"tMs":4600,"value":0,"easing":"linear"},{"tMs":5000,"value":6,"easing":"inQuad"},{"tMs":5300,"value":-280,"easing":"outQuad"},{"tMs":5600,"value":-180,"easing":"inQuad"},{"tMs":5900,"value":-180,"easing":"linear"},{"tMs":14000,"value":-180,"easing":"linear"}]},{"property":"scaleX","keys":[{"tMs":0,"value":1,"easing":"linear"},{"tMs":4600,"value":1,"easing":"linear"},{"tMs":5000,"value":1.1,"easing":"inQuad"},{"tMs":5300,"value":0.92,"easing":"outQuad"},{"tMs":5600,"value":1.16,"easing":"inQuad"},{"tMs":5900,"value":1,"easing":"outBack"},{"tMs":14000,"value":1,"easing":"linear"}]},{"property":"scaleY","keys":[{"tMs":0,"value":1,"easing":"linear"},{"tMs":4600,"value":1,"easing":"linear"},{"tMs":5000,"value":0.86,"easing":"inQuad"},{"tMs":5300,"value":1.14,"easing":"outQuad"},{"tMs":5600,"value":0.8,"easing":"inQuad"},{"tMs":5900,"value":1,"easing":"outBack"},{"tMs":14000,"value":1,"easing":"linear"}]}]},{"id":"cat-body","tracks":[{"property":"translateY","keys":[{"tMs":0,"value":0,"easing":"linear"},{"tMs":2200,"value":0,"easing":"linear"},{"tMs":2325,"value":-3,"easing":"inOutQuad"},{"tMs":2450,"value":0,"easing":"inOutQuad"},{"tMs":2575,"value":-3,"easing":"inOutQuad"},{"tMs":2700,"value":0,"easing":"inOutQuad"},{"tMs":2825,"value":-3,"easing":"inOutQuad"},{"tMs":2950,"value":0,"easing":"inOutQuad"},{"tMs":3075,"value":-3,"easing":"inOutQuad"},{"tMs":3200,"value":0,"easing":"inOutQuad"},{"tMs":3325,"value":-3,"easing":"inOutQuad"},{"tMs":3450,"value":0,"easing":"inOutQuad"},{"tMs":3575,"value":-3,"easing":"inOutQuad"},{"tMs":3700,"value":0,"easing":"inOutQuad"},{"tMs":3825,"value":-3,"easing":"inOutQuad"},{"tMs":3950,"value":0,"easing":"inOutQuad"},{"tMs":4075,"value":-3,"easing":"inOutQuad"},{"tMs":4200,"value":0,"easing":"inOutQuad"},{"tMs":4325,"value":-3,"easing":"inOutQuad"},{"tMs":4450,"value":0,"easing":"inOutQuad"},{"tMs":4600,"value":0,"easing":"linear"},{"tMs":14000,"value":0,"easing":"linear"}]}]},{"id":"cat-head","tracks":[{"property":"rotate","keys":[{"tMs":0,"value":0,"easing":"linear"},{"tMs":1250,"value":0,"easing":"linear"},{"tMs":1750,"value":12,"easing":"inOutQuad"},{"tMs":2200,"value":12,"easing":"linear"},{"tMs":4600,"value":0,"easing":"outQuad"},{"tMs":14000,"value":0,"easing":"linear"}]}]},{"id":"cat-ear-right","tracks":[{"property":"rotate","keys":[{"tMs":0,"value":0,"easing":"linear"},{"tMs":1000,"value":0,"easing":"linear"},{"tMs":1250,"value":18,"easing":"outQuad"},{"tMs":1500,"value":0,"easing":"inQuad"},{"tMs":14000,"value":0,"easing":"linear"}]}]},{"id":"cat-eye-left","tracks":[{"property":"scaleY","keys":[{"tMs":0,"value":1,"easing":"linear"},{"tMs":8800,"value":1,"easing":"linear"},{"tMs":8870,"value":0.07,"easing":"inQuad"},{"tMs":8940,"value":1,"easing":"outQuad"},{"tMs":10000,"value":1,"easing":"linear"},{"tMs":10070,"value":0.07,"easing":"inQuad"},{"tMs":10140,"value":1,"easing":"outQuad"},{"tMs":14000,"value":1,"easing":"linear"}]}]},{"id":"cat-eye-right","tracks":[{"property":"scaleY","keys":[{"tMs":0,"value":1,"easing":"linear"},{"tMs":8800,"value":1,"easing":"linear"},{"tMs":8870,"value":0.07,"easing":"inQuad"},{"tMs":8940,"value":1,"easing":"outQuad"},{"tMs":10000,"value":1,"easing":"linear"},{"tMs":10070,"value":0.07,"easing":"inQuad"},{"tMs":10140,"value":1,"easing":"outQuad"},{"tMs":14000,"value":1,"easing":"linear"}]}]},{"id":"cat-tail-1","tracks":[{"property":"rotate","keys":[{"tMs":0,"value":-14,"easing":"linear"},{"tMs":700,"value":0,"easing":"inOutQuad"},{"tMs":1400,"value":14,"easing":"inOutQuad"},{"tMs":2100,"value":0,"easing":"inOutQuad"},{"tMs":2200,"value":20,"easing":"linear"},{"tMs":4600,"value":20,"easing":"linear"},{"tMs":5000,"value":-48,"easing":"outQuad"},{"tMs":5600,"value":-36,"easing":"linear"},{"tMs":5900,"value":-26,"easing":"linear"},{"tMs":7200,"value":-26,"easing":"linear"},{"tMs":8600,"value":-22,"easing":"linear"},{"tMs":8950,"value":22,"easing":"inOutQuad"},{"tMs":9300,"value":-22,"easing":"inOutQuad"},{"tMs":9650,"value":22,"easing":"inOutQuad"},{"tMs":10000,"value":-22,"easing":"inOutQuad"},{"tMs":10350,"value":22,"easing":"inOutQuad"},{"tMs":10700,"value":-22,"easing":"inOutQuad"},{"tMs":11000,"value":-10,"easing":"outQuad"},{"tMs":14000,"value":-10,"easing":"linear"}]}]},{"id":"cat-tail-2","tracks":[{"property":"rotate","keys":[{"tMs":0,"value":-8,"easing":"linear"},{"tMs":700,"value":-4,"easing":"inOutQuad"},{"tMs":1400,"value":8,"easing":"inOutQuad"},{"tMs":2100,"value":4,"easing":"inOutQuad"},{"tMs":2200,"value":14,"easing":"linear"},{"tMs":4600,"value":14,"easing":"linear"},{"tMs":5000,"value":-28,"easing":"outQuad"},{"tMs":5600,"value":-20,"easing":"linear"},{"tMs":5900,"value":18,"easing":"linear"},{"tMs":7200,"value":18,"easing":"linear"},{"tMs":8600,"value":-15,"easing":"linear"},{"tMs":8950,"value":15,"easing":"inOutQuad"},{"tMs":9300,"value":-15,"easing":"inOutQuad"},{"tMs":9650,"value":15,"easing":"inOutQuad"},{"tMs":10000,"value":-15,"easing":"inOutQuad"},{"tMs":10350,"value":15,"easing":"inOutQuad"},{"tMs":10700,"value":-15,"easing":"inOutQuad"},{"tMs":11000,"value":8,"easing":"outQuad"},{"tMs":14000,"value":8,"easing":"linear"}]}]},{"id":"cat-tail-3","tracks":[{"property":"rotate","keys":[{"tMs":0,"value":-3,"easing":"linear"},{"tMs":700,"value":-6,"easing":"inOutQuad"},{"tMs":1400,"value":3,"easing":"inOutQuad"},{"tMs":2100,"value":6,"easing":"inOutQuad"},{"tMs":2200,"value":8,"easing":"linear"},{"tMs":4600,"value":8,"easing":"linear"},{"tMs":5000,"value":-14,"easing":"outQuad"},{"tMs":5600,"value":-10,"easing":"linear"},{"tMs":5900,"value":-8,"easing":"linear"},{"tMs":7200,"value":-8,"easing":"linear"},{"tMs":8600,"value":-8,"easing":"linear"},{"tMs":8950,"value":8,"easing":"inOutQuad"},{"tMs":9300,"value":-8,"easing":"inOutQuad"},{"tMs":9650,"value":8,"easing":"inOutQuad"},{"tMs":10000,"value":-8,"easing":"inOutQuad"},{"tMs":10350,"value":8,"easing":"inOutQuad"},{"tMs":10700,"value":-8,"easing":"inOutQuad"},{"tMs":11000,"value":-4,"easing":"outQuad"},{"tMs":14000,"value":-4,"easing":"linear"}]}]},{"id":"cat-leg-fl","tracks":[{"property":"rotate","keys":[{"tMs":0,"value":0,"easing":"linear"},{"tMs":2200,"value":-20,"easing":"linear"},{"tMs":2450,"value":20,"easing":"inOutQuad"},{"tMs":2700,"value":-20,"easing":"inOutQuad"},{"tMs":2950,"value":20,"easing":"inOutQuad"},{"tMs":3200,"value":-20,"easing":"inOutQuad"},{"tMs":3450,"value":20,"easing":"inOutQuad"},{"tMs":3700,"value":-20,"easing":"inOutQuad"},{"tMs":3950,"value":20,"easing":"inOutQuad"},{"tMs":4200,"value":-20,"easing":"inOutQuad"},{"tMs":4450,"value":20,"easing":"inOutQuad"},{"tMs":4600,"value":0,"easing":"outQuad"},{"tMs":14000,"value":0,"easing":"linear"}]}]},{"id":"cat-leg-br","tracks":[{"property":"rotate","keys":[{"tMs":0,"value":0,"easing":"linear"},{"tMs":2200,"value":-20,"easing":"linear"},{"tMs":2450,"value":20,"easing":"inOutQuad"},{"tMs":2700,"value":-20,"easing":"inOutQuad"},{"tMs":2950,"value":20,"easing":"inOutQuad"},{"tMs":3200,"value":-20,"easing":"inOutQuad"},{"tMs":3450,"value":20,"easing":"inOutQuad"},{"tMs":3700,"value":-20,"easing":"inOutQuad"},{"tMs":3950,"value":20,"easing":"inOutQuad"},{"tMs":4200,"value":-20,"easing":"inOutQuad"},{"tMs":4450,"value":20,"easing":"inOutQuad"},{"tMs":4600,"value":0,"easing":"outQuad"},{"tMs":14000,"value":0,"easing":"linear"}]}]},{"id":"cat-leg-fr","tracks":[{"property":"rotate","keys":[{"tMs":0,"value":0,"easing":"linear"},{"tMs":2200,"value":20,"easing":"linear"},{"tMs":2450,"value":-20,"easing":"inOutQuad"},{"tMs":2700,"value":20,"easing":"inOutQuad"},{"tMs":2950,"value":-20,"easing":"inOutQuad"},{"tMs":3200,"value":20,"easing":"inOutQuad"},{"tMs":3450,"value":-20,"easing":"inOutQuad"},{"tMs":3700,"value":20,"easing":"inOutQuad"},{"tMs":3950,"value":-20,"easing":"inOutQuad"},{"tMs":4200,"value":20,"easing":"inOutQuad"},{"tMs":4450,"value":-20,"easing":"inOutQuad"},{"tMs":4600,"value":0,"easing":"outQuad"},{"tMs":14000,"value":0,"easing":"linear"}]}]},{"id":"cat-leg-bl","tracks":[{"property":"rotate","keys":[{"tMs":0,"value":0,"easing":"linear"},{"tMs":2200,"value":20,"easing":"linear"},{"tMs":2450,"value":-20,"easing":"inOutQuad"},{"tMs":2700,"value":20,"easing":"inOutQuad"},{"tMs":2950,"value":-20,"easing":"inOutQuad"},{"tMs":3200,"value":20,"easing":"inOutQuad"},{"tMs":3450,"value":-20,"easing":"inOutQuad"},{"tMs":3700,"value":20,"easing":"inOutQuad"},{"tMs":3950,"value":-20,"easing":"inOutQuad"},{"tMs":4200,"value":20,"easing":"inOutQuad"},{"tMs":4450,"value":-20,"easing":"inOutQuad"},{"tMs":4600,"value":0,"easing":"outQuad"},{"tMs":6500,"value":56,"easing":"outQuad"},{"tMs":14000,"value":56,"easing":"linear"}]}]}]}]};
+try {
+  const renderer = createTimelineRenderer(document.querySelector("#scene"), timeline);
+  window.__seek = ms => renderer.seek(ms);
+  window.__seek(0);
+  window.__ready = true;
+} catch (error) {
+  window.__bootError = error?.stack || String(error);
+  throw error;
+}
+</script></body></html>
