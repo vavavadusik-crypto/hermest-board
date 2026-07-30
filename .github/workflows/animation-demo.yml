@@ -1,0 +1,91 @@
+name: Render the animation demo
+
+# Прогоняет декларативный движок и рендерит его демо в MP4 на раннере GitHub.
+# Существует по той же причине, что и `render-video.yml`: захват 660 кадров
+# headless-браузером греет слабую машину до предела, а раннеру это ничего не
+# стоит. Готовый ролик забирается из артефактов запуска.
+on:
+  workflow_dispatch:
+    inputs:
+      demo:
+        description: "Which demo to render"
+        required: true
+        default: typographic
+        type: choice
+        options: [typographic, cartoon]
+  push:
+    paths:
+      - "animation-engine/timeline/**"
+      - ".github/workflows/animation-demo.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # На раннере Chrome живёт в VM без пользовательской сессии — песочница там
+      # не поднимается, а /dev/shm мал для кадров 1920x1080.
+      HERMEST_CHROME_FLAGS: "--no-sandbox --disable-dev-shm-usage --disable-gpu"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Show what the runner already provides
+        run: |
+          google-chrome --version
+          ffmpeg -version | head -1
+          node --version
+
+      - name: Unit tests
+        run: node --test animation-engine/timeline/test/unit/timeline.test.mjs
+
+      - name: Build the self-playing page
+        working-directory: animation-engine/timeline
+        run: node demo/build-demo.mjs
+
+      - name: Prove the page needs no JavaScript
+        working-directory: animation-engine/timeline
+        run: |
+          if grep -q "<script" demo/out/demo.html; then
+            echo "demo.html contains a <script> tag; the CSS path is not self-sufficient" >&2
+            exit 1
+          fi
+          echo "no <script> in demo.html"
+
+      - name: Render MP4
+        if: inputs.demo != 'cartoon'
+        working-directory: animation-engine/timeline
+        run: node demo/render-mp4.mjs
+
+      - name: Render the cartoon scene
+        if: inputs.demo == 'cartoon'
+        working-directory: animation-engine/timeline
+        run: node demo-cartoon/render-scene.mjs
+
+      - name: Report what came out
+        working-directory: animation-engine/timeline
+        run: |
+          shopt -s nullglob
+          for f in demo/out/*.mp4 demo-cartoon/out/*.mp4; do
+            echo "== $f"
+            ffprobe -v error -show_entries format=duration,size \
+              -show_entries stream=width,height,nb_frames,r_frame_rate \
+              -of default=nw=1 "$f"
+            sha256sum "$f"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: animation-demo
+          path: |
+            animation-engine/timeline/demo/out/*.mp4
+            animation-engine/timeline/demo/out/demo.html
+            animation-engine/timeline/demo-cartoon/out/*.mp4
+          if-no-files-found: error
+          retention-days: 14

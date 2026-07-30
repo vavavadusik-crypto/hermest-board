@@ -142,7 +142,10 @@ const staticPort = server.address().port;
 const cdpPort = await freePort();
 const profile = path.join(out, `chrome-profile-${Date.now()}-${process.pid}`);
 await mkdir(profile, { recursive:true });
-const chrome = spawn("google-chrome", ["--headless=new", `--remote-debugging-port=${cdpPort}`, "--remote-debugging-address=127.0.0.1", `--window-size=${width},${height}`, "--hide-scrollbars", "--force-device-scale-factor=1", `--user-data-dir=${profile}`, "about:blank"], { stdio:["ignore", "ignore", "pipe"] });
+// CI-раннеры и контейнеры запускают Chrome в условиях, где песочница недоступна,
+// поэтому дополнительные флаги приходят снаружи, а не зашиты в код рендера.
+const extraChromeFlags = (process.env.HERMEST_CHROME_FLAGS ?? "").split(/\s+/).filter(Boolean);
+const chrome = spawn("google-chrome", ["--headless=new", `--remote-debugging-port=${cdpPort}`, "--remote-debugging-address=127.0.0.1", `--window-size=${width},${height}`, "--hide-scrollbars", "--force-device-scale-factor=1", `--user-data-dir=${profile}`, ...extraChromeFlags, "about:blank"], { stdio:["ignore", "ignore", "pipe"] });
 let chromeStderr = "";
 chrome.stderr.on("data", chunk => { chromeStderr = (chromeStderr + chunk).slice(-4000); });
 
