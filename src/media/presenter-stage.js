@@ -16,9 +16,12 @@ const LINK_MS = 200;
 const WINDOW_MS = 260;
 const HARD_CUT_MS = 1;
 const GESTURE_NEAR_CENTER_RATIO = 0.08;
+// Доли кадра позы, где находится кисть. Замерено по силуэту готовых кадров, а
+// не подобрано на глаз: позы стали полноростовыми, и прежние числа от поясного
+// набора выводили линию-связку из пустого места рядом с рукой.
 const GESTURE_HAND_ANCHORS = Object.freeze({
-  pointLeft: Object.freeze({ x: 0.08, y: 0.51 }),
-  handUp: Object.freeze({ x: 0.04, y: 0.36 })
+  pointLeft: Object.freeze({ x: 0.124, y: 0.372 }),
+  handUp: Object.freeze({ x: 0.243, y: 0.367 })
 });
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
