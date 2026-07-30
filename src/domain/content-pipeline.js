@@ -130,8 +130,8 @@ function normalizeCard(card, index) {
     text,
     // Нормализованные значения затирают сырые из спреда: в сцену не должно
     // попасть ничего, что не прошло проверку формы и размера.
-    sceneType: normalizeSceneType(card.sceneType),
-    sceneData: normalizeSceneData(card.sceneData),
+    sceneType: normalizeSceneType(card.sceneType ?? card.archetype),
+    sceneData: normalizeSceneData(card.sceneData ?? card.data),
     x: finiteNumber(card.x),
     y: finiteNumber(card.y)
   };

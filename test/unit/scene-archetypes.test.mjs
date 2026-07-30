@@ -24,8 +24,8 @@ const FORMATS = Object.freeze([
 
 const BRIEF = Object.freeze({ topic: "Как Hermest Board собирает ролик", language: "ru" });
 
-// Карточка со всеми полями сразу: любой архетип найдёт здесь свои данные,
-// поэтому один и тот же вход можно прогнать через все двенадцать макетов.
+// Карточка со всеми публичными полями: приватный растровый presenter-атлас
+// проверяется отдельно, чтобы общая матрица не требовала графику заказчика.
 const RICH_SCENE = Object.freeze({
   title: "Что получается на выходе",
   narration:
@@ -68,12 +68,14 @@ function markupFor({ archetype, recipe, scene = RICH_SCENE, role = "body", scene
 // Роли opening/closing перекрывают выбор архетипа на statement, поэтому образцы
 // закрывают и их: в раскадровке это первая и последняя сцена.
 const ROLE_CASES = Object.freeze([
-  ...SCENE_ARCHETYPES.map(archetype => ({ archetype, role: "body", label: archetype })),
+  ...SCENE_ARCHETYPES
+    .filter(archetype => archetype !== "presenter")
+    .map(archetype => ({ archetype, role: "body", label: archetype })),
   { archetype: "statement", role: "closing", label: "statement:closing" }
 ]);
 
 test("archetype coverage matches the plan", () => {
-  assert.equal(SCENE_ARCHETYPES.length, 12);
+  assert.equal(SCENE_ARCHETYPES.length, 13);
   assert.equal(ROLE_CASES.length, 13);
 });
 

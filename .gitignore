@@ -17,3 +17,5 @@ npm-debug.log*
 .vercel
 node_modules
 release/
+assets/presenters/*/
+!assets/presenters/*/.gitkeep

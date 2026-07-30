@@ -12,6 +12,7 @@ export const SCENE_ARCHETYPES = Object.freeze([
   "classic",
   "statement",
   "cartoon-shot",
+  "presenter",
   "device-mockup",
   "board-columns",
   "format-trio",
@@ -182,9 +183,41 @@ function normalizeSceneData(raw) {
   }
   const cartoon = normalizeCartoon(raw.cartoon);
   if (cartoon) data.cartoon = cartoon;
+  const presenter = normalizePresenter(raw.presenter, raw.beats);
+  if (presenter) data.presenter = presenter;
   const cta = cleanItem(raw.cta, MAX_LABEL_CHARS);
   if (cta) data.cta = cta;
   return data;
+}
+
+function normalizePresenter(rawPresenter, rawBeats) {
+  if (!rawPresenter || typeof rawPresenter !== "object" || Array.isArray(rawPresenter)) return null;
+  const id = cleanItem(rawPresenter.id, 64);
+  if (!/^[a-z0-9][a-z0-9_-]{0,63}$/iu.test(id)) return null;
+  const fraction = value => Number.isFinite(Number(value)) ? Math.min(1, Math.max(0, Number(value))) : null;
+  const beats = [];
+  if (Array.isArray(rawBeats)) {
+    for (const rawBeat of rawBeats.slice(0, 12)) {
+      if (!rawBeat?.window || typeof rawBeat.window !== "object" || Array.isArray(rawBeat.window)) continue;
+      const x = fraction(rawBeat.window.x);
+      const y = fraction(rawBeat.window.y);
+      if (x === null || y === null) continue;
+      const atMs = Number.isSafeInteger(Number(rawBeat.atMs)) && Number(rawBeat.atMs) >= 0 ? Number(rawBeat.atMs) : 0;
+      const moveTo = fraction(rawBeat.moveTo);
+      beats.push({
+        atMs,
+        say: cleanItem(rawBeat.say, 240),
+        ...(moveTo === null ? {} : { moveTo }),
+        window: {
+          x,
+          y,
+          title: cleanItem(rawBeat.window.title, 56),
+          lines: cleanList(rawBeat.window.lines, { limit: 72, max: 5 })
+        }
+      });
+    }
+  }
+  return { id, startX: fraction(rawPresenter.startX) ?? 0.5, beats };
 }
 
 /**

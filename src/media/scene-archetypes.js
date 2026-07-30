@@ -22,6 +22,7 @@ import {
 } from "./cartoon-cast.js";
 import { buildBeatCss } from "./scene-beats.js";
 import { NODE_COLORS, THEME, clampText, escapeHtml, scaled } from "./scene-design.js";
+import { buildPresenterTimeline, loadPresenterAtlas, presenterStageCss, renderPresenterMarkup } from "./presenter-stage.js";
 
 const MAX_CHIPS = 5;
 
@@ -1175,9 +1176,35 @@ function buildCartoonShot(ctx) {
   };
 }
 
+function buildPresenter(ctx) {
+  const presenter = ctx.content.data.presenter;
+  if (!presenter) throw new TypeError("Presenter scene requires sceneData.presenter with an id");
+  const atlas = loadPresenterAtlas(presenter.id);
+  const timeline = buildPresenterTimeline({
+    beats: presenter.beats,
+    frameWidth: ctx.layout.width,
+    frameHeight: ctx.layout.height,
+    atlas,
+    startX: presenter.startX,
+    durationMs: ctx.durationMs
+  });
+  return {
+    stageFlex: "flex-direction:column;align-items:stretch;justify-content:flex-start;",
+    stage: renderPresenterMarkup({
+      timeline,
+      atlas,
+      beats: presenter.beats,
+      originX: -ctx.layout.padLeft,
+      originY: -ctx.layout.padTop
+    }),
+    css: presenterStageCss({ timeline })
+  };
+}
+
 const BUILDERS = Object.freeze({
   classic: buildClassic,
   "cartoon-shot": buildCartoonShot,
+  presenter: buildPresenter,
   statement: buildStatement,
   "device-mockup": buildDeviceMockup,
   "board-columns": buildBoardColumns,

@@ -101,7 +101,9 @@ const LAYOUTS = [
 
 test("no element is given two competing animation declarations", () => {
   const conflicts = [];
-  for (const archetype of SCENE_ARCHETYPES) {
+  // Presenter needs a private customer atlas. Its animation contract is
+  // covered by presenter-stage.test.mjs without requiring that asset here.
+  for (const archetype of SCENE_ARCHETYPES.filter(archetype => archetype !== "presenter")) {
     for (const role of ["opening", "body", "closing"]) {
       for (const size of LAYOUTS) {
         const layout = resolveSceneLayout(size);

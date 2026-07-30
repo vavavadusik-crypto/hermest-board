@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "title": "Hermest Board: ведущий объясняет продукт",
+  "brief": {
+    "topic": "как Hermest Board превращает одну тему в готовый ролик",
+    "audience": "инвестор или партнёр, который видит продукт впервые",
+    "language": "ru",
+    "tone": "спокойная уверенность, без рекламного нажима",
+    "targetDurationSeconds": 62,
+    "voice": "ru_RU-dmitri-medium",
+    "narrationProvider": "piper",
+    "brollMode": "deterministic",
+    "generateVisuals": false
+  },
+  "cards": [
+    {
+      "id": "scene-01",
+      "x": 80,
+      "y": 80,
+      "title": "Одна строка",
+      "text": "Всё начинается с одной строки. Ты пишешь тему — и дальше доска работает сама.",
+      "sceneType": "presenter",
+      "sceneData": {
+        "presenter": { "id": "kael", "startX": 0.5 },
+        "beats": [
+          {
+            "atMs": 1200,
+            "moveTo": 0.34,
+            "window": {
+              "x": 0.72,
+              "y": 0.34,
+              "title": "Тема",
+              "lines": ["Как мы делаем ролики", "62 секунды", "русский"]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-02",
+      "x": 420,
+      "y": 80,
+      "title": "Сценарий по сценам",
+      "text": "Тема разбирается на сцены. Каждая сцена — карточка, которую можно переписать руками.",
+      "sceneType": "presenter",
+      "sceneData": {
+        "presenter": { "id": "kael", "startX": 0.34 },
+        "beats": [
+          {
+            "atMs": 900,
+            "moveTo": 0.68,
+            "window": {
+              "x": 0.24,
+              "y": 0.56,
+              "title": "Сцены",
+              "lines": ["01 · Проблема", "02 · Решение", "03 · Как это работает", "04 · Итог"]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-03",
+      "x": 760,
+      "y": 80,
+      "title": "Голос и субтитры",
+      "text": "Голос и субтитры собираются сами, на твоём компьютере. Ключи и облако не нужны.",
+      "sceneType": "presenter",
+      "sceneData": {
+        "presenter": { "id": "kael", "startX": 0.68 },
+        "beats": [
+          {
+            "atMs": 900,
+            "moveTo": 0.4,
+            "window": {
+              "x": 0.74,
+              "y": 0.62,
+              "title": "Озвучка",
+              "lines": ["Голос — локально", "Субтитры — покадрово", "Без облака"]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-04",
+      "x": 80,
+      "y": 420,
+      "title": "Готовый файл",
+      "text": "На выходе — настоящий MP4. Не превью, не картинка. Файл, который можно выложить.",
+      "sceneType": "presenter",
+      "sceneData": {
+        "presenter": { "id": "kael", "startX": 0.4 },
+        "beats": [
+          {
+            "atMs": 900,
+            "moveTo": 0.3,
+            "window": {
+              "x": 0.7,
+              "y": 0.3,
+              "title": "Результат",
+              "lines": ["1920 × 1080", "MP4 · H.264", "хеш и манифест"]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-05",
+      "x": 420,
+      "y": 420,
+      "title": "Зачем это нужно",
+      "text": "Один человек делает то, на что раньше уходила студия. И повторяет это каждый день.",
+      "sceneType": "presenter",
+      "sceneData": {
+        "presenter": { "id": "kael", "startX": 0.3 },
+        "beats": [
+          {
+            "atMs": 1000,
+            "moveTo": 0.62,
+            "window": {
+              "x": 0.22,
+              "y": 0.32,
+              "title": "Цена вопроса",
+              "lines": ["Один автор", "Один вечер", "Серия роликов"]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-06",
+      "x": 760,
+      "y": 420,
+      "title": "Hermest Board",
+      "text": "Hermest Board. Доска, из которой собирается ролик.",
+      "sceneType": "presenter",
+      "sceneData": {
+        "presenter": { "id": "kael", "startX": 0.5 },
+        "beats": []
+      }
+    }
+  ]
+}
