@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermest.local/schemas/animation/scene-command.schema.json",
+  "title": "Hermes Animation JSON-RPC Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["jsonrpc", "id", "method", "protocolVersion"],
+  "properties": {
+    "jsonrpc": { "const": "2.0" },
+    "id": {
+      "oneOf": [
+        { "type": "string", "minLength": 1, "maxLength": 128 },
+        { "type": "integer", "minimum": 0 }
+      ]
+    },
+    "method": {
+      "type": "string",
+      "enum": [
+        "engine.ping",
+        "engine.getCapabilities",
+        "engine.getVersion",
+        "engine.getDiagnostics",
+        "project.create",
+        "project.open",
+        "project.save",
+        "project.close",
+        "project.validate",
+        "scene.list",
+        "scene.create",
+        "scene.load",
+        "scene.save",
+        "scene.serialize",
+        "scene.validate",
+        "node.list",
+        "node.create",
+        "node.remove",
+        "node.getProperties",
+        "node.setProperties",
+        "asset.import",
+        "asset.list",
+        "asset.validate",
+        "asset.getMetadata",
+        "timeline.get",
+        "timeline.seek",
+        "timeline.play",
+        "timeline.pause",
+        "timeline.stop",
+        "timeline.setLoop",
+        "timeline.addKeyframe",
+        "timeline.removeKeyframe",
+        "camera.list",
+        "camera.setActive",
+        "camera.orbit",
+        "camera.preview",
+        "render.preview",
+        "render.start",
+        "render.cancel",
+        "render.getStatus",
+        "render.getResult",
+        "test.run",
+        "test.getReport"
+      ]
+    },
+    "params": {
+      "oneOf": [
+        { "type": "object" },
+        { "type": "array" }
+      ]
+    },
+    "protocolVersion": { "const": "0.1.0" }
+  }
+}
