@@ -139,7 +139,9 @@ export function buildSceneMarkup({
     sceneCount: total,
     sceneTitles: titles,
     heroFontSize,
-    durationMs: scene.durationMs
+    durationMs: scene.durationMs,
+    narrationDurationMs: scene.narrationDurationMs,
+    seed: numericSeed
   });
 
   return `<!DOCTYPE html>

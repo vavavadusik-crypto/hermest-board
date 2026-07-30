@@ -20,8 +20,14 @@ const ATLAS = Object.freeze({
   turn: Object.freeze({ frameWidth: 420, frameHeight: 590, stepDegrees: 10, frames: Object.freeze(Array.from({ length: 36 }, (_, index) => ({ angle: index * 10, file: "k" + String(index + 1).padStart(3, "0") + ".png" }))) }),
   walk: Object.freeze({ dir: "walk", frameWidth: 204, frameHeight: 512, frameDurationMs: 75, frames: Object.freeze(Array.from({ length: 12 }, (_, index) => "w" + String(index + 1).padStart(2, "0") + ".png")) }),
   gesture: Object.freeze({ dir: "gesture", frameWidth: 348, frameHeight: 512, poses: Object.freeze({ pointLeft: "g02.png", handUp: "g04.png" }) }),
-  footAnchor: Object.freeze({ turn: 0.995, walk: 0.985, gesture: 1 }),
-  figureHeightRatio: Object.freeze({ turn: 1, walk: 0.97, gesture: 0.62 })
+  speak: Object.freeze({
+    dir: "head", frameWidth: 420, frameHeight: 580,
+    mouth: Object.freeze({ closed: Object.freeze(["h01.png", "h11.png"]), mid: Object.freeze(["h02.png", "h06.png"]), open: Object.freeze(["h04.png", "h05.png", "h07.png"]), smile: Object.freeze(["h08.png"]) }),
+    blink: Object.freeze(["h09.png", "h10.png"]),
+    frames: Object.freeze(Array.from({ length: 11 }, (_, index) => "h" + String(index + 1).padStart(2, "0") + ".png"))
+  }),
+  footAnchor: Object.freeze({ turn: 0.995, walk: 0.985, gesture: 1, speak: 1 }),
+  figureHeightRatio: Object.freeze({ turn: 1, walk: 0.97, gesture: 0.62, speak: 1 })
 });
 
 const BEATS = Object.freeze([
@@ -30,7 +36,17 @@ const BEATS = Object.freeze([
 ]);
 
 function timeline() {
-  return buildPresenterTimeline({ beats: BEATS, frameWidth: 1920, frameHeight: 1080, atlas: ATLAS, startX: 0.5, durationMs: 9000 });
+  return buildPresenterTimeline({ beats: BEATS, frameWidth: 1920, frameHeight: 1080, atlas: ATLAS, startX: 0.5, durationMs: 9000, narrationDurationMs: 0 });
+}
+
+function trackValue(track, atMs) {
+  let previous = track[0];
+  let next = null;
+  for (const point of track) {
+    if (point.atMs <= atMs) previous = point;
+    if (point.atMs > atMs) { next = point; break; }
+  }
+  return next ? previous.value + (next.value - previous.value) * (atMs - previous.atMs) / (next.atMs - previous.atMs) : previous.value;
 }
 
 test("presenter angle is calculated from the window position", () => {
@@ -51,6 +67,65 @@ test("presenter view switching is a 1ms hard cut and one presenter asset is visi
     const total = Object.values(evaluatePresenterOpacity(plan, time)).reduce((sum, opacity) => sum + opacity, 0);
     assert.ok(Math.abs(total - 1) < 1e-9, "opacity sum at " + time + "ms is " + total);
   }
+});
+
+test("speech uses irregular mouth frames, rests closed, and keeps exactly one presenter frame visible", () => {
+  const plan = buildPresenterTimeline({
+    beats: [], frameWidth: 1920, frameHeight: 1080, atlas: ATLAS, durationMs: 7000, narrationDurationMs: 6000, seed: 42
+  });
+  const cues = plan.speech.cues;
+  assert.ok(cues.length >= 30 && cues.length <= 60, "6 s speech has " + cues.length + " mouth changes");
+  for (let index = 3; index < cues.length; index += 1) {
+    const duration = cues[index].durationMs;
+    assert.equal(cues.slice(index - 3, index).every(cue => cue.durationMs === duration), false, "no four identical mouth intervals");
+  }
+  assert.ok(cues.some(cue => cue.shape === "closed" && cue.durationMs >= 260), "speech includes a closed-mouth breath");
+  for (let atMs = 6001; atMs <= plan.durationMs; atMs += 97) {
+    const opacities = evaluatePresenterOpacity(plan, atMs);
+    const visible = plan.assets.filter(asset => opacities[asset.id] > 0.999999);
+    assert.equal(visible.length, 1, "one presenter frame at " + atMs + "ms");
+    assert.equal(visible[0].shape, "closed", "mouth closes after narration at " + atMs + "ms");
+  }
+  const opacityTimes = [...new Set(Object.values(plan.layers).flatMap(layer => layer.opacity?.map(frame => frame.atMs) || []))].sort((left, right) => left - right);
+  for (const atMs of [...opacityTimes, ...opacityTimes.slice(1).map((time, index) => (opacityTimes[index] + time) / 2)]) {
+    const total = Object.values(evaluatePresenterOpacity(plan, atMs)).reduce((sum, opacity) => sum + opacity, 0);
+    assert.ok(Math.abs(total - 1) < 1e-9, "opacity sum at " + atMs + "ms is " + total);
+  }
+});
+
+test("speech blinking is a deterministic 120ms closed-mouth interruption at least every 5.5 seconds", () => {
+  const plan = buildPresenterTimeline({
+    beats: [], frameWidth: 1920, frameHeight: 1080, atlas: ATLAS, durationMs: 12000, narrationDurationMs: 12000, seed: 7
+  });
+  assert.ok(plan.speech.blinks.length >= 2);
+  let previousStart = 0;
+  for (const blink of plan.speech.blinks) {
+    assert.equal(blink.durationMs, 120);
+    assert.ok(blink.startMs - previousStart >= 3000, "blink gap is at least 3 s");
+    assert.ok(blink.startMs - previousStart <= 5500, "blink gap is at most 5.5 s");
+    const cue = plan.speech.cues.find(item => blink.startMs >= item.startMs && blink.endMs <= item.endMs);
+    assert.equal(cue?.shape, "closed");
+    previousStart = blink.startMs;
+  }
+  assert.ok(plan.speech.durationMs - previousStart <= 5500, "final blink gap is at most 5.5 s");
+});
+
+test("presenter life and cinematic camera stay inside the crop-safe zone", () => {
+  const plan = buildPresenterTimeline({ beats: BEATS, frameWidth: 1920, frameHeight: 1080, atlas: ATLAS, durationMs: 8000, narrationDurationMs: 7100, seed: 7 });
+  assert.ok(plan.life.cycleMs >= 2400 && plan.life.cycleMs <= 3200);
+  assert.ok(Math.max(...plan.layers["presenter-life"].rotate.map(point => Math.abs(point.value))) <= 0.8);
+  assert.ok(Math.max(...plan.layers["presenter-life"].translateY.map(point => Math.abs(point.value))) <= 5);
+  for (let step = 0; step <= 200; step += 1) {
+    const atMs = plan.durationMs * step / 200;
+    const scale = trackValue(plan.camera.scale, atMs);
+    const tx = trackValue(plan.camera.translateX, atMs);
+    const ty = trackValue(plan.camera.translateY, atMs);
+    assert.ok(scale >= 1, "camera scale at " + atMs + "ms");
+    assert.ok(Math.abs(tx) <= ((scale - 1) / 2) * plan.frame.width + 1e-9, "camera x at " + atMs + "ms");
+    assert.ok(Math.abs(ty) <= ((scale - 1) / 2) * plan.frame.height + 1e-9, "camera y at " + atMs + "ms");
+  }
+  assert.equal(plan.camera.direction, "right");
+  assert.match(presenterStageCss({ timeline: plan }), /cubic-bezier\(\.18,\.04,\.2,1\)/);
 });
 
 test("movement uses the walk loop, while a stopped presenter returns to turn", () => {

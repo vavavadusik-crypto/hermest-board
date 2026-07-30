@@ -1186,7 +1186,9 @@ function buildPresenter(ctx) {
     frameHeight: ctx.layout.height,
     atlas,
     startX: presenter.startX,
-    durationMs: ctx.durationMs
+    durationMs: ctx.durationMs,
+    narrationDurationMs: ctx.narrationDurationMs,
+    seed: ctx.seed
   });
   return {
     stageFlex: "flex-direction:column;align-items:stretch;justify-content:flex-start;",
@@ -1232,7 +1234,9 @@ export function renderSceneArchetype({
   sceneCount = 1,
   sceneTitles = [],
   heroFontSize,
-  durationMs = 0
+  durationMs = 0,
+  narrationDurationMs = durationMs,
+  seed = 1
 }) {
   const builder = BUILDERS[archetype];
   if (!builder) throw new RangeError(`Unsupported scene archetype: ${archetype}`);
@@ -1246,6 +1250,8 @@ export function renderSceneArchetype({
     sceneTitles,
     heroFontSize,
     durationMs,
+    narrationDurationMs,
+    seed,
     s: factor => scaled(layout, factor)
   });
 }
